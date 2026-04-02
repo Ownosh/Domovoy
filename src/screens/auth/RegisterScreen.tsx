@@ -13,6 +13,7 @@ export function RegisterScreen({ navigation }: Props) {
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
     const [phone, setPhone] = useState("");
+    const [building, setBuilding] = useState("");
     const [apartment, setApartment] = useState("");
     const [password, setPassword] = useState("");
     const [password2, setPassword2] = useState("");
@@ -24,6 +25,7 @@ export function RegisterScreen({ navigation }: Props) {
             !name.trim() ||
             !email.trim() ||
             !phone.trim() ||
+            !building.trim() ||
             !apartment.trim() ||
             !password
         ) {
@@ -49,6 +51,7 @@ export function RegisterScreen({ navigation }: Props) {
             name,
             email,
             phone,
+            building,
             apartment,
             password,
         });
@@ -79,10 +82,18 @@ export function RegisterScreen({ navigation }: Props) {
                 />
                 <View style={styles.gap} />
                 <Input
-                    label="Квартира / секция"
+                    label="Дом или ЖК, адрес"
+                    value={building}
+                    onChangeText={setBuilding}
+                    placeholder="ЖК, улица, дом"
+                    hint='Например: ЖК «Солнечный», пр. Октябрьский, 117'
+                />
+                <View style={styles.gap} />
+                <Input
+                    label="Квартира"
                     value={apartment}
                     onChangeText={setApartment}
-                    placeholder="напр. 42, подъезд 2"
+                    placeholder="напр. 42"
                 />
                 <View style={styles.gap} />
                 <Input

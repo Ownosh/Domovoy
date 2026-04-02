@@ -85,7 +85,7 @@ export function LoginScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
     flex: { flex: 1, justifyContent: "center", paddingVertical: spacing.xl },
-    card: { gap: spacing.sm },
+    card: { gap: spacing.sm, flexDirection: "column" },
     gap: { height: spacing.md },
     gapLg: { height: spacing.lg },
     err: { color: colors.danger, marginTop: spacing.sm },

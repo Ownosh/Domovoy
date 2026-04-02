@@ -11,6 +11,7 @@ export function EditProfileScreen({ navigation }: Props) {
     const { profile, updateProfile } = useApp();
     const [name, setName] = useState(profile.name);
     const [phone, setPhone] = useState(profile.phone);
+    const [building, setBuilding] = useState(profile.building);
     const [apartment, setApartment] = useState(profile.apartment);
     const [ok, setOk] = useState(false);
 
@@ -18,6 +19,7 @@ export function EditProfileScreen({ navigation }: Props) {
         updateProfile({
             name: name.trim(),
             phone: phone.trim(),
+            building: building.trim(),
             apartment: apartment.trim(),
         });
         setOk(true);
@@ -41,7 +43,15 @@ export function EditProfileScreen({ navigation }: Props) {
                 />
                 <View style={styles.gap} />
                 <Input
-                    label="Квартира / секция"
+                    label="Дом или ЖК, адрес"
+                    value={building}
+                    onChangeText={setBuilding}
+                    placeholder="ЖК, улица, дом"
+                    hint='Например: ЖК «Солнечный», пр. Октябрьский, 117'
+                />
+                <View style={styles.gap} />
+                <Input
+                    label="Квартира"
                     value={apartment}
                     onChangeText={setApartment}
                 />

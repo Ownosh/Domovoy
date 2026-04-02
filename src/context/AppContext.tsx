@@ -186,6 +186,18 @@ function parseStored(raw: string): AppState | null {
     }
 }
 
+function normalizeProfile(p: Profile | undefined): Profile {
+    if (!p) {
+        return { name: "", phone: "", building: "", apartment: "" };
+    }
+    return {
+        name: p.name ?? "",
+        phone: p.phone ?? "",
+        building: p.building ?? "",
+        apartment: p.apartment ?? "",
+    };
+}
+
 type AppContextValue = {
     hydrated: boolean;
     /** Есть сохранённая учётная запись (можно войти после выхода) */
@@ -205,6 +217,7 @@ type AppContextValue = {
         password: string;
         name: string;
         phone: string;
+        building: string;
         apartment: string;
     }) => void;
     logout: () => void;
@@ -232,11 +245,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             if (raw) {
                 const parsed = parseStored(raw);
                 if (parsed) {
+                    const account = parsed.account
+                        ? {
+                              ...parsed.account,
+                              profile: normalizeProfile(
+                                  parsed.account.profile,
+                              ),
+                          }
+                        : null;
                     dispatch({
                         type: "REPLACE",
                         payload: {
                             ...initialState,
                             ...parsed,
+                            account,
                             news: seedNews,
                         },
                     });
@@ -276,6 +298,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             password: string;
             name: string;
             phone: string;
+            building: string;
             apartment: string;
         }) => {
             const user: User = {
@@ -287,6 +310,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 profile: {
                     name: data.name.trim(),
                     phone: data.phone.trim(),
+                    building: data.building.trim(),
                     apartment: data.apartment.trim(),
                 },
                 password: data.password,
@@ -402,11 +426,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const isAuthenticated =
         state.sessionActive && state.account !== null;
     const user = isAuthenticated ? state.account!.user : null;
-    const profile = state.account?.profile ?? {
-        name: "",
-        phone: "",
-        apartment: "",
-    };
+    const profile =
+        state.account?.profile != null
+            ? normalizeProfile(state.account.profile)
+            : { name: "", phone: "", building: "", apartment: "" };
 
     const hasAccount = state.account !== null;
 

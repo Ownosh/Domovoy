@@ -10,6 +10,9 @@ export type User = {
 export type Profile = {
     name: string;
     phone: string;
+    /** ЖК, улица, дом, корпус — как ввёл житель */
+    building: string;
+    /** Номер квартиры */
     apartment: string;
 };
 

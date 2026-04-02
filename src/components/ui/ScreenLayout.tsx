@@ -32,7 +32,15 @@ export function ScreenLayout({
     onBack,
 }: Props) {
     const body = (
-        <View style={[styles.inner, contentStyle]}>{children}</View>
+        <View
+            style={[
+                styles.inner,
+                !scroll && styles.innerNoScroll,
+                contentStyle,
+            ]}
+        >
+            {children}
+        </View>
     );
 
     return (
@@ -83,6 +91,7 @@ export function ScreenLayout({
                         style={styles.scroll}
                         contentContainerStyle={styles.scrollContent}
                         keyboardShouldPersistTaps="handled"
+                        keyboardDismissMode="on-drag"
                         showsVerticalScrollIndicator={false}
                     >
                         {body}
@@ -99,7 +108,10 @@ const styles = StyleSheet.create({
     gradient: { flex: 1 },
     safe: { flex: 1 },
     scroll: { flex: 1 },
-    scrollContent: { paddingBottom: spacing.xxxl },
+    scrollContent: {
+        paddingBottom: spacing.xxxl * 2,
+        flexGrow: 1,
+    },
     header: {
         flexDirection: "row",
         alignItems: "flex-start",
@@ -121,4 +133,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.lg,
         gap: spacing.lg,
     },
+    /** Without ScrollView, stretch so flex children (e.g. Login) get a real height */
+    innerNoScroll: { flex: 1 },
 });

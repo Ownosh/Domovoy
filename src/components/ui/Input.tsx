@@ -10,10 +10,12 @@ import { colors, radius, spacing, textStyles } from "../../theme";
 
 type Props = TextInputProps & {
     label?: string;
+    /** Подсказка под полем — переносится, в отличие от placeholder */
+    hint?: string;
     error?: string;
 };
 
-export function Input({ label, error, style, ...rest }: Props) {
+export function Input({ label, hint, error, style, ...rest }: Props) {
     return (
         <View style={styles.wrap}>
             {!!label && (
@@ -29,6 +31,9 @@ export function Input({ label, error, style, ...rest }: Props) {
                 ]}
                 {...rest}
             />
+            {!!hint && (
+                <Text style={[textStyles.caption, styles.hint]}>{hint}</Text>
+            )}
             {!!error && (
                 <Text style={[textStyles.caption, styles.error]}>{error}</Text>
             )}
@@ -39,6 +44,7 @@ export function Input({ label, error, style, ...rest }: Props) {
 const styles = StyleSheet.create({
     wrap: { gap: spacing.sm },
     label: { color: colors.textMuted },
+    hint: { color: colors.textDim },
     input: {
         backgroundColor: colors.bgElevated,
         borderWidth: 1,

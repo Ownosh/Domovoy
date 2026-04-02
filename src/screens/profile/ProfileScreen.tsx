@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Card, ScreenLayout } from "../../components/ui";
 import { VerificationStatusBadge } from "../../components/ui/StatusBadge";
 import { useApp } from "../../context/AppContext";
+import type { Profile } from "../../types";
 import { colors, spacing, textStyles } from "../../theme";
 
 type Props = ProfileScreenProps<"ProfileMain">;
@@ -30,6 +31,13 @@ const rows: {
     { icon: "trash-outline", title: "Удалить аккаунт", target: "DeleteAccount" },
 ];
 
+function formatProfileSubline(profile: Pick<Profile, "building" | "apartment" | "phone">) {
+    const addr = [profile.building, profile.apartment && `кв. ${profile.apartment}`]
+        .filter(Boolean)
+        .join(" · ");
+    return [addr, profile.phone].filter(Boolean).join(" · ");
+}
+
 export function ProfileScreen({ navigation }: Props) {
     const { profile, user, logout, verification } = useApp();
 
@@ -43,8 +51,7 @@ export function ProfileScreen({ navigation }: Props) {
                     {profile.name || "Житель"}
                 </Text>
                 <Text style={[textStyles.caption, styles.sub]}>
-                    {profile.apartment ? `Кв. ${profile.apartment}` : ""}
-                    {profile.phone ? ` · ${profile.phone}` : ""}
+                    {formatProfileSubline(profile)}
                 </Text>
                 <View style={styles.verifyRow}>
                     <Text style={[textStyles.caption, styles.verifyLabel]}>

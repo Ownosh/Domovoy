@@ -37,56 +37,57 @@ export const housePassport: HousePassport = {
     ],
 };
 
-const center = { lat: 55.751244, lng: 37.618423 };
+/** Центр карты — рядом с пр. Октябрьский, 117 (г. Киров) */
+const center = { lat: 58.5844, lng: 49.6605 };
 
 export const districtPois: DistrictPoi[] = [
     {
         id: "p1",
-        name: "Школа № 1424",
+        name: "Лицей № 39",
         category: "education",
-        address: "ул. Берёзовая, 5",
-        lat: 55.7528,
-        lng: 37.615,
+        address: "г. Киров, пр. Октябрьский, 99",
+        lat: 58.5856,
+        lng: 49.6588,
     },
     {
         id: "p2",
-        name: "Детский сад «Родничок»",
+        name: "Детский сад № 194",
         category: "education",
-        address: "ул. Липовая, 3",
-        lat: 55.7495,
-        lng: 37.621,
+        address: "г. Киров, ул. Ленина, 198",
+        lat: 58.5832,
+        lng: 49.6624,
     },
     {
         id: "p3",
-        name: "Поликлиника района",
+        name: "Городская поликлиника № 2",
         category: "health",
-        address: "пр. Зелёный, 18",
-        lat: 55.748,
-        lng: 37.612,
+        address: "г. Киров, пр. Октябрьский, 24",
+        lat: 58.5868,
+        lng: 49.6555,
     },
     {
         id: "p4",
-        name: "ТЦ «Берёзка»",
+        name: "ТЦ «Глобус»",
         category: "shopping",
-        address: "ул. Берёзовая, 20",
-        lat: 55.7535,
-        lng: 37.6225,
+        address: "г. Киров, пр. Октябрьский, 82",
+        lat: 58.585,
+        lng: 49.6579,
     },
     {
         id: "p5",
-        name: "Парк «Сосновый бор»",
+        name: "Сквер у Дворца молодёжи",
         category: "leisure",
-        address: "Сосновая аллея",
-        lat: 55.7465,
-        lng: 37.619,
+        address: "г. Киров, пр. Октябрьский (зона отдыха)",
+        lat: 58.5825,
+        lng: 49.6638,
     },
     {
         id: "p6",
-        name: "Аптека 36,6",
+        name: "Аптека «Фармленд»",
         category: "health",
-        address: "ул. Берёзовая, 8",
-        lat: 55.7505,
-        lng: 37.617,
+        address: "г. Киров, пр. Октябрьский, 105",
+        lat: 58.5849,
+        lng: 49.6592,
     },
 ];
 

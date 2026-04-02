@@ -1,27 +1,49 @@
+import {
+    Montserrat_400Regular,
+    Montserrat_500Medium,
+    Montserrat_600SemiBold,
+    Montserrat_700Bold,
+    useFonts,
+} from "@expo-google-fonts/montserrat";
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
+import { AppProvider } from "./context/AppContext";
+import { RootNavigator } from "./navigation/RootNavigator";
+import { colors } from "./theme";
 
-const App = () => {
+export default function App() {
+    const [fontsLoaded] = useFonts({
+        Montserrat_400Regular,
+        Montserrat_500Medium,
+        Montserrat_600SemiBold,
+        Montserrat_700Bold,
+    });
+
+    if (!fontsLoaded) {
+        return (
+            <View style={styles.boot}>
+                <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+        );
+    }
+
     return (
-        <View style={styles.container}>
-            <Text style={styles.text}>Привет, Домовой!</Text>
-        </View>
+        <SafeAreaProvider>
+            <AppProvider>
+                <StatusBar style="light" />
+                <RootNavigator />
+            </AppProvider>
+        </SafeAreaProvider>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
+    boot: {
         flex: 1,
-        justifyContent: "center",
+        backgroundColor: colors.bg,
         alignItems: "center",
-        backgroundColor: "#191A1F"
+        justifyContent: "center",
     },
-    text: {
-        color: "white",
-        fontSize: 24,
-        textAlign: "center",
-        fontWeight: "bold"
-    }
 });
-
-export default App;

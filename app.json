@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Домовой",
+    "slug": "domovoy",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "domovoy",
+    "plugins": ["expo-font"],
+    "android": {
+      "package": "com.domovoy.app"
+    },
+    "ios": {
+      "bundleIdentifier": "com.domovoy.app"
+    }
+  }
+}

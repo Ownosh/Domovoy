@@ -7,6 +7,7 @@ import { DeleteAccountScreen } from "../screens/profile/DeleteAccountScreen";
 import { EditProfileScreen } from "../screens/profile/EditProfileScreen";
 import { NotificationSettingsScreen } from "../screens/profile/NotificationSettingsScreen";
 import { ProfileScreen } from "../screens/profile/ProfileScreen";
+import { PrivacyPolicyScreen } from "../screens/auth/PrivacyPolicyScreen";
 import { VerificationScreen } from "../screens/profile/VerificationScreen";
 import type { ProfileStackParamList } from "./types";
 
@@ -26,6 +27,10 @@ export function ProfileNavigator() {
                 component={ChangePasswordScreen}
             />
             <Stack.Screen name="Verification" component={VerificationScreen} />
+            <Stack.Screen
+                name="PrivacyPolicy"
+                component={PrivacyPolicyScreen}
+            />
             <Stack.Screen
                 name="DeleteAccount"
                 component={DeleteAccountScreen}

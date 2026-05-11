@@ -4,6 +4,7 @@ import React from "react";
 import { Platform, StyleSheet } from "react-native";
 import { AppealsNavigator } from "./AppealsNavigator";
 import { ProfileNavigator } from "./ProfileNavigator";
+import { SafetyNavigator } from "./SafetyNavigator";
 import type { MainTabParamList } from "./types";
 import { DistrictScreen } from "../screens/district/DistrictScreen";
 import { HomeScreen } from "../screens/home/HomeScreen";
@@ -46,12 +47,12 @@ export function MainTabs() {
                 }}
             />
             <Tab.Screen
-                name="House"
+                name="AboutHouse"
                 component={HousePassportScreen}
                 options={{
-                    title: "Дом",
+                    title: "О доме",
                     tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="business-outline" size={size} color={color} />
+                        <Ionicons name="home-outline" size={size} color={color} />
                     ),
                 }}
             />
@@ -66,13 +67,22 @@ export function MainTabs() {
                 }}
             />
             <Tab.Screen
+                name="Safety"
+                component={SafetyNavigator}
+                options={{
+                    title: "Безопасность и ЧС",
+                    tabBarLabel: "Безопасность",
+                    tabBarIcon: ({ color, size }) => (
+                        <Ionicons name="shield-checkmark-outline" size={size} color={color} />
+                    ),
+                }}
+            />
+            <Tab.Screen
                 name="Profile"
                 component={ProfileNavigator}
                 options={{
                     title: "Профиль",
-                    tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="person-circle-outline" size={size} color={color} />
-                    ),
+                    tabBarItemStyle: { display: "none" },
                 }}
             />
         </Tab.Navigator>

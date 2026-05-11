@@ -1,10 +1,14 @@
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useApp } from "../context/AppContext";
 import { colors } from "../theme";
 import { AuthNavigator } from "./AuthNavigator";
+import { CommunityNavigator } from "./CommunityNavigator";
+import type { AuthenticatedRootParamList } from "./types";
 import { MainTabs } from "./MainTabs";
+import { SosQuickScreen } from "../screens/safety/SosQuickScreen";
 
 const navTheme = {
     ...DefaultTheme,
@@ -17,6 +21,8 @@ const navTheme = {
         primary: colors.primary,
     },
 };
+
+const Stack = createNativeStackNavigator<AuthenticatedRootParamList>();
 
 export function RootNavigator() {
     const { hydrated, isAuthenticated } = useApp();
@@ -31,7 +37,26 @@ export function RootNavigator() {
 
     return (
         <NavigationContainer theme={navTheme}>
-            {isAuthenticated ? <MainTabs /> : <AuthNavigator />}
+            {isAuthenticated ? (
+                <Stack.Navigator
+                    id="AuthenticatedRoot"
+                    screenOptions={{ headerShown: false }}
+                >
+                    <Stack.Screen name="Main" component={MainTabs} />
+                    <Stack.Screen
+                        name="Community"
+                        component={CommunityNavigator}
+                        options={{ presentation: "modal" }}
+                    />
+                    <Stack.Screen
+                        name="Sos"
+                        component={SosQuickScreen}
+                        options={{ presentation: "modal" }}
+                    />
+                </Stack.Navigator>
+            ) : (
+                <AuthNavigator />
+            )}
         </NavigationContainer>
     );
 }

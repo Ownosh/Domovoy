@@ -1,0 +1,31 @@
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import React from "react";
+import type { CommunityStackParamList } from "./types";
+import { CommunityHubScreen } from "../screens/community/CommunityHubScreen";
+import { NeighborAdDetailScreen } from "../screens/community/NeighborAdDetailScreen";
+import { NeighborAdNewScreen } from "../screens/community/NeighborAdNewScreen";
+import { VoteCreateInfoScreen } from "../screens/community/VoteCreateInfoScreen";
+import { VoteDetailScreen } from "../screens/community/VoteDetailScreen";
+import { VoteNewScreen } from "../screens/community/VoteNewScreen";
+
+const Stack = createNativeStackNavigator<CommunityStackParamList>();
+
+export function CommunityNavigator() {
+    return (
+        <Stack.Navigator
+            id="CommunityStack"
+            initialRouteName="CommunityHub"
+            screenOptions={{ headerShown: false }}
+        >
+            <Stack.Screen name="CommunityHub" component={CommunityHubScreen} />
+            <Stack.Screen name="NeighborAdNew" component={NeighborAdNewScreen} />
+            <Stack.Screen
+                name="NeighborAdDetail"
+                component={NeighborAdDetailScreen}
+            />
+            <Stack.Screen name="VoteDetail" component={VoteDetailScreen} />
+            <Stack.Screen name="VoteCreateInfo" component={VoteCreateInfoScreen} />
+            <Stack.Screen name="VoteNew" component={VoteNewScreen} />
+        </Stack.Navigator>
+    );
+}

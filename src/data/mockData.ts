@@ -1,11 +1,20 @@
 import type {
     Appeal,
     AppNotification,
+    ContractorProfile,
     DistrictPoi,
+    EmergencyContactLine,
+    HouseCalendarActivity,
     HousePassport,
+    NeighborAd,
     NewsItem,
+    TrashPickupRow,
     UkContacts,
+    UkTransparencyStats,
+    Vote,
+    VoteCast,
 } from "../types";
+import { buildBuildingKey } from "../utils/buildingKey";
 
 export const ukContacts: UkContacts = {
     companyName: "УК «Домовой»",
@@ -19,7 +28,7 @@ export const housePassport: HousePassport = {
     address: "г. Киров, пр-кт. Октябрьский, д. 117",
     yearBuilt: 2018,
     entrances: 3,
-    apartments: 192,
+    apartments: 487,
     specs: [
         { label: "Серия / тип дома", value: "Панельный, И-155" },
         { label: "Этажность", value: "25 этажей +  подземная автостоянка" },
@@ -37,7 +46,6 @@ export const housePassport: HousePassport = {
     ],
 };
 
-/** Центр карты — рядом с пр. Октябрьский, 117 (г. Киров) */
 const center = { lat: 58.5844, lng: 49.6605 };
 
 export const districtPois: DistrictPoi[] = [
@@ -153,6 +161,8 @@ export const seedNotifications: AppNotification[] = [
     },
 ];
 
+const demoHouseKey = buildBuildingKey(housePassport.address);
+
 export const seedAppeals: Appeal[] = [
     {
         id: "a1",
@@ -161,6 +171,11 @@ export const seedAppeals: Appeal[] = [
         category: "Аварийная ситуация",
         status: "in_progress",
         createdAt: "2026-03-28T14:20:00",
+        kind: "personal",
+        authorUserId: "seed",
+        buildingKey: demoHouseKey,
+        authorApartment: "12",
+        participants: [],
     },
     {
         id: "a2",
@@ -169,6 +184,11 @@ export const seedAppeals: Appeal[] = [
         category: "Оборудование",
         status: "accepted",
         createdAt: "2026-03-25T11:00:00",
+        kind: "personal",
+        authorUserId: "seed",
+        buildingKey: demoHouseKey,
+        authorApartment: "101",
+        participants: [],
     },
     {
         id: "a3",
@@ -177,6 +197,220 @@ export const seedAppeals: Appeal[] = [
         category: "Нарушение порядка",
         status: "resolved",
         createdAt: "2026-03-10T09:30:00",
+        kind: "personal",
+        authorUserId: "seed",
+        buildingKey: demoHouseKey,
+        authorApartment: "84",
+        participants: [],
+    },
+    {
+        id: "a_col_demo",
+        title: "Коллективно: сквозняк в подъезде 2",
+        body: "Дверь на этаже не закрывается, холодный воздух. Просим УК устранить.",
+        category: "Оборудование",
+        status: "new",
+        createdAt: "2026-05-01T10:00:00",
+        kind: "collective",
+        authorUserId: "seed",
+        buildingKey: demoHouseKey,
+        entrance: "2",
+        authorApartment: "40",
+        participants: [
+            {
+                userId: "seed_n1",
+                apartment: "45",
+                entrance: "2",
+                displayName: "Иван П.",
+                anonymous: false,
+                comment: "Поддерживаю, у нас на этаже дует",
+                joinedAt: "2026-05-01T11:00:00",
+            },
+            {
+                userId: "seed_n2",
+                apartment: "47",
+                entrance: "2",
+                displayName: "Сосед",
+                anonymous: true,
+                joinedAt: "2026-05-01T12:30:00",
+            },
+        ],
+    },
+];
+
+const monthMs = 30 * 24 * 60 * 60 * 1000;
+
+export const seedNeighborAds: NeighborAd[] = [
+    {
+        id: "ad1",
+        authorUserId: "seed",
+        buildingKey: demoHouseKey,
+        title: "Продаю детскую коляску",
+        body: "Состояние хорошее, пользовались 8 месяцев. Самовывоз.",
+        category: "sell",
+        showPhone: false,
+        authorPhone: undefined,
+        createdAt: "2026-04-20T12:00:00",
+        expiresAt: new Date(
+            new Date("2026-04-20T12:00:00").getTime() + monthMs,
+        ).toISOString(),
+        archived: false,
+    },
+    {
+        id: "ad2",
+        authorUserId: "seed",
+        buildingKey: demoHouseKey,
+        title: "Ищу няню на вечер пятницы",
+        body: "Ребёнку 4 года, район школы № 1424.",
+        category: "service",
+        showPhone: true,
+        authorPhone: "+7 (900) 000-00-00",
+        createdAt: "2026-05-05T09:00:00",
+        expiresAt: new Date(
+            new Date("2026-05-05T09:00:00").getTime() + monthMs,
+        ).toISOString(),
+        archived: false,
+    },
+    {
+        id: "ad_lost1",
+        authorUserId: "seed",
+        buildingKey: demoHouseKey,
+        title: "Потерян ключ с брелоком Audi",
+        body: "Вчера вечером у подъезда 2. Нашедшего прошу написать.",
+        category: "lost",
+        showPhone: true,
+        authorPhone: "+7 (900) 000-00-00",
+        createdAt: "2026-05-09T18:00:00",
+        expiresAt: new Date(
+            new Date("2026-05-09T18:00:00").getTime() + monthMs,
+        ).toISOString(),
+        archived: false,
+    },
+    {
+        id: "ad_found1",
+        authorUserId: "seed",
+        buildingKey: demoHouseKey,
+        title: "Найдена детская шапка (розовая)",
+        body: "У почтовых ящиков в подъезде 1, полка над батареей.",
+        category: "found",
+        showPhone: false,
+        authorPhone: undefined,
+        createdAt: "2026-05-10T11:00:00",
+        expiresAt: new Date(
+            new Date("2026-05-10T11:00:00").getTime() + monthMs,
+        ).toISOString(),
+        archived: false,
+    },
+];
+
+export const seedVotes: Vote[] = [
+    {
+        id: "v_demo_trial",
+        buildingKey: demoHouseKey,
+        sponsor: "residents",
+        trial: true,
+        createdByLabel: "Пример для жильцов",
+        topic: "Пробное голосование: как проходит опрос",
+        description:
+            "Демонстрационная карточка: так выглядит голосование от соседей. Проголосуйте, чтобы проверить учёт площади и интерфейс. Для настоящего ОСС используется официальная процедура и ГИС ЖКХ.",
+        options: [
+            { id: "v_demo_trial_o1", label: "Всё понятно, интерфейс устраивает" },
+            { id: "v_demo_trial_o2", label: "Хочется доработок" },
+        ],
+        endsAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
+        visibility: "open",
+        createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+        id: "v1",
+        buildingKey: demoHouseKey,
+        sponsor: "uk",
+        createdByLabel: "УК «Домовой»",
+        topic: "Установка видеокамеры во дворе",
+        description:
+            "Предлагается установить камеру у детской площадки за счёт средств ФКР. Срок голосования — 7 дней.",
+        options: [
+            { id: "v1o1", label: "За" },
+            { id: "v1o2", label: "Против" },
+            { id: "v1o3", label: "Воздержаться" },
+        ],
+        endsAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
+        visibility: "open",
+        createdAt: "2026-05-08T08:00:00",
+    },
+    {
+        id: "v2",
+        buildingKey: demoHouseKey,
+        sponsor: "residents",
+        createdByLabel: "Инициативная группа",
+        topic: "Выбор подрядчика по косметическому ремонту подъезда",
+        description: "Тайное голосование между двумя допущенными организациями.",
+        options: [
+            { id: "v2o1", label: "ООО «СтройКомфорт»" },
+            { id: "v2o2", label: "ООО «РемДом»" },
+        ],
+        endsAt: "2026-04-01T23:59:59",
+        visibility: "secret",
+        createdAt: "2026-03-20T10:00:00",
+        closed: true,
+    },
+];
+
+export const seedVoteCasts: VoteCast[] = [
+    {
+        voteId: "v2",
+        userId: "seed",
+        optionId: "v2o1",
+        votedAt: "2026-03-25T14:00:00",
+        areaSqm: 54.2,
+    },
+    {
+        voteId: "v2",
+        userId: "seed_owner2",
+        optionId: "v2o2",
+        votedAt: "2026-03-26T10:30:00",
+        areaSqm: 38.0,
+    },
+];
+
+/** Плановые события по дому — отображаются в календаре на месяц */
+export const houseCalendarActivities: HouseCalendarActivity[] = [
+    { id: "ca1", date: "2026-05-03", title: "Уборка двора и МАФ", kind: "yard" },
+    { id: "ca2", date: "2026-05-07", title: "Замена участка стояка ХВС (подъезд 1)", kind: "pipes" },
+    { id: "ca3", date: "2026-05-10", title: "Собрание собственников (онлайн)", kind: "meeting" },
+    { id: "ca4", date: "2026-05-14", title: "Уборка двора и МАФ", kind: "yard" },
+    { id: "ca5", date: "2026-05-18", title: "Промывка системы отопления (пробный контур)", kind: "heating" },
+    { id: "ca6", date: "2026-05-21", title: "Вывоз крупногабарита (площадка)", kind: "garbage" },
+    { id: "ca7", date: "2026-05-24", title: "Уборка двора и МАФ", kind: "yard" },
+    { id: "ca8", date: "2026-05-28", title: "Проверка лифтов (плановая)", kind: "other" },
+    { id: "ca9", date: "2026-06-01", title: "Уборка двора и МАФ", kind: "yard" },
+    { id: "ca10", date: "2026-06-11", title: "Окраска металлоконструкций входных групп", kind: "other" },
+];
+
+/** Расписание вывоза и обслуживания мусорной площадки */
+export const trashPickupSchedule: TrashPickupRow[] = [
+    {
+        id: "t1",
+        title: "ТКО (смешанные отходы)",
+        schedule: "Понедельник, среда, пятница",
+        note: "Вывоз с контейнерной площадки после 8:00",
+    },
+    {
+        id: "t2",
+        title: "Раздельный сбор (пластик, бумага)",
+        schedule: "По вторникам",
+        note: "Пластик — синий контейнер, макулатура — жёлтый",
+    },
+    {
+        id: "t3",
+        title: "Крупногабарит и вторсырьё",
+        schedule: "1-я суббота каждого месяца",
+        note: "С 9:00 до 14:00 на площадке у въезда",
+    },
+    {
+        id: "t4",
+        title: "Органические отходы (пилот)",
+        schedule: "Четверг",
+        note: "Коричневый контейнер — только для участников пилота",
     },
 ];
 
@@ -189,4 +423,52 @@ export const appealCategories = [
     "Уборка / благоустройство",
     "Нарушение порядка",
     "Другое",
+];
+
+/** Публичные метрики УК (имитация снимка раз в сутки, без ручной правки в приложении) */
+export const ukTransparencyStats: UkTransparencyStats = {
+    snapshotAtIso: "2026-05-11T06:00:00",
+    avgAppealStars3m: 4.2,
+    closedAppeals90d: 186,
+    closedOnTimePercent: 78,
+};
+
+export const seedContractors: ContractorProfile[] = [
+    {
+        id: "c1",
+        name: "ООО «АкваСервис»",
+        workKinds: ["Сантехника", "Отопление"],
+        avgStars: 4.6,
+        closedJobsRated: 42,
+    },
+    {
+        id: "c2",
+        name: "«ЭлектроБезопасность»",
+        workKinds: ["Электрика", "Щитовые"],
+        avgStars: 4.3,
+        closedJobsRated: 31,
+    },
+    {
+        id: "c3",
+        name: "Клининг «Чистый дом»",
+        workKinds: ["Уборка МОП", "Подъезды"],
+        avgStars: 4.1,
+        closedJobsRated: 58,
+    },
+];
+
+/** Доп. номера от УК — подмешиваются к стандартному списку аварийных */
+export const ukEmergencyExtraContacts: EmergencyContactLine[] = [
+    {
+        id: "uk_dispatch",
+        title: "Диспетчер УК (круглосуточно)",
+        subtitle: "Аварийная заявка по дому",
+        phone: "+74951234567",
+    },
+    {
+        id: "uk_lift",
+        title: "Лифтовая служба по договору",
+        subtitle: "Подрядчик УК",
+        phone: "+74959876543",
+    },
 ];

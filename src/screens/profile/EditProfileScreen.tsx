@@ -13,14 +13,24 @@ export function EditProfileScreen({ navigation }: Props) {
     const [phone, setPhone] = useState(profile.phone);
     const [building, setBuilding] = useState(profile.building);
     const [apartment, setApartment] = useState(profile.apartment);
+    const [areaStr, setAreaStr] = useState(
+        profile.apartmentAreaSqm != null
+            ? String(profile.apartmentAreaSqm)
+            : "",
+    );
     const [ok, setOk] = useState(false);
 
     const save = () => {
+        const areaNum = parseFloat(areaStr.replace(",", "."));
         updateProfile({
             name: name.trim(),
             phone: phone.trim(),
             building: building.trim(),
             apartment: apartment.trim(),
+            apartmentAreaSqm:
+                areaStr.trim() === "" || Number.isNaN(areaNum)
+                    ? undefined
+                    : areaNum,
         });
         setOk(true);
         setTimeout(() => navigation.goBack(), 600);
@@ -54,6 +64,14 @@ export function EditProfileScreen({ navigation }: Props) {
                     label="Квартира"
                     value={apartment}
                     onChangeText={setApartment}
+                />
+                <View style={styles.gap} />
+                <Input
+                    label="Площадь квартиры, м² (для голосований ОСС)"
+                    value={areaStr}
+                    onChangeText={setAreaStr}
+                    keyboardType="decimal-pad"
+                    placeholder="Например: 54.2"
                 />
                 {ok && (
                     <Text style={[textStyles.caption, styles.ok]}>

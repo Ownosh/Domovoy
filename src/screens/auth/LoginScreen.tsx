@@ -32,13 +32,14 @@ export function LoginScreen({ navigation }: Props) {
     };
 
     return (
-        <ScreenLayout
-            title="Вход"
-            subtitle="Личный кабинет жителя"
-            scroll={false}
-        >
+        <ScreenLayout scroll={false}>
             <View style={styles.flex}>
                 <Card style={styles.card}>
+                    <Text style={[textStyles.title, styles.formTitle]}>Вход</Text>
+                    <Text style={[textStyles.caption, styles.formSubtitle]}>
+                        Личный кабинет жителя
+                    </Text>
+                    <View style={styles.gap} />
                     <Input
                         label="Email"
                         value={email}
@@ -86,6 +87,8 @@ export function LoginScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
     flex: { flex: 1, justifyContent: "center", paddingVertical: spacing.xl },
     card: { gap: spacing.sm, flexDirection: "column" },
+    formTitle: { color: colors.text, textAlign: "center" },
+    formSubtitle: { color: colors.textMuted, textAlign: "center" },
     gap: { height: spacing.md },
     gapLg: { height: spacing.lg },
     err: { color: colors.danger, marginTop: spacing.sm },

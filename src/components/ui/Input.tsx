@@ -10,7 +10,6 @@ import { colors, radius, spacing, textStyles } from "../../theme";
 
 type Props = TextInputProps & {
     label?: string;
-    /** Подсказка под полем — переносится, в отличие от placeholder */
     hint?: string;
     error?: string;
 };

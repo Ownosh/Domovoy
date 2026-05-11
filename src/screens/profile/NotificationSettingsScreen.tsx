@@ -1,9 +1,7 @@
 import type { ProfileScreenProps } from "../../navigation/types";
 import React from "react";
-import { StyleSheet, Text } from "react-native";
 import { Card, ScreenLayout, ToggleRow } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
-import { colors, textStyles } from "../../theme";
 
 type Props = ProfileScreenProps<"NotificationSettings">;
 
@@ -13,13 +11,9 @@ export function NotificationSettingsScreen({ navigation }: Props) {
     return (
         <ScreenLayout
             title="Уведомления"
-            subtitle="Какие типы сообщений показывать в ленте"
+            subtitle="Какие типы сообщений показывать и присылать"
             onBack={() => navigation.goBack()}
         >
-            <Text style={[textStyles.body, styles.intro]}>
-                Отключённые категории скрываются на главной и не подсвечиваются
-                как непрочитанные.
-            </Text>
             <Card padded={false}>
                 <ToggleRow
                     title="Отключения коммуникаций"
@@ -51,7 +45,3 @@ export function NotificationSettingsScreen({ navigation }: Props) {
         </ScreenLayout>
     );
 }
-
-const styles = StyleSheet.create({
-    intro: { color: colors.textMuted },
-});

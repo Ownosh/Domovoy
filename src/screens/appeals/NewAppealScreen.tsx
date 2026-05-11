@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, Card, Input, ScreenLayout } from "../../components/ui";
 import { appealCategories } from "../../data/mockData";
 import { useApp } from "../../context/AppContext";
+import type { AppealKind } from "../../types";
 import { colors, radius, spacing, textStyles } from "../../theme";
 
 type Props = AppealsScreenProps<"AppealNew">;
@@ -13,6 +14,8 @@ export function NewAppealScreen({ navigation }: Props) {
     const [title, setTitle] = useState("");
     const [body, setBody] = useState("");
     const [category, setCategory] = useState(appealCategories[0]);
+    const [kind, setKind] = useState<AppealKind>("personal");
+    const [entrance, setEntrance] = useState("");
     const [err, setErr] = useState("");
 
     const submit = () => {
@@ -20,8 +23,18 @@ export function NewAppealScreen({ navigation }: Props) {
             setErr("Укажите тему и описание");
             return;
         }
+        if (kind === "collective" && !entrance.trim()) {
+            setErr("Для коллективного обращения укажите номер подъезда (для порога квартир)");
+            return;
+        }
         setErr("");
-        addAppeal(title.trim(), body.trim(), category);
+        addAppeal({
+            title: title.trim(),
+            body: body.trim(),
+            category,
+            kind,
+            entrance: kind === "collective" ? entrance.trim() : undefined,
+        });
         navigation.popToTop();
     };
 
@@ -31,6 +44,61 @@ export function NewAppealScreen({ navigation }: Props) {
             subtitle="Опишите проблему"
             onBack={() => navigation.goBack()}
         >
+            <Text style={[textStyles.label, styles.label]}>Тип обращения</Text>
+            <View style={styles.kindRow}>
+                <Pressable
+                    onPress={() => setKind("personal")}
+                    style={[
+                        styles.kindChip,
+                        kind === "personal" && styles.kindChipOn,
+                    ]}
+                >
+                    <Text
+                        style={[
+                            textStyles.caption,
+                            kind === "personal"
+                                ? styles.kindChipTextOn
+                                : styles.kindChipText,
+                        ]}
+                    >
+                        Личное
+                    </Text>
+                </Pressable>
+                <Pressable
+                    onPress={() => setKind("collective")}
+                    style={[
+                        styles.kindChip,
+                        kind === "collective" && styles.kindChipOn,
+                    ]}
+                >
+                    <Text
+                        style={[
+                            textStyles.caption,
+                            kind === "collective"
+                                ? styles.kindChipTextOn
+                                : styles.kindChipText,
+                        ]}
+                    >
+                        Коллективное
+                    </Text>
+                </Pressable>
+            </View>
+            <Text style={[textStyles.caption, styles.hint]}>
+                Коллективное попадает в общую ленту дома; соседи могут присоединиться
+                после верификации.
+            </Text>
+            {kind === "collective" && (
+                <Card style={styles.entCard}>
+                    <Input
+                        label="Подъезд №"
+                        value={entrance}
+                        onChangeText={setEntrance}
+                        keyboardType="number-pad"
+                        placeholder="Например: 2"
+                        hint="Порог «массового обращения» — уникальные квартиры в этом подъезде"
+                    />
+                </Card>
+            )}
             <Text style={[textStyles.label, styles.label]}>Категория</Text>
             <View style={styles.chips}>
                 {appealCategories.map((c) => (
@@ -84,6 +152,27 @@ export function NewAppealScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
     label: { color: colors.textMuted },
+    kindRow: {
+        flexDirection: "row",
+        gap: spacing.sm,
+        marginBottom: spacing.sm,
+    },
+    kindChip: {
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.sm,
+        borderRadius: radius.full,
+        borderWidth: 1,
+        borderColor: colors.border,
+        backgroundColor: colors.surface,
+    },
+    kindChipOn: {
+        borderColor: colors.primary,
+        backgroundColor: colors.primarySoft,
+    },
+    kindChipText: { color: colors.textMuted },
+    kindChipTextOn: { color: colors.primary, fontWeight: "600" },
+    hint: { color: colors.textDim, marginBottom: spacing.md, lineHeight: 18 },
+    entCard: { marginBottom: spacing.md },
     chips: {
         flexDirection: "row",
         flexWrap: "wrap",

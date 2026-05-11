@@ -52,7 +52,7 @@ export function ScreenLayout({
         >
             <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
                 {(title || subtitle || rightAccessory || onBack) && (
-                    <View style={styles.header}>
+                    <View style={[styles.header, onBack && styles.headerWithBack]}>
                         {onBack ? (
                             <Pressable
                                 onPress={onBack}
@@ -69,21 +69,38 @@ export function ScreenLayout({
                                 />
                             </Pressable>
                         ) : null}
-                        <View style={styles.headerText}>
+                        <View
+                            style={[
+                                styles.headerText,
+                                onBack && styles.headerTextWithBack,
+                            ]}
+                        >
                             {!!title && (
-                                <Text style={[textStyles.hero, styles.title]}>
+                                <Text
+                                    style={[
+                                        textStyles.hero,
+                                        styles.title,
+                                        onBack && styles.titleWithBack,
+                                    ]}
+                                >
                                     {title}
                                 </Text>
                             )}
                             {!!subtitle && (
                                 <Text
-                                    style={[textStyles.caption, styles.subtitle]}
+                                    style={[
+                                        textStyles.caption,
+                                        styles.subtitle,
+                                        onBack && styles.subtitleWithBack,
+                                    ]}
                                 >
                                     {subtitle}
                                 </Text>
                             )}
                         </View>
-                        {rightAccessory}
+                        {rightAccessory ? (
+                            <View style={styles.rightAccessory}>{rightAccessory}</View>
+                        ) : null}
                     </View>
                 )}
                 {scroll ? (
@@ -121,18 +138,41 @@ const styles = StyleSheet.create({
         paddingBottom: spacing.md,
         gap: spacing.sm,
     },
+    headerWithBack: {
+        justifyContent: "center",
+        alignItems: "center",
+        minHeight: 44,
+    },
     backBtn: {
-        marginLeft: -spacing.sm,
-        marginTop: -spacing.xs,
+        position: "absolute",
+        left: spacing.lg - spacing.sm,
+        top: spacing.sm,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.borderSubtle,
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1,
     },
     backPressed: { opacity: 0.6 },
     headerText: { flex: 1, paddingRight: spacing.md },
+    headerTextWithBack: {
+        flex: 0,
+        paddingLeft: spacing.xl,
+        paddingRight: spacing.xl,
+        alignItems: "center",
+    },
+    rightAccessory: { marginLeft: "auto" },
     title: { color: colors.text },
+    titleWithBack: { textAlign: "center" },
     subtitle: { color: colors.textMuted, marginTop: spacing.xs },
+    subtitleWithBack: { textAlign: "center" },
     inner: {
         paddingHorizontal: spacing.lg,
         gap: spacing.lg,
     },
-    /** Without ScrollView, stretch so flex children (e.g. Login) get a real height */
     innerNoScroll: { flex: 1 },
 });

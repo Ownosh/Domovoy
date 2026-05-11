@@ -1,8 +1,11 @@
+import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { DistrictMap } from "../../components/map/DistrictMap";
 import { Card, ScreenLayout } from "../../components/ui";
 import { districtPois } from "../../data/mockData";
+import type { MainTabNavigationProp } from "../../navigation/types";
 import type { PoiCategory } from "../../types";
 import { colors, radius, spacing, textStyles } from "../../theme";
 
@@ -22,6 +25,7 @@ const catColors: Record<PoiCategory, string> = {
 };
 
 export function DistrictScreen() {
+    const navigation = useNavigation<MainTabNavigationProp>();
     const [filter, setFilter] = useState<PoiCategory | "all">("all");
     const list = useMemo(
         () =>
@@ -35,6 +39,22 @@ export function DistrictScreen() {
         <ScreenLayout
             title="Район"
             subtitle="Справочник и карта объектов рядом с домом"
+            rightAccessory={
+                <Pressable
+                    onPress={() => navigation.navigate("Profile")}
+                    hitSlop={10}
+                    style={({ pressed }) => [
+                        styles.profileButton,
+                        pressed && styles.profileButtonPressed,
+                    ]}
+                >
+                    <Ionicons
+                        name="person-circle-outline"
+                        size={30}
+                        color={colors.text}
+                    />
+                </Pressable>
+            }
         >
             <View style={styles.filters}>
                 {filters.map((f) => (
@@ -88,6 +108,8 @@ export function DistrictScreen() {
 }
 
 const styles = StyleSheet.create({
+    profileButton: { marginTop: spacing.xs },
+    profileButtonPressed: { opacity: 0.6 },
     filters: {
         flexDirection: "row",
         flexWrap: "wrap",

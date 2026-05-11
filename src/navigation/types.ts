@@ -1,4 +1,5 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import type { EmergencyScenarioId, NeighborAdCategory } from "../types";
 import type {
     BottomTabNavigationProp,
     BottomTabScreenProps,
@@ -11,7 +12,36 @@ import type {
 export type AuthStackParamList = {
     Login: undefined;
     Register: undefined;
+    PrivacyPolicy: undefined;
 };
+
+export type CommunityStackParamList = {
+    CommunityHub: undefined;
+    NeighborAdNew: { presetCategory?: NeighborAdCategory } | undefined;
+    NeighborAdDetail: { id: string };
+    VoteDetail: { id: string };
+    VoteCreateInfo: undefined;
+    VoteNew: undefined;
+};
+
+export type AuthenticatedRootParamList = {
+    Main: undefined;
+    Community: NavigatorScreenParams<CommunityStackParamList> | undefined;
+    Sos: undefined;
+};
+
+export type SafetyStackParamList = {
+    SafetyHub: undefined;
+    EmergencyPhones: undefined;
+    EmergencyGuide: undefined;
+    EmergencyGuideDetail: { scenario: EmergencyScenarioId };
+};
+
+export type SafetyScreenProps<T extends keyof SafetyStackParamList> =
+    NativeStackScreenProps<SafetyStackParamList, T>;
+
+export type CommunityScreenProps<T extends keyof CommunityStackParamList> =
+    NativeStackScreenProps<CommunityStackParamList, T>;
 
 export type AppealsStackParamList = {
     AppealsList: undefined;
@@ -24,6 +54,7 @@ export type ProfileStackParamList = {
     EditProfile: undefined;
     ChangePassword: undefined;
     Verification: undefined;
+    PrivacyPolicy: undefined;
     DeleteAccount: undefined;
     AppealHistory: undefined;
     NotificationSettings: undefined;
@@ -33,8 +64,9 @@ export type ProfileStackParamList = {
 export type MainTabParamList = {
     Home: undefined;
     Appeals: NavigatorScreenParams<AppealsStackParamList> | undefined;
-    House: undefined;
+    AboutHouse: undefined;
     District: undefined;
+    Safety: NavigatorScreenParams<SafetyStackParamList> | undefined;
     Profile: NavigatorScreenParams<ProfileStackParamList> | undefined;
 };
 
@@ -51,7 +83,7 @@ export type ProfileScreenProps<T extends keyof ProfileStackParamList> =
 
 export type HomeTabProps = CompositeScreenProps<
     BottomTabScreenProps<MainTabParamList, "Home">,
-    NativeStackScreenProps<RootStackParamList>
+    NativeStackScreenProps<AuthenticatedRootParamList>
 >;
 
 export type MainTabNavigationProp = BottomTabNavigationProp<MainTabParamList>;

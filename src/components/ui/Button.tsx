@@ -55,7 +55,7 @@ export function Button({
                         textStyles.subtitle,
                         styles.label,
                         isPrimary && styles.labelOnPrimary,
-                        isDanger && styles.labelOnPrimary,
+                        isDanger && styles.labelOnDanger,
                         variant === "secondary" && styles.labelSecondary,
                         variant === "ghost" && styles.labelGhost,
                     ]}
@@ -94,11 +94,19 @@ const styles = StyleSheet.create({
     },
     danger: {
         backgroundColor: colors.danger,
+        borderWidth: 1,
+        borderColor: "#f08b8b",
+        shadowColor: colors.danger,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.28,
+        shadowRadius: 8,
+        elevation: 3,
     },
     disabled: { opacity: 0.45 },
     pressed: { opacity: 0.88, transform: [{ scale: 0.99 }] },
     label: { fontSize: 15 },
     labelOnPrimary: { color: colors.bg },
+    labelOnDanger: { color: colors.bg },
     labelSecondary: { color: colors.text },
     labelGhost: { color: colors.primary },
 });

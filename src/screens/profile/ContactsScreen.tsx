@@ -2,8 +2,8 @@ import type { ProfileScreenProps } from "../../navigation/types";
 import React from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Card, ScreenLayout } from "../../components/ui";
-import { ukContacts } from "../../data/mockData";
+import { Card, ScreenLayout, UkPublicStatsCard } from "../../components/ui";
+import { ukContacts, ukTransparencyStats } from "../../data/mockData";
 import { colors, spacing, textStyles } from "../../theme";
 
 type Props = ProfileScreenProps<"Contacts">;
@@ -21,6 +21,8 @@ export function ContactsScreen({ navigation }: Props) {
             subtitle={c.companyName}
             onBack={() => navigation.goBack()}
         >
+            <UkPublicStatsCard stats={ukTransparencyStats} />
+            <View style={{ height: spacing.lg }} />
             <Card>
                 <ContactRow
                     icon="mail-outline"

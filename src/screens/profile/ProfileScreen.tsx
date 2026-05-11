@@ -25,7 +25,7 @@ const rows: {
     { icon: "person-outline", title: "Личные данные", target: "EditProfile" },
     { icon: "key-outline", title: "Смена пароля", target: "ChangePassword" },
     { icon: "shield-checkmark-outline", title: "Верификация", target: "Verification" },
-    { icon: "chatbubbles-outline", title: "История обращений", target: "AppealHistory" },
+    { icon: "archive-outline", title: "Архив", target: "AppealHistory" },
     { icon: "notifications-outline", title: "Уведомления", target: "NotificationSettings" },
     { icon: "business-outline", title: "Контакты УК", target: "Contacts" },
     { icon: "trash-outline", title: "Удалить аккаунт", target: "DeleteAccount" },

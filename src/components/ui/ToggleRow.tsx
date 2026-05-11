@@ -28,15 +28,17 @@ export function ToggleRow({
                     </Text>
                 )}
             </View>
-            <Switch
-                value={value}
-                onValueChange={onValueChange}
-                trackColor={{
-                    false: colors.border,
-                    true: colors.primaryMuted,
-                }}
-                thumbColor={value ? colors.primary : colors.textDim}
-            />
+            <View style={styles.switchWrap}>
+                <Switch
+                    value={value}
+                    onValueChange={onValueChange}
+                    trackColor={{
+                        false: colors.border,
+                        true: colors.primaryMuted,
+                    }}
+                    thumbColor={value ? colors.primary : colors.textDim}
+                />
+            </View>
         </Pressable>
     );
 }
@@ -44,13 +46,19 @@ export function ToggleRow({
 const styles = StyleSheet.create({
     row: {
         flexDirection: "row",
-        alignItems: "center",
+        alignItems: "flex-start",
         justifyContent: "space-between",
+        paddingHorizontal: spacing.lg,
         paddingVertical: spacing.md,
         gap: spacing.md,
     },
     pressed: { opacity: 0.85 },
     texts: { flex: 1 },
+    switchWrap: {
+        minWidth: 56,
+        alignItems: "flex-end",
+        marginTop: 2,
+    },
     title: { color: colors.text },
     desc: { color: colors.textMuted, marginTop: spacing.xs },
 });

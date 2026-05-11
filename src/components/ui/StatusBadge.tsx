@@ -5,8 +5,9 @@ import { colors, radius, spacing, textStyles } from "../../theme";
 
 const appealLabels: Record<AppealStatus, string> = {
     new: "Новое",
-    accepted: "Принято",
+    accepted: "Принятое",
     in_progress: "В работе",
+    mass_appeal: "Массовое обращение",
     resolved: "Решено",
     rejected: "Отклонено",
 };
@@ -15,6 +16,7 @@ const appealColors: Record<AppealStatus, string> = {
     new: colors.info,
     accepted: colors.primary,
     in_progress: colors.warning,
+    mass_appeal: colors.warning,
     resolved: colors.primary,
     rejected: colors.danger,
 };

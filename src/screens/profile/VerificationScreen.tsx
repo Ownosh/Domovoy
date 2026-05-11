@@ -1,6 +1,6 @@
 import type { ProfileScreenProps } from "../../navigation/types";
 import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, Card, ScreenLayout } from "../../components/ui";
 import { VerificationStatusBadge } from "../../components/ui/StatusBadge";
 import { useApp } from "../../context/AppContext";
@@ -11,9 +11,34 @@ type Props = ProfileScreenProps<"Verification">;
 export function VerificationScreen({ navigation }: Props) {
     const { verification, submitVerification, setVerificationDemo } = useApp();
     const [docType, setDocType] = useState<"lease" | "ownership">("lease");
+    const [pdConsent, setPdConsent] = useState(false);
 
     const canSubmit =
         verification.status === "none" || verification.status === "rejected";
+
+    const onUploadDemo = () => {
+        if (!pdConsent) {
+            Alert.alert(
+                "Согласие нужно",
+                "Отметьте согласие на обработку персональных данных для отправки документов на верификацию.",
+            );
+            return;
+        }
+        submitVerification(docType);
+    };
+
+    const onDemoStatus = (
+        status: "pending" | "approved" | "rejected",
+    ) => {
+        if (!pdConsent) {
+            Alert.alert(
+                "Согласие нужно",
+                "Отметьте согласие на обработку персональных данных перед сменой демо-статуса верификации.",
+            );
+            return;
+        }
+        setVerificationDemo(status);
+    };
 
     return (
         <ScreenLayout
@@ -47,6 +72,30 @@ export function VerificationScreen({ navigation }: Props) {
                     </Text>
                 )}
             </Card>
+
+            <View style={styles.consentRow}>
+                <Pressable
+                    onPress={() => setPdConsent((v) => !v)}
+                    style={styles.checkboxHit}
+                >
+                    <View
+                        style={[
+                            styles.checkbox,
+                            pdConsent && styles.checkboxOn,
+                        ]}
+                    />
+                </Pressable>
+                <Text style={[textStyles.caption, styles.consentText]}>
+                    Согласие на обработку персональных данных, необходимых для
+                    верификации (в т.ч. сведений об адресе и документе).{" "}
+                    <Text
+                        style={styles.policyLink}
+                        onPress={() => navigation.navigate("PrivacyPolicy")}
+                    >
+                        Политика конфиденциальности
+                    </Text>
+                </Text>
+            </View>
 
             {canSubmit && (
                 <>
@@ -106,7 +155,8 @@ export function VerificationScreen({ navigation }: Props) {
                         <View style={styles.gap} />
                         <Button
                             title="Загрузить документ (демо)"
-                            onPress={() => submitVerification(docType)}
+                            onPress={onUploadDemo}
+                            disabled={!pdConsent}
                         />
                     </Card>
                 </>
@@ -124,17 +174,20 @@ export function VerificationScreen({ navigation }: Props) {
                     <Button
                         variant="secondary"
                         title="На рассмотрении"
-                        onPress={() => setVerificationDemo("pending")}
+                        onPress={() => onDemoStatus("pending")}
+                        disabled={!pdConsent}
                     />
                     <Button
                         variant="secondary"
                         title="Подтверждён"
-                        onPress={() => setVerificationDemo("approved")}
+                        onPress={() => onDemoStatus("approved")}
+                        disabled={!pdConsent}
                     />
                     <Button
                         variant="secondary"
                         title="Отклонён"
-                        onPress={() => setVerificationDemo("rejected")}
+                        onPress={() => onDemoStatus("rejected")}
+                        disabled={!pdConsent}
                     />
                 </View>
             </Card>
@@ -176,4 +229,24 @@ const styles = StyleSheet.create({
     demoTitle: { color: colors.textDim },
     demoText: { color: colors.textDim },
     demoBtns: { gap: spacing.sm },
+    consentRow: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        gap: spacing.md,
+        marginBottom: spacing.lg,
+    },
+    checkboxHit: { paddingTop: 2 },
+    checkbox: {
+        width: 22,
+        height: 22,
+        borderRadius: 6,
+        borderWidth: 2,
+        borderColor: colors.border,
+    },
+    checkboxOn: {
+        borderColor: colors.primary,
+        backgroundColor: colors.primary,
+    },
+    consentText: { flex: 1, color: colors.textMuted, lineHeight: 20 },
+    policyLink: { color: colors.primary, fontWeight: "600" },
 });

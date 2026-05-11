@@ -4,3 +4,4 @@ export { Input } from "./Input";
 export { ScreenLayout } from "./ScreenLayout";
 export { AppealStatusBadge, VerificationStatusBadge } from "./StatusBadge";
 export { ToggleRow } from "./ToggleRow";
+export { UkPublicStatsCard } from "./UkPublicStatsCard";

@@ -9,28 +9,30 @@ import {
 import { useApp } from "../../context/AppContext";
 import type { MainTabNavigationProp } from "../../navigation/types";
 import { colors, spacing, textStyles } from "../../theme";
+import { isArchivedAppeal } from "../../utils/appeals";
 
 type Props = ProfileScreenProps<"AppealHistory">;
 
 export function AppealHistoryScreen({ navigation }: Props) {
     const parent = navigation.getParent<MainTabNavigationProp>();
     const { appeals } = useApp();
+    const archivedAppeals = appeals.filter(isArchivedAppeal);
 
     return (
         <ScreenLayout
-            title="История обращений"
-            subtitle="Те же заявления, что в разделе «Обращения»"
+            title="Архив"
+            subtitle="Сюда автоматически попадают завершённые обращения"
             scroll={false}
             contentStyle={styles.flex}
             onBack={() => navigation.goBack()}
         >
             <FlatList
-                data={appeals}
+                data={archivedAppeals}
                 keyExtractor={(i) => i.id}
                 contentContainerStyle={styles.list}
                 ListEmptyComponent={
                     <Text style={[textStyles.body, styles.empty]}>
-                        Обращений пока нет
+                        В архиве пока нет завершённых обращений
                     </Text>
                 }
                 renderItem={({ item }) => (

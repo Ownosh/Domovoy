@@ -472,7 +472,7 @@ export function HomeScreen() {
                                         showRibbon={feedFilter === "all"}
                                         onOpen={() =>
                                             openCommunity("VoteDetail", {
-                                                id: row.item.id,
+                                                id: String(row.item.id),
                                             })
                                         }
                                     />
@@ -487,7 +487,7 @@ export function HomeScreen() {
                                         onOpen={() =>
                                             navigation.navigate("Appeals", {
                                                 screen: "AppealDetail",
-                                                params: { id: row.item.id },
+                                                params: { id: String(row.item.id) },
                                             })
                                         }
                                     />
@@ -500,7 +500,7 @@ export function HomeScreen() {
                                     showRibbon={feedFilter === "all"}
                                     onOpen={() =>
                                         openCommunity("NeighborAdDetail", {
-                                            id: row.item.id,
+                                            id: String(row.item.id),
                                         })
                                     }
                                 />
@@ -659,7 +659,6 @@ const styles = StyleSheet.create({
     feedColumn: { flex: 1 },
     feedScroll: { flex: 1 },
     feedScrollContent: {
-        flexGrow: 1,
         paddingBottom: spacing.xxxl * 2,
     },
     fab: {
@@ -776,19 +775,21 @@ const styles = StyleSheet.create({
     ntitle: { color: colors.text },
     nbody: { color: colors.textMuted },
     filterRow: {
-        flexDirection: "row",
-        gap: spacing.sm,
-        paddingBottom: spacing.md,
-        flexGrow: 0,
-    },
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingBottom: spacing.md,
+    flexGrow: 0,
+    alignItems: "center",  // ← добавить
+},
     filterChip: {
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.sm,
-        borderRadius: radius.full,
-        borderWidth: 1,
-        borderColor: colors.border,
-        backgroundColor: colors.surface,
-    },
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignSelf: "flex-start",  // ← добавить
+},
     filterChipOn: {
         borderColor: colors.primary,
         backgroundColor: colors.primarySoft,

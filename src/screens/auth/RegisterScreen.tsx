@@ -30,6 +30,26 @@ export function RegisterScreen({ navigation }: Props) {
     const [dataConsent, setDataConsent] = useState(false);
     const [err, setErr] = useState("");
 
+    const sanitizePhone = (value: string) => {
+        const digits = value.replace(/\D/g, "");
+        let normalized = digits;
+        if (normalized.startsWith("8")) {
+            normalized = `7${normalized.slice(1)}`;
+        }
+        if (normalized.length > 11) {
+            normalized = normalized.slice(0, 11);
+        }
+        if (!normalized) {
+            return "";
+        }
+        return `+${normalized}`;
+    };
+
+    const isValidRussianPhone = (value: string) => {
+        const digits = value.replace(/\D/g, "");
+        return digits.length === 11 && digits.startsWith("7");
+    };
+
     const onSubmit = () => {
         setErr("");
         if (!dataConsent) {
@@ -45,6 +65,10 @@ export function RegisterScreen({ navigation }: Props) {
             !password
         ) {
             setErr("Заполните все поля");
+            return;
+        }
+        if (!isValidRussianPhone(phone)) {
+            setErr("Введите российский номер в формате +7XXXXXXXXXX");
             return;
         }
         if (password.length < 6) {
@@ -99,8 +123,11 @@ export function RegisterScreen({ navigation }: Props) {
                         <Input
                             label="Телефон"
                             value={phone}
-                            onChangeText={setPhone}
+                            onChangeText={(value) => setPhone(sanitizePhone(value))}
                             keyboardType="phone-pad"
+                            maxLength={16}
+                            placeholder="+7 900 000-00-00"
+                            autoComplete="tel"
                         />
                         <View style={styles.gap} />
                         <Input
@@ -154,7 +181,11 @@ export function RegisterScreen({ navigation }: Props) {
                                         styles.checkbox,
                                         dataConsent && styles.checkboxOn,
                                     ]}
-                                />
+                                >
+                                    {dataConsent ? (
+                                        <Text style={styles.checkboxMark}>✓</Text>
+                                    ) : null}
+                                </View>
                             </Pressable>
                             <Text style={[textStyles.caption, styles.consentText]}>
                                 Согласие на обработку данных, необходимых для работы
@@ -225,10 +256,18 @@ const styles = StyleSheet.create({
         borderRadius: 6,
         borderWidth: 2,
         borderColor: colors.border,
+        alignItems: "center",
+        justifyContent: "center",
     },
     checkboxOn: {
         borderColor: colors.primary,
         backgroundColor: colors.primary,
+    },
+    checkboxMark: {
+        color: colors.bg,
+        fontSize: 14,
+        lineHeight: 18,
+        fontWeight: "700",
     },
     consentText: { flex: 1, color: colors.textMuted, lineHeight: 20 },
     policyLink: { color: colors.primary, fontWeight: "600" },

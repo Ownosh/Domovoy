@@ -753,5 +753,5 @@ const styles = StyleSheet.create({
     },
     searchHitRowPressed: { opacity: 0.88 },
     searchHitTitle: { color: colors.text },
-    searchHitAddr: { color: colors.textMuted, marginTop: 2 },
+    searchHitAddr: { color: colors.text, marginTop: 2 },
 });

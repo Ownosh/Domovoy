@@ -38,7 +38,6 @@ export function AppealsListScreen() {
     return (
         <ScreenLayout
             title="Обращения"
-            subtitle="Заявления в управляющую компанию"
             scroll={false}
             contentStyle={styles.flex}
             rightAccessory={

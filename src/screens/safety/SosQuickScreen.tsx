@@ -25,7 +25,7 @@ export function SosQuickScreen({ navigation }: Props) {
     }, []);
 
     return (
-        <ScreenLayout title="SOS" subtitle="Только при реальной угрозе" scroll={false}>
+        <ScreenLayout title="SOS" scroll={false}>
             <Text style={[textStyles.caption, styles.warn]}>
                 Одно подтверждение перед звонком — защита от случайного нажатия.
             </Text>

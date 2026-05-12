@@ -16,7 +16,6 @@ export type AuthStackParamList = {
 };
 
 export type CommunityStackParamList = {
-    CommunityHub: undefined;
     NeighborAdNew: { presetCategory?: NeighborAdCategory } | undefined;
     NeighborAdDetail: { id: string };
     VoteDetail: { id: string };

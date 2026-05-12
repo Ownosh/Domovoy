@@ -1,7 +1,6 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React from "react";
 import type { CommunityStackParamList } from "./types";
-import { CommunityHubScreen } from "../screens/community/CommunityHubScreen";
 import { NeighborAdDetailScreen } from "../screens/community/NeighborAdDetailScreen";
 import { NeighborAdNewScreen } from "../screens/community/NeighborAdNewScreen";
 import { VoteCreateInfoScreen } from "../screens/community/VoteCreateInfoScreen";
@@ -14,10 +13,9 @@ export function CommunityNavigator() {
     return (
         <Stack.Navigator
             id="CommunityStack"
-            initialRouteName="CommunityHub"
+            initialRouteName="NeighborAdNew"
             screenOptions={{ headerShown: false }}
         >
-            <Stack.Screen name="CommunityHub" component={CommunityHubScreen} />
             <Stack.Screen name="NeighborAdNew" component={NeighborAdNewScreen} />
             <Stack.Screen
                 name="NeighborAdDetail"

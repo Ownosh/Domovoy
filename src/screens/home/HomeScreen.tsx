@@ -164,7 +164,6 @@ export function HomeScreen() {
             params?: CommunityStackParamList[S],
         ) => {
             const root = getCommunityRoot(navigation);
-            setCreateOpen(false);
             root?.navigate("Community", { screen, params } as never);
         },
         [navigation],
@@ -174,6 +173,8 @@ export function HomeScreen() {
         <ScreenLayout
             title="Домовой"
             subtitle={`Здравствуйте, ${profile.name || "сосед"}`}
+            scroll={false}
+            contentStyle={styles.flex}
             rightAccessory={
                 <View style={styles.headerActions}>
                     <Pressable
@@ -196,16 +197,6 @@ export function HomeScreen() {
                                 </Text>
                             </View>
                         ) : null}
-                    </Pressable>
-                    <Pressable
-                        onPress={() => setCreateOpen(true)}
-                        hitSlop={10}
-                        style={({ pressed }) => [
-                            styles.iconBtn,
-                            pressed && styles.iconBtnPressed,
-                        ]}
-                    >
-                        <Ionicons name="add-circle-outline" size={28} color={colors.text} />
                     </Pressable>
                     <Pressable
                         onPress={() => navigation.navigate("Profile")}
@@ -354,121 +345,181 @@ export function HomeScreen() {
                                 styles.createRow,
                                 pressed && styles.createRowPressed,
                             ]}
-                            onPress={() =>
-                                openCommunity("NeighborAdNew", { presetCategory: "sell" })
-                            }
+                            onPress={() => {
+                                setCreateOpen(false);
+                                openCommunity("NeighborAdNew", {
+                                    presetCategory: "sell",
+                                });
+                            }}
                         >
-                            <Ionicons name="megaphone-outline" size={22} color={colors.primary} />
+                            <Ionicons
+                                name="megaphone-outline"
+                                size={22}
+                                color={colors.primary}
+                            />
                             <View style={styles.createRowText}>
-                                <Text style={[textStyles.subtitle, styles.createRowTitle]}>
+                                <Text
+                                    style={[textStyles.subtitle, styles.createRowTitle]}
+                                >
                                     Объявление соседа
                                 </Text>
-                                <Text style={[textStyles.caption, styles.createRowSub]}>
-                                    Жилец дома может опубликовать собственное объявление
+                                <Text
+                                    style={[textStyles.caption, styles.createRowSub]}
+                                >
+                                    Короткое объявление для соседей по дому
                                 </Text>
                             </View>
-                            <Ionicons name="chevron-forward" size={18} color={colors.textDim} />
+                            <Ionicons
+                                name="chevron-forward"
+                                size={18}
+                                color={colors.textDim}
+                            />
                         </Pressable>
                         <Pressable
                             style={({ pressed }) => [
                                 styles.createRow,
                                 pressed && styles.createRowPressed,
                             ]}
-                            onPress={() => openCommunity("VoteNew")}
+                            onPress={() => {
+                                setCreateOpen(false);
+                                openCommunity("VoteNew");
+                            }}
                         >
-                            <Ionicons name="bar-chart-outline" size={22} color={colors.accent} />
+                            <Ionicons
+                                name="bar-chart-outline"
+                                size={22}
+                                color={colors.accent}
+                            />
                             <View style={styles.createRowText}>
-                                <Text style={[textStyles.subtitle, styles.createRowTitle]}>
-                                    Голосование от жильцов
+                                <Text
+                                    style={[textStyles.subtitle, styles.createRowTitle]}
+                                >
+                                    Голосование
                                 </Text>
-                                <Text style={[textStyles.caption, styles.createRowSub]}>
-                                    Тема, описание, 2–4 варианта, срок
+                                <Text
+                                    style={[textStyles.caption, styles.createRowSub]}
+                                >
+                                    Тема, варианты ответа и срок опроса
                                 </Text>
                             </View>
-                            <Ionicons name="chevron-forward" size={18} color={colors.textDim} />
+                            <Ionicons
+                                name="chevron-forward"
+                                size={18}
+                                color={colors.textDim}
+                            />
                         </Pressable>
                     </Pressable>
                 </Pressable>
             </Modal>
 
-            <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.filterRow}
-            >
-                {FILTER_CHIPS.map((c) => (
-                    <Pressable
-                        key={c.id}
-                        onPress={() => setFeedFilter(c.id)}
-                        style={[
-                            styles.filterChip,
-                            feedFilter === c.id && styles.filterChipOn,
-                        ]}
+            <View style={styles.feedColumn}>
+                <ScrollView
+                    style={styles.feedScroll}
+                    contentContainerStyle={styles.feedScrollContent}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                    showsVerticalScrollIndicator={false}
+                >
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.filterRow}
+                        nestedScrollEnabled
                     >
-                        <Text
-                            style={[
-                                textStyles.caption,
-                                feedFilter === c.id
-                                    ? styles.filterOnText
-                                    : styles.filterOffText,
-                            ]}
-                        >
-                            {c.label}
-                        </Text>
-                    </Pressable>
-                ))}
-            </ScrollView>
+                        {FILTER_CHIPS.map((c) => (
+                            <Pressable
+                                key={c.id}
+                                onPress={() => setFeedFilter(c.id)}
+                                style={[
+                                    styles.filterChip,
+                                    feedFilter === c.id && styles.filterChipOn,
+                                ]}
+                            >
+                                <Text
+                                    style={[
+                                        textStyles.caption,
+                                        feedFilter === c.id
+                                            ? styles.filterOnText
+                                            : styles.filterOffText,
+                                    ]}
+                                >
+                                    {c.label}
+                                </Text>
+                            </Pressable>
+                        ))}
+                    </ScrollView>
 
-            {visibleFeed.length === 0 ? (
-                <Text style={[textStyles.body, styles.empty]}>
-                    В этой категории пока пусто.
-                </Text>
-            ) : (
-                visibleFeed.map((row) => {
-                    if (row.kind === "news") {
-                        return (
-                            <FeedNewsRow key={row.key} item={row.item} showRibbon={feedFilter === "all"} />
-                        );
-                    }
-                    if (row.kind === "vote") {
-                        return (
-                            <FeedVoteRow
-                                key={row.key}
-                                vote={row.item}
-                                showRibbon={feedFilter === "all"}
-                                onOpen={() =>
-                                    openCommunity("VoteDetail", { id: row.item.id })
-                                }
-                            />
-                        );
-                    }
-                    if (row.kind === "appeal") {
-                        return (
-                            <FeedAppealRow
-                                key={row.key}
-                                appeal={row.item}
-                                showRibbon={feedFilter === "all"}
-                                onOpen={() =>
-                                    navigation.navigate("Appeals", {
-                                        screen: "AppealDetail",
-                                        params: { id: row.item.id },
-                                    })
-                                }
-                            />
-                        );
-                    }
-                    return (
-                        <FeedAdRow
-                            key={row.key}
-                            ad={row.item}
-                            showRibbon={feedFilter === "all"}
-                            onOpen={() =>
-                                openCommunity("NeighborAdDetail", { id: row.item.id })
+                    {visibleFeed.length === 0 ? (
+                        <Text style={[textStyles.body, styles.empty]}>
+                            В этой категории пока пусто.
+                        </Text>
+                    ) : (
+                        visibleFeed.map((row) => {
+                            if (row.kind === "news") {
+                                return (
+                                    <FeedNewsRow
+                                        key={row.key}
+                                        item={row.item}
+                                        showRibbon={feedFilter === "all"}
+                                    />
+                                );
                             }
-                        />
-                    );
-                })
-            )}
+                            if (row.kind === "vote") {
+                                return (
+                                    <FeedVoteRow
+                                        key={row.key}
+                                        vote={row.item}
+                                        showRibbon={feedFilter === "all"}
+                                        onOpen={() =>
+                                            openCommunity("VoteDetail", {
+                                                id: row.item.id,
+                                            })
+                                        }
+                                    />
+                                );
+                            }
+                            if (row.kind === "appeal") {
+                                return (
+                                    <FeedAppealRow
+                                        key={row.key}
+                                        appeal={row.item}
+                                        showRibbon={feedFilter === "all"}
+                                        onOpen={() =>
+                                            navigation.navigate("Appeals", {
+                                                screen: "AppealDetail",
+                                                params: { id: row.item.id },
+                                            })
+                                        }
+                                    />
+                                );
+                            }
+                            return (
+                                <FeedAdRow
+                                    key={row.key}
+                                    ad={row.item}
+                                    showRibbon={feedFilter === "all"}
+                                    onOpen={() =>
+                                        openCommunity("NeighborAdDetail", {
+                                            id: row.item.id,
+                                        })
+                                    }
+                                />
+                            );
+                        })
+                    )}
+                </ScrollView>
+                <Pressable
+                    onPress={() => setCreateOpen(true)}
+                    hitSlop={10}
+                    accessibilityLabel="Добавить объявление или голосование"
+                    style={({ pressed }) => [
+                        styles.fab,
+                        pressed && styles.fabPressed,
+                    ]}
+                >
+                    <Ionicons name="add" size={28} color={colors.bg} />
+                </Pressable>
+            </View>
         </ScreenLayout>
     );
 }
@@ -604,6 +655,30 @@ function formatDate(iso: string) {
 }
 
 const styles = StyleSheet.create({
+    flex: { flex: 1 },
+    feedColumn: { flex: 1 },
+    feedScroll: { flex: 1 },
+    feedScrollContent: {
+        flexGrow: 1,
+        paddingBottom: spacing.xxxl * 2,
+    },
+    fab: {
+        position: "absolute",
+        right: spacing.lg,
+        bottom: spacing.xl,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: colors.primary,
+        alignItems: "center",
+        justifyContent: "center",
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.35,
+        shadowRadius: 10,
+        elevation: 6,
+    },
+    fabPressed: { opacity: 0.9, transform: [{ scale: 0.98 }] },
     headerActions: {
         flexDirection: "row",
         alignItems: "center",
@@ -652,6 +727,19 @@ const styles = StyleSheet.create({
         borderBottomWidth: 0,
         paddingBottom: spacing.xl,
     },
+    createRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.md,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.lg,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.borderSubtle,
+    },
+    createRowPressed: { opacity: 0.85 },
+    createRowText: { flex: 1 },
+    createRowTitle: { color: colors.text },
+    createRowSub: { color: colors.textMuted, marginTop: 2 },
     sheetHeader: {
         flexDirection: "row",
         alignItems: "center",
@@ -687,19 +775,6 @@ const styles = StyleSheet.create({
     date: { color: colors.textDim },
     ntitle: { color: colors.text },
     nbody: { color: colors.textMuted },
-    createRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: spacing.md,
-        paddingHorizontal: spacing.lg,
-        paddingVertical: spacing.lg,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.borderSubtle,
-    },
-    createRowPressed: { opacity: 0.85 },
-    createRowText: { flex: 1 },
-    createRowTitle: { color: colors.text },
-    createRowSub: { color: colors.textMuted, marginTop: 2 },
     filterRow: {
         flexDirection: "row",
         gap: spacing.sm,

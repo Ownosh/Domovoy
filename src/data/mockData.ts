@@ -2,7 +2,6 @@ import type {
     Appeal,
     AppNotification,
     ContractorProfile,
-    DistrictPoi,
     EmergencyContactLine,
     HouseCalendarActivity,
     HousePassport,
@@ -46,60 +45,11 @@ export const housePassport: HousePassport = {
     ],
 };
 
-const center = { lat: 58.5844, lng: 49.6605 };
-
-export const districtPois: DistrictPoi[] = [
-    {
-        id: "p1",
-        name: "Лицей № 39",
-        category: "education",
-        address: "г. Киров, пр. Октябрьский, 99",
-        lat: 58.5856,
-        lng: 49.6588,
-    },
-    {
-        id: "p2",
-        name: "Детский сад № 194",
-        category: "education",
-        address: "г. Киров, ул. Ленина, 198",
-        lat: 58.5832,
-        lng: 49.6624,
-    },
-    {
-        id: "p3",
-        name: "Городская поликлиника № 2",
-        category: "health",
-        address: "г. Киров, пр. Октябрьский, 24",
-        lat: 58.5868,
-        lng: 49.6555,
-    },
-    {
-        id: "p4",
-        name: "ТЦ «Глобус»",
-        category: "shopping",
-        address: "г. Киров, пр. Октябрьский, 82",
-        lat: 58.585,
-        lng: 49.6579,
-    },
-    {
-        id: "p5",
-        name: "Сквер у Дворца молодёжи",
-        category: "leisure",
-        address: "г. Киров, пр. Октябрьский (зона отдыха)",
-        lat: 58.5825,
-        lng: 49.6638,
-    },
-    {
-        id: "p6",
-        name: "Аптека «Фармленд»",
-        category: "health",
-        address: "г. Киров, пр. Октябрьский, 105",
-        lat: 58.5849,
-        lng: 49.6592,
-    },
-];
-
-export { center as districtMapCenter };
+export {
+    districtMapCenter,
+    districtPois,
+    homeMapAnchor,
+} from "./districtPois";
 
 export const seedNews: NewsItem[] = [
     {

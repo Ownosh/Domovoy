@@ -71,9 +71,9 @@ export function MainTabs() {
                 component={SafetyNavigator}
                 options={{
                     title: "Безопасность и ЧС",
-                    tabBarLabel: "Безопасность",
+                    tabBarLabel: "Памятка",
                     tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="shield-checkmark-outline" size={size} color={color} />
+                        <Ionicons name="book-outline" size={size} color={color} />
                     ),
                 }}
             />

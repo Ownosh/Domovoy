@@ -6,7 +6,16 @@
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "scheme": "domovoy",
-    "plugins": ["expo-font"],
+    "plugins": [
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Приложению нужен доступ к геолокации, чтобы построить маршрут до выбранного места от вашего текущего положения.",
+          "locationWhenInUsePermission": "Приложению нужен доступ к геолокации, чтобы построить маршрут до выбранного места от вашего текущего положения."
+        }
+      ]
+    ],
     "android": {
       "package": "com.domovoy.app"
     },

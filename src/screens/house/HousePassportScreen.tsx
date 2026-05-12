@@ -217,7 +217,6 @@ export function HousePassportScreen() {
     return (
         <ScreenLayout
             title="О доме"
-            subtitle="Паспорт, календарь работ, оценки и расписание вывоза"
             rightAccessory={
                 <Pressable
                     onPress={() => navigation.navigate("Profile")}
@@ -235,9 +234,6 @@ export function HousePassportScreen() {
                 </Pressable>
             }
         >
-            <Text style={[textStyles.label, styles.sectionFirst]}>
-                Календарь на месяц
-            </Text>
             <Card>
                 <View style={styles.calHeader}>
                     <Pressable

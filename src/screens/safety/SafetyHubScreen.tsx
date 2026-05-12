@@ -15,8 +15,7 @@ export function SafetyHubScreen() {
 
     return (
         <ScreenLayout
-            title="Безопасность и ЧС"
-            subtitle="Телефоны и памятка офлайн"
+            title="Памятка"
             rightAccessory={
                 <Pressable
                     onPress={() => tabNav.navigate("Profile")}

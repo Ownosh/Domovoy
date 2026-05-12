@@ -107,15 +107,48 @@ export type HousePassport = {
     photoUrls: string[];
 };
 
-export type PoiCategory = "education" | "health" | "shopping" | "leisure";
+/**
+ * Слои карты: «город» — объекты по всему Кирову; «дом» — только у вашего дома
+ * (контейнеры, парковка и остановки рядом с подъездом).
+ */
+export const DISTRICT_MAP_LAYER_IDS = [
+    "schools_daycare",
+    "clinic_pharmacy",
+    "grocery",
+    "parks",
+    "bus_stops_city",
+    "parking_city",
+    "waste_yard",
+    "bus_stops_house",
+    "parking_house",
+] as const;
+
+export type DistrictMapLayerId = (typeof DISTRICT_MAP_LAYER_IDS)[number];
+
+export type DistrictSearchHit = {
+    id: string;
+    title: string;
+    address: string;
+    lat: number;
+    lng: number;
+};
+
+export type DistrictPoiScope = "city" | "house";
 
 export type DistrictPoi = {
     id: string;
     name: string;
-    category: PoiCategory;
+    layerId: DistrictMapLayerId;
     address: string;
     lat: number;
     lng: number;
+    scope: DistrictPoiScope;
+    /** Условный рейтинг 1–5 для подбора «лучшей» точки в категории */
+    rating?: number;
+    /** Часы работы, уроки, приём — по типу объекта */
+    schedule?: string;
+    /** Фото для карточки на карте */
+    photoUrl?: string;
 };
 
 export type UkContacts = {

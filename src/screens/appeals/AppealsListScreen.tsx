@@ -143,7 +143,7 @@ export function AppealsListScreen() {
                     )}
                 />
                 <Pressable
-                    onPress={() => navigation.navigate("AppealNew")}
+                    onPress={() => navigation.navigate("AppealNew", tab === "house" ? { defaultKind: "collective" } : undefined)}
                     hitSlop={10}
                     style={({ pressed }) => [
                         styles.fab,

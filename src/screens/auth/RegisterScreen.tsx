@@ -16,6 +16,18 @@ import { colors, spacing, textStyles } from "../../theme";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "Register">;
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type FieldErrors = {
+    name?: string;
+    email?: string;
+    phone?: string;
+    building?: string;
+    apartment?: string;
+    password?: string;
+    password2?: string;
+};
+
 export function RegisterScreen({ navigation }: Props) {
     const { register } = useApp();
     const [name, setName] = useState("");
@@ -28,7 +40,8 @@ export function RegisterScreen({ navigation }: Props) {
     const [showPassword, setShowPassword] = useState(false);
     const [showPassword2, setShowPassword2] = useState(false);
     const [dataConsent, setDataConsent] = useState(false);
-    const [err, setErr] = useState("");
+    const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+    const [consentErr, setConsentErr] = useState("");
 
     const sanitizePhone = (value: string) => {
         const digits = value.replace(/\D/g, "");
@@ -50,35 +63,58 @@ export function RegisterScreen({ navigation }: Props) {
         return digits.length === 11 && digits.startsWith("7");
     };
 
+    const validate = (): boolean => {
+        const errors: FieldErrors = {};
+
+        if (!name.trim()) {
+            errors.name = "Введите ФИО";
+        } else if (name.trim().split(/\s+/).length < 2) {
+            errors.name = "Введите фамилию и имя";
+        }
+
+        if (!email.trim()) {
+            errors.email = "Введите email";
+        } else if (!EMAIL_RE.test(email.trim())) {
+            errors.email = "Неверный формат email";
+        }
+
+        if (!phone.trim()) {
+            errors.phone = "Введите номер телефона";
+        } else if (!isValidRussianPhone(phone)) {
+            errors.phone = "Формат: +7XXXXXXXXXX";
+        }
+
+        if (!building.trim()) {
+            errors.building = "Введите адрес дома";
+        }
+
+        if (!apartment.trim()) {
+            errors.apartment = "Введите номер квартиры";
+        }
+
+        if (!password) {
+            errors.password = "Введите пароль";
+        } else if (password.length < 6) {
+            errors.password = "Не менее 6 символов";
+        }
+
+        if (!password2) {
+            errors.password2 = "Повторите пароль";
+        } else if (password !== password2) {
+            errors.password2 = "Пароли не совпадают";
+        }
+
+        setFieldErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+
     const onSubmit = () => {
-        setErr("");
+        setConsentErr("");
         if (!dataConsent) {
-            setErr("Нужно согласие на обработку персональных данных");
+            setConsentErr("Нужно согласие на обработку персональных данных");
             return;
         }
-        if (
-            !name.trim() ||
-            !email.trim() ||
-            !phone.trim() ||
-            !building.trim() ||
-            !apartment.trim() ||
-            !password
-        ) {
-            setErr("Заполните все поля");
-            return;
-        }
-        if (!isValidRussianPhone(phone)) {
-            setErr("Введите российский номер в формате +7XXXXXXXXXX");
-            return;
-        }
-        if (password.length < 6) {
-            setErr("Пароль не короче 6 символов");
-            return;
-        }
-        if (password !== password2) {
-            setErr("Пароли не совпадают");
-            return;
-        }
+        if (!validate()) return;
         register({
             name,
             email,
@@ -110,45 +146,55 @@ export function RegisterScreen({ navigation }: Props) {
                     showsVerticalScrollIndicator={false}
                 >
                     <Card>
-                        <Input label="ФИО" value={name} onChangeText={setName} />
+                        <Input
+                            label="ФИО"
+                            value={name}
+                            onChangeText={(v) => { setName(v); setFieldErrors((e) => ({ ...e, name: undefined })); }}
+                            error={fieldErrors.name}
+                        />
                         <View style={styles.gap} />
                         <Input
                             label="Email"
                             value={email}
-                            onChangeText={setEmail}
+                            onChangeText={(v) => { setEmail(v); setFieldErrors((e) => ({ ...e, email: undefined })); }}
                             autoCapitalize="none"
                             keyboardType="email-address"
+                            error={fieldErrors.email}
                         />
                         <View style={styles.gap} />
                         <Input
                             label="Телефон"
                             value={phone}
-                            onChangeText={(value) => setPhone(sanitizePhone(value))}
+                            onChangeText={(value) => { setPhone(sanitizePhone(value)); setFieldErrors((e) => ({ ...e, phone: undefined })); }}
                             keyboardType="phone-pad"
                             maxLength={16}
                             placeholder="+7 900 000-00-00"
                             autoComplete="tel"
+                            error={fieldErrors.phone}
                         />
                         <View style={styles.gap} />
                         <Input
                             label="Дом или ЖК, адрес"
                             value={building}
-                            onChangeText={setBuilding}
+                            onChangeText={(v) => { setBuilding(v); setFieldErrors((e) => ({ ...e, building: undefined })); }}
                             placeholder="ЖК, улица, дом"
                             hint='Например: ЖК «Солнечный», пр. Октябрьский, 117'
+                            error={fieldErrors.building}
                         />
                         <View style={styles.gap} />
                         <Input
                             label="Квартира"
                             value={apartment}
-                            onChangeText={setApartment}
+                            onChangeText={(v) => { setApartment(v); setFieldErrors((e) => ({ ...e, apartment: undefined })); }}
+                            error={fieldErrors.apartment}
                         />
                         <View style={styles.gap} />
                         <Input
                             label="Пароль"
                             value={password}
-                            onChangeText={setPassword}
+                            onChangeText={(v) => { setPassword(v); setFieldErrors((e) => ({ ...e, password: undefined })); }}
                             secureTextEntry={!showPassword}
+                            error={fieldErrors.password}
                         />
                         <View style={styles.passMeta}>
                             <Pressable onPress={() => setShowPassword((v) => !v)}>
@@ -161,8 +207,9 @@ export function RegisterScreen({ navigation }: Props) {
                         <Input
                             label="Повтор пароля"
                             value={password2}
-                            onChangeText={setPassword2}
+                            onChangeText={(v) => { setPassword2(v); setFieldErrors((e) => ({ ...e, password2: undefined })); }}
                             secureTextEntry={!showPassword2}
+                            error={fieldErrors.password2}
                         />
                         <View style={styles.passMeta}>
                             <Pressable onPress={() => setShowPassword2((v) => !v)}>
@@ -201,8 +248,8 @@ export function RegisterScreen({ navigation }: Props) {
                                 </Text>
                             </Text>
                         </View>
-                        {!!err && (
-                            <Text style={[textStyles.caption, styles.err]}>{err}</Text>
+                        {!!consentErr && (
+                            <Text style={[textStyles.caption, styles.err]}>{consentErr}</Text>
                         )}
                         <View style={styles.gapLg} />
                         <Button title="Зарегистрироваться" onPress={onSubmit} />

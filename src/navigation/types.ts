@@ -44,7 +44,7 @@ export type CommunityScreenProps<T extends keyof CommunityStackParamList> =
 
 export type AppealsStackParamList = {
     AppealsList: undefined;
-    AppealNew: undefined;
+    AppealNew: { defaultKind?: "personal" | "collective" } | undefined;
     AppealDetail: { id: string };
 };
 

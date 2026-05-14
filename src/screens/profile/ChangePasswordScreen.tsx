@@ -1,36 +1,55 @@
 import type { ProfileScreenProps } from "../../navigation/types";
 import React, { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Button, Card, Input, ScreenLayout } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
-import { colors, spacing, textStyles } from "../../theme";
+import { spacing } from "../../theme";
 
 type Props = ProfileScreenProps<"ChangePassword">;
+
+type FieldErrors = {
+    current?: string;
+    next?: string;
+    again?: string;
+};
 
 export function ChangePasswordScreen({ navigation }: Props) {
     const { changePassword } = useApp();
     const [current, setCurrent] = useState("");
     const [next, setNext] = useState("");
     const [again, setAgain] = useState("");
-    const [err, setErr] = useState("");
+    const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+
+    const clearError = (field: keyof FieldErrors) =>
+        setFieldErrors((e) => ({ ...e, [field]: undefined }));
 
     const submit = () => {
-        setErr("");
-        if (!current || !next) {
-            setErr("Заполните поля");
+        const errors: FieldErrors = {};
+
+        if (!current) {
+            errors.current = "Введите текущий пароль";
+        }
+
+        if (!next) {
+            errors.next = "Введите новый пароль";
+        } else if (next.length < 6) {
+            errors.next = "Не менее 6 символов";
+        }
+
+        if (!again) {
+            errors.again = "Повторите новый пароль";
+        } else if (next && next !== again) {
+            errors.again = "Пароли не совпадают";
+        }
+
+        if (Object.keys(errors).length > 0) {
+            setFieldErrors(errors);
             return;
         }
-        if (next.length < 6) {
-            setErr("Новый пароль не короче 6 символов");
-            return;
-        }
-        if (next !== again) {
-            setErr("Повтор не совпадает");
-            return;
-        }
+
         const ok = changePassword(current, next);
         if (!ok) {
-            setErr("Текущий пароль неверен");
+            setFieldErrors({ current: "Текущий пароль неверен" });
             return;
         }
         navigation.goBack();
@@ -45,26 +64,26 @@ export function ChangePasswordScreen({ navigation }: Props) {
                 <Input
                     label="Текущий пароль"
                     value={current}
-                    onChangeText={setCurrent}
+                    onChangeText={(v) => { setCurrent(v); clearError("current"); }}
                     secureTextEntry
+                    error={fieldErrors.current}
                 />
                 <View style={styles.gap} />
                 <Input
                     label="Новый пароль"
                     value={next}
-                    onChangeText={setNext}
+                    onChangeText={(v) => { setNext(v); clearError("next"); }}
                     secureTextEntry
+                    error={fieldErrors.next}
                 />
                 <View style={styles.gap} />
                 <Input
                     label="Повтор нового пароля"
                     value={again}
-                    onChangeText={setAgain}
+                    onChangeText={(v) => { setAgain(v); clearError("again"); }}
                     secureTextEntry
+                    error={fieldErrors.again}
                 />
-                {!!err && (
-                    <Text style={[textStyles.caption, styles.err]}>{err}</Text>
-                )}
                 <View style={styles.gapLg} />
                 <Button title="Обновить пароль" onPress={submit} />
             </Card>
@@ -75,5 +94,4 @@ export function ChangePasswordScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
     gap: { height: spacing.md },
     gapLg: { height: spacing.lg },
-    err: { color: colors.danger, marginTop: spacing.sm },
 });

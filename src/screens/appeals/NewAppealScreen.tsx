@@ -9,12 +9,12 @@ import { colors, radius, spacing, textStyles } from "../../theme";
 
 type Props = AppealsScreenProps<"AppealNew">;
 
-export function NewAppealScreen({ navigation }: Props) {
+export function NewAppealScreen({ navigation, route }: Props) {
     const { addAppeal } = useApp();
     const [title, setTitle] = useState("");
     const [body, setBody] = useState("");
     const [category, setCategory] = useState(appealCategories[0]);
-    const [kind, setKind] = useState<AppealKind>("personal");
+    const [kind, setKind] = useState<AppealKind>(route.params?.defaultKind ?? "personal");
     const [entrance, setEntrance] = useState("");
     const [err, setErr] = useState("");
 

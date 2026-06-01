@@ -9,25 +9,23 @@ import { colors, spacing, textStyles } from "../../theme";
 type Props = NativeStackScreenProps<AuthStackParamList, "Login">;
 
 export function LoginScreen({ navigation }: Props) {
-    const { login, hasAccount } = useApp();
+    const { login } = useApp();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [err, setErr] = useState("");
+    const [loading, setLoading] = useState(false);
 
-    const onSubmit = () => {
+    const onSubmit = async () => {
         setErr("");
         if (!email.trim() || !password) {
             setErr("Заполните email и пароль");
             return;
         }
-        if (!hasAccount) {
-            setErr("Сначала создайте учётную запись");
-            return;
-        }
-        const ok = login(email, password);
+        setLoading(true);
+        const ok = await login(email, password);
+        setLoading(false);
         if (!ok) {
             setErr("Неверный email или пароль");
-            return;
         }
     };
 
@@ -35,7 +33,7 @@ export function LoginScreen({ navigation }: Props) {
         <ScreenLayout scroll={false}>
             <View style={styles.flex}>
                 <Card style={styles.card}>
-                    <Text style={[textStyles.title, styles.formTitle]}>Вход</Text>
+                    <Text style={[textStyles.hero, styles.formTitle]}>Вход</Text>
                     <Text style={[textStyles.caption, styles.formSubtitle]}>
                         Личный кабинет жителя
                     </Text>
@@ -62,7 +60,7 @@ export function LoginScreen({ navigation }: Props) {
                         </Text>
                     )}
                     <View style={styles.gapLg} />
-                    <Button title="Войти" onPress={onSubmit} />
+                    <Button title="Войти" onPress={onSubmit} loading={loading} />
                 </Card>
                 <Pressable
                     onPress={() => navigation.navigate("Register")}
@@ -73,12 +71,6 @@ export function LoginScreen({ navigation }: Props) {
                         <Text style={styles.linkBold}>Регистрация</Text>
                     </Text>
                 </Pressable>
-                {!hasAccount && (
-                    <Text style={[textStyles.caption, styles.hint]}>
-                        При первом запуске создайте учётную запись — данные
-                        сохраняются только на устройстве (демо без сервера).
-                    </Text>
-                )}
             </View>
         </ScreenLayout>
     );

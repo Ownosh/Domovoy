@@ -1,4 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { apiLogin, apiLogout, apiRegister, apiChangePassword } from "../api/auth";
+import { clearTokens } from "../api/client";
 import React, {
     createContext,
     useCallback,
@@ -104,6 +106,7 @@ type Action =
     | { type: "REPLACE"; payload: AppState }
     | { type: "SESSION_START" }
     | { type: "SESSION_END" }
+    | { type: "LOGIN"; payload: Account }
     | { type: "REGISTER"; payload: Account }
     | { type: "UPDATE_PROFILE"; payload: Partial<Profile> }
     | { type: "CHANGE_PASSWORD"; payload: string }
@@ -184,7 +187,9 @@ function reducer(state: AppState, action: Action): AppState {
         case "SESSION_START":
             return { ...state, sessionActive: true };
         case "SESSION_END":
-            return { ...state, sessionActive: false };
+            return { ...state, account: null, sessionActive: false };
+        case "LOGIN":
+            return { ...state, account: action.payload, sessionActive: true };
         case "REGISTER":
             return {
                 ...state,
@@ -639,7 +644,7 @@ type AppContextValue = {
     neighborAds: NeighborAd[];
     votes: import("../types").Vote[];
     voteCasts: VoteCast[];
-    login: (email: string, password: string) => boolean;
+    login: (email: string, password: string) => Promise<boolean>;
     register: (data: {
         email: string;
         password: string;
@@ -648,10 +653,10 @@ type AppContextValue = {
         building: string;
         apartment: string;
         dataConsentAt: string;
-    }) => void;
-    logout: () => void;
+    }) => Promise<void>;
+    logout: () => Promise<void>;
     updateProfile: (p: Partial<Profile>) => void;
-    changePassword: (current: string, next: string) => boolean;
+    changePassword: (current: string, next: string) => Promise<boolean>;
     submitVerification: (docType: "lease" | "ownership") => void;
     addAppeal: (input: {
         title: string;
@@ -741,21 +746,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }, [state, hydrated]);
 
     const login = useCallback(
-        (email: string, password: string) => {
-            const acc = state.account;
-            if (!acc) return false;
-            if (acc.user.email.toLowerCase() !== email.trim().toLowerCase()) {
+        async (email: string, password: string): Promise<boolean> => {
+            try {
+                const res = await apiLogin(email, password);
+                const account: Account = {
+                    user: { id: res.user.id, email: res.user.email },
+                    profile: {
+                        name: res.profile.name,
+                        phone: res.profile.phone,
+                        building: res.profile.building,
+                        apartment: res.profile.apartment,
+                        apartmentAreaSqm: res.profile.apartmentAreaSqm,
+                    },
+                    password: "",
+                    dataConsentAt: undefined,
+                };
+                dispatch({ type: "LOGIN", payload: account });
+                return true;
+            } catch {
                 return false;
             }
-            if (acc.password !== password) return false;
-            dispatch({ type: "SESSION_START" });
-            return true;
         },
-        [state.account],
+        [],
     );
 
     const register = useCallback(
-        (data: {
+        async (data: {
             email: string;
             password: string;
             name: string;
@@ -763,20 +779,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             building: string;
             apartment: string;
             dataConsentAt: string;
-        }) => {
-            const user: User = {
-                id: `u_${Date.now()}`,
-                email: data.email.trim().toLowerCase(),
-            };
+        }): Promise<void> => {
+            const res = await apiRegister(data);
             const account: Account = {
-                user,
+                user: { id: res.user.id, email: res.user.email },
                 profile: {
-                    name: data.name.trim(),
-                    phone: data.phone.trim(),
-                    building: data.building.trim(),
-                    apartment: data.apartment.trim(),
+                    name: res.profile.name,
+                    phone: res.profile.phone,
+                    building: res.profile.building,
+                    apartment: res.profile.apartment,
+                    apartmentAreaSqm: res.profile.apartmentAreaSqm,
                 },
-                password: data.password,
+                password: "",
                 dataConsentAt: data.dataConsentAt,
             };
             dispatch({ type: "REGISTER", payload: account });
@@ -784,7 +798,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         [],
     );
 
-    const logout = useCallback(() => {
+    const logout = useCallback(async () => {
+        await apiLogout().catch(() => {});
+        await clearTokens().catch(() => {});
         dispatch({ type: "SESSION_END" });
     }, []);
 
@@ -793,14 +809,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const changePassword = useCallback(
-        (current: string, next: string) => {
-            if (!state.account || current !== state.account.password) {
+        async (current: string, next: string): Promise<boolean> => {
+            try {
+                await apiChangePassword(current, next);
+                return true;
+            } catch {
                 return false;
             }
-            dispatch({ type: "CHANGE_PASSWORD", payload: next });
-            return true;
         },
-        [state.account],
+        [],
     );
 
     const submitVerification = useCallback(

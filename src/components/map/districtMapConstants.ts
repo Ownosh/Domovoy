@@ -133,11 +133,14 @@ export function districtPoiLayerIcon(poi: DistrictPoi): IonIconName {
 
 export const districtMapStyles = StyleSheet.create({
     wrap: { gap: 0 },
+    mapWrap: {
+        borderRadius: radius.lg,
+        overflow: "hidden",
+        position: "relative",
+    },
     map: {
         width: "100%",
         height: 280,
-        borderRadius: radius.lg,
-        overflow: "hidden",
     },
     dot: {
         width: 14,

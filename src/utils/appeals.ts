@@ -4,7 +4,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const ARCHIVE_DELAY_DAYS = 3;
 const archivedStatuses = new Set<Appeal["status"]>(["resolved", "rejected"]);
 
-/** Порог уникальных квартир (в рамках подъезда, если указан) для «Массового обращения» */
+/** Порог квартир в подъезде для массовой жалобы. */
 export const MASS_APPEAL_THRESHOLD = 5;
 
 function isOlderThanArchiveDelay(createdAt: string): boolean {

@@ -20,6 +20,7 @@ type Props = {
     contentStyle?: ViewStyle;
     rightAccessory?: React.ReactNode;
     onBack?: () => void;
+    centerHeader?: boolean;
 };
 
 export function ScreenLayout({
@@ -30,6 +31,7 @@ export function ScreenLayout({
     contentStyle,
     rightAccessory,
     onBack,
+    centerHeader,
 }: Props) {
     const body = (
         <View
@@ -73,6 +75,7 @@ export function ScreenLayout({
                             style={[
                                 styles.headerText,
                                 onBack && styles.headerTextWithBack,
+                                centerHeader && styles.headerTextCentered,
                             ]}
                         >
                             {!!title && (
@@ -80,7 +83,7 @@ export function ScreenLayout({
                                     style={[
                                         textStyles.hero,
                                         styles.title,
-                                        onBack && styles.titleWithBack,
+                                        (onBack || centerHeader) && styles.titleWithBack,
                                     ]}
                                 >
                                     {title}
@@ -91,7 +94,7 @@ export function ScreenLayout({
                                     style={[
                                         textStyles.caption,
                                         styles.subtitle,
-                                        onBack && styles.subtitleWithBack,
+                                        (onBack || centerHeader) && styles.subtitleWithBack,
                                     ]}
                                 >
                                     {subtitle}
@@ -163,6 +166,9 @@ const styles = StyleSheet.create({
         flex: 0,
         paddingLeft: spacing.xl,
         paddingRight: spacing.xl,
+        alignItems: "center",
+    },
+    headerTextCentered: {
         alignItems: "center",
     },
     rightAccessory: { marginLeft: "auto" },

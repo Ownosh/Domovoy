@@ -1,7 +1,8 @@
 import type { ProfileScreenProps } from "../../navigation/types";
 import React, { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Button, Card, Input, ScreenLayout } from "../../components/ui";
+import { AddressAutocomplete, Button, Card, Input, ScreenLayout } from "../../components/ui";
+import type { BuildingSuggestion } from "../../api/buildings";
 import { useApp } from "../../context/AppContext";
 import { colors, spacing, textStyles } from "../../theme";
 
@@ -58,6 +59,8 @@ export function EditProfileScreen({ navigation }: Props) {
 
         if (!apartment.trim()) {
             errors.apartment = "Введите номер квартиры";
+        } else if (!/^\d+$/.test(apartment.trim())) {
+            errors.apartment = "Только цифры, например: 42";
         }
 
         if (areaStr.trim() !== "") {
@@ -111,10 +114,14 @@ export function EditProfileScreen({ navigation }: Props) {
                     error={fieldErrors.phone}
                 />
                 <View style={styles.gap} />
-                <Input
+                <AddressAutocomplete
                     label="Дом или ЖК, адрес"
                     value={building}
                     onChangeText={(v) => { setBuilding(v); clearError("building"); }}
+                    onSelectSuggestion={(item: BuildingSuggestion) => {
+                        setBuilding(item.short_name);
+                        clearError("building");
+                    }}
                     placeholder="ЖК, улица, дом"
                     hint='Например: ЖК «Солнечный», пр. Октябрьский, 117'
                     error={fieldErrors.building}
@@ -123,7 +130,8 @@ export function EditProfileScreen({ navigation }: Props) {
                 <Input
                     label="Квартира"
                     value={apartment}
-                    onChangeText={(v) => { setApartment(v); clearError("apartment"); }}
+                    onChangeText={(v) => { setApartment(v.replace(/\D/g, "")); clearError("apartment"); }}
+                    keyboardType="number-pad"
                     error={fieldErrors.apartment}
                 />
                 <View style={styles.gap} />

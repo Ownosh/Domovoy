@@ -9,7 +9,7 @@ import {
     Text,
     View,
 } from "react-native";
-import { Button, Card, Input, ScreenLayout } from "../../components/ui";
+import { AddressAutocomplete, Button, Card, Input, ScreenLayout } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
 import type { AuthStackParamList } from "../../navigation/types";
 import { colors, spacing, textStyles } from "../../theme";
@@ -30,6 +30,7 @@ type FieldErrors = {
 
 export function RegisterScreen({ navigation }: Props) {
     const { register } = useApp();
+    const [loading, setLoading] = useState(false);
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
     const [phone, setPhone] = useState("");
@@ -37,8 +38,6 @@ export function RegisterScreen({ navigation }: Props) {
     const [apartment, setApartment] = useState("");
     const [password, setPassword] = useState("");
     const [password2, setPassword2] = useState("");
-    const [showPassword, setShowPassword] = useState(false);
-    const [showPassword2, setShowPassword2] = useState(false);
     const [dataConsent, setDataConsent] = useState(false);
     const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
     const [consentErr, setConsentErr] = useState("");
@@ -90,6 +89,8 @@ export function RegisterScreen({ navigation }: Props) {
 
         if (!apartment.trim()) {
             errors.apartment = "Введите номер квартиры";
+        } else if (!/^\d+$/.test(apartment.trim())) {
+            errors.apartment = "Только цифры, например: 42";
         }
 
         if (!password) {
@@ -108,29 +109,37 @@ export function RegisterScreen({ navigation }: Props) {
         return Object.keys(errors).length === 0;
     };
 
-    const onSubmit = () => {
+    const onSubmit = async () => {
         setConsentErr("");
         if (!dataConsent) {
             setConsentErr("Нужно согласие на обработку персональных данных");
             return;
         }
         if (!validate()) return;
-        register({
-            name,
-            email,
-            phone,
-            building,
-            apartment,
-            password,
-            dataConsentAt: new Date().toISOString(),
-        });
+        setLoading(true);
+        try {
+            await register({
+                name,
+                email,
+                phone,
+                building,
+                apartment,
+                password,
+                dataConsentAt: new Date().toISOString(),
+            });
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : "Ошибка регистрации";
+            setConsentErr(msg);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
         <ScreenLayout
             title="Регистрация"
             subtitle="Создайте доступ к личному кабинету"
-            onBack={() => navigation.goBack()}
+            centerHeader
             scroll={false}
         >
             <KeyboardAvoidingView
@@ -173,10 +182,14 @@ export function RegisterScreen({ navigation }: Props) {
                             error={fieldErrors.phone}
                         />
                         <View style={styles.gap} />
-                        <Input
+                        <AddressAutocomplete
                             label="Дом или ЖК, адрес"
                             value={building}
                             onChangeText={(v) => { setBuilding(v); setFieldErrors((e) => ({ ...e, building: undefined })); }}
+                            onSelectSuggestion={(item) => {
+                                setBuilding(item.short_name);
+                                setFieldErrors((e) => ({ ...e, building: undefined }));
+                            }}
                             placeholder="ЖК, улица, дом"
                             hint='Например: ЖК «Солнечный», пр. Октябрьский, 117'
                             error={fieldErrors.building}
@@ -185,7 +198,8 @@ export function RegisterScreen({ navigation }: Props) {
                         <Input
                             label="Квартира"
                             value={apartment}
-                            onChangeText={(v) => { setApartment(v); setFieldErrors((e) => ({ ...e, apartment: undefined })); }}
+                            onChangeText={(v) => { setApartment(v.replace(/\D/g, "")); setFieldErrors((e) => ({ ...e, apartment: undefined })); }}
+                            keyboardType="number-pad"
                             error={fieldErrors.apartment}
                         />
                         <View style={styles.gap} />
@@ -193,31 +207,19 @@ export function RegisterScreen({ navigation }: Props) {
                             label="Пароль"
                             value={password}
                             onChangeText={(v) => { setPassword(v); setFieldErrors((e) => ({ ...e, password: undefined })); }}
-                            secureTextEntry={!showPassword}
+                            secureTextEntry
+                            showPasswordToggle
                             error={fieldErrors.password}
                         />
-                        <View style={styles.passMeta}>
-                            <Pressable onPress={() => setShowPassword((v) => !v)}>
-                                <Text style={[textStyles.caption, styles.passToggle]}>
-                                    {showPassword ? "Скрыть" : "Показать"}
-                                </Text>
-                            </Pressable>
-                        </View>
                         <View style={styles.gap} />
                         <Input
                             label="Повтор пароля"
                             value={password2}
                             onChangeText={(v) => { setPassword2(v); setFieldErrors((e) => ({ ...e, password2: undefined })); }}
-                            secureTextEntry={!showPassword2}
+                            secureTextEntry
+                            showPasswordToggle
                             error={fieldErrors.password2}
                         />
-                        <View style={styles.passMeta}>
-                            <Pressable onPress={() => setShowPassword2((v) => !v)}>
-                                <Text style={[textStyles.caption, styles.passToggle]}>
-                                    {showPassword2 ? "Скрыть" : "Показать"}
-                                </Text>
-                            </Pressable>
-                        </View>
                         <View style={styles.consentRow}>
                             <Pressable
                                 onPress={() => setDataConsent((v) => !v)}
@@ -252,7 +254,7 @@ export function RegisterScreen({ navigation }: Props) {
                             <Text style={[textStyles.caption, styles.err]}>{consentErr}</Text>
                         )}
                         <View style={styles.gapLg} />
-                        <Button title="Зарегистрироваться" onPress={onSubmit} />
+                        <Button title="Зарегистрироваться" onPress={onSubmit} loading={loading} />
                     </Card>
                     <Pressable
                         onPress={() => navigation.navigate("Login")}
@@ -278,13 +280,6 @@ const styles = StyleSheet.create({
     },
     gap: { height: spacing.md },
     gapLg: { height: spacing.lg },
-    passMeta: {
-        marginTop: spacing.xs,
-        flexDirection: "row",
-        justifyContent: "flex-end",
-        alignItems: "center",
-    },
-    passToggle: { color: colors.primary, fontWeight: "600" },
     err: { color: colors.danger, marginTop: spacing.sm },
     linkWrap: { alignItems: "center", marginBottom: spacing.xl },
     keyboardSpacer: { height: spacing.xxxl * 1.5 },

@@ -1,12 +1,12 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { ComponentProps } from "react";
 import * as Location from "expo-location";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, {
     forwardRef,
     useCallback,
     useEffect,
     useImperativeHandle,
-    useMemo,
     useRef,
     useState,
 } from "react";
@@ -16,6 +16,7 @@ import {
     Platform,
     Pressable,
     ScrollView,
+    StyleSheet,
     Text,
     View,
 } from "react-native";
@@ -49,9 +50,17 @@ export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
         ref,
     ) {
         const mapRef = useRef<MapView>(null);
+        const insets = useSafeAreaInsets();
         const [panel, setPanel] = useState<DetailPanel | null>(null);
         const [navPickerOpen, setNavPickerOpen] = useState(false);
         const [locationAllowed, setLocationAllowed] = useState(false);
+        const [isFullscreen, setIsFullscreen] = useState(false);
+        const [currentRegion, setCurrentRegion] = useState(() => ({
+            latitude: districtMapCenter.lat,
+            longitude: districtMapCenter.lng,
+            latitudeDelta: 0.08,
+            longitudeDelta: 0.08,
+        }));
 
         useImperativeHandle(ref, () => ({
             showPoiDetail: (poi: DistrictPoi) => {
@@ -86,61 +95,14 @@ export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
             return () => clearTimeout(t);
         }, [mapFocus]);
 
-        const region = useMemo(
-            () => ({
-                latitude: districtMapCenter.lat,
-                longitude: districtMapCenter.lng,
-                latitudeDelta: 0.08,
-                longitudeDelta: 0.08,
-            }),
-            [],
-        );
-
-        const destCoords = useCallback((d: DetailPanel) => {
-            if (d.kind === "poi") {
-                return { lat: d.poi.lat, lng: d.poi.lng };
-            }
-            return { lat: d.hit.lat, lng: d.hit.lng };
-        }, []);
-
-        const openNavigator = useCallback(
-            async (app: ExternalNavigatorApp, d: DetailPanel) => {
-                const { lat, lng } = destCoords(d);
-                let origin: { lat: number; lng: number } | undefined;
-                if (Platform.OS !== "web") {
-                    const perm = await Location.requestForegroundPermissionsAsync();
-                    if (perm.status === Location.PermissionStatus.GRANTED) {
-                        setLocationAllowed(true);
-                        try {
-                            const pos = await Location.getCurrentPositionAsync({
-                                accuracy: Location.Accuracy.Balanced,
-                            });
-                            origin = {
-                                lat: pos.coords.latitude,
-                                lng: pos.coords.longitude,
-                            };
-                        } catch {
-                            origin = undefined;
-                        }
-                    }
-                }
-                openRouteInExternalNavigator(app, { lat, lng }, origin);
-                setNavPickerOpen(false);
-                setPanel(null);
-            },
-            [destCoords],
-        );
-
-        const detailVisible = panel !== null && !navPickerOpen;
-        const navVisible = navPickerOpen && panel !== null;
-
-        return (
-            <View style={styles.wrap}>
+        const renderMapView = useCallback((fullscreen: boolean) => (
+            <View style={fullscreen ? mapFullStyles.mapWrap : styles.mapWrap}>
                 <MapView
                     ref={mapRef}
-                    style={styles.map}
+                    style={fullscreen ? mapFullStyles.map : styles.map}
                     provider={PROVIDER_DEFAULT}
-                    initialRegion={region}
+                    initialRegion={currentRegion}
+                    onRegionChangeComplete={setCurrentRegion}
                     showsUserLocation={locationAllowed && Platform.OS !== "web"}
                     showsMyLocationButton={false}
                 >
@@ -195,239 +157,273 @@ export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
                         </Marker>
                     ) : null}
                 </MapView>
-
-                <Modal
-                    visible={detailVisible}
-                    transparent
-                    animationType="slide"
-                    onRequestClose={() => setPanel(null)}
+                <Pressable
+                    onPress={() => setIsFullscreen((v) => !v)}
+                    hitSlop={8}
+                    style={({ pressed }) => [
+                        mapFullStyles.expandBtn,
+                        fullscreen && { top: insets.top + 12 },
+                        pressed && mapFullStyles.expandBtnPressed,
+                    ]}
                 >
-                    <Pressable
-                        style={styles.modalRoot}
-                        onPress={() => setPanel(null)}
-                    >
-                        <Pressable
-                            style={styles.modalCard}
-                            onPress={(e) => e.stopPropagation()}
-                        >
-                            {panel?.kind === "poi" ? (
-                                <>
-                                    <View style={styles.modalHeader}>
-                                        <View style={{ flex: 1, gap: 4 }}>
-                                            <Text
-                                                style={[
-                                                    textStyles.subtitle,
-                                                    styles.callTitle,
-                                                ]}
-                                            >
-                                                {panel.poi.name}
-                                            </Text>
-                                            <Text
-                                                style={[
-                                                    textStyles.caption,
-                                                    styles.callMeta,
-                                                ]}
-                                            >
-                                                {districtPoiLayerLabel(panel.poi)}
-                                            </Text>
-                                        </View>
-                                        <Pressable
-                                            onPress={() => setPanel(null)}
-                                            hitSlop={12}
-                                        >
-                                            <Ionicons
-                                                name="close"
-                                                size={26}
-                                                color={colors.textDim}
-                                            />
-                                        </Pressable>
-                                    </View>
-                                    {panel.poi.photoUrl ? (
-                                        <Image
-                                            source={{ uri: panel.poi.photoUrl }}
-                                            style={styles.poiPhoto}
-                                            resizeMode="cover"
-                                        />
-                                    ) : (
-                                        <View
-                                            style={[
-                                                styles.poiPhoto,
-                                                {
-                                                    alignItems: "center",
-                                                    justifyContent: "center",
-                                                },
-                                            ]}
-                                        >
-                                            <Ionicons
-                                                name="image-outline"
-                                                size={48}
-                                                color={colors.textDim}
-                                            />
-                                        </View>
-                                    )}
-                                    <Text
-                                        style={[
-                                            textStyles.body,
-                                            { color: colors.textMuted },
-                                        ]}
-                                    >
-                                        {panel.poi.address}
-                                    </Text>
-                                    {panel.poi.schedule ? (
-                                        <Text
-                                            style={[
-                                                textStyles.caption,
-                                                {
-                                                    color: colors.textDim,
-                                                    lineHeight: 20,
-                                                },
-                                            ]}
-                                        >
-                                            {panel.poi.schedule}
-                                        </Text>
-                                    ) : null}
-                                    <Button
-                                        title="Проложить путь"
-                                        onPress={() => setNavPickerOpen(true)}
-                                    />
-                                </>
-                            ) : null}
-                            {panel?.kind === "search" ? (
-                                <>
-                                    <View style={styles.modalHeader}>
-                                        <View style={{ flex: 1, gap: 4 }}>
-                                            <Text
-                                                style={[
-                                                    textStyles.subtitle,
-                                                    styles.callTitle,
-                                                ]}
-                                            >
-                                                {panel.hit.title}
-                                            </Text>
-                                            <Text
-                                                style={[
-                                                    textStyles.caption,
-                                                    styles.callMeta,
-                                                ]}
-                                            >
-                                                Адрес из поиска
-                                            </Text>
-                                        </View>
-                                        <Pressable
-                                            onPress={() => setPanel(null)}
-                                            hitSlop={12}
-                                        >
-                                            <Ionicons
-                                                name="close"
-                                                size={26}
-                                                color={colors.textDim}
-                                            />
-                                        </Pressable>
-                                    </View>
-                                    <View
-                                        style={[
-                                            styles.poiPhoto,
-                                            {
-                                                alignItems: "center",
-                                                justifyContent: "center",
-                                            },
-                                        ]}
-                                    >
-                                        <Ionicons
-                                            name="search"
-                                            size={48}
-                                            color={colors.warning}
-                                        />
-                                    </View>
-                                    <Text
-                                        style={[
-                                            textStyles.body,
-                                            { color: colors.textMuted },
-                                        ]}
-                                    >
-                                        {panel.hit.address}
-                                    </Text>
-                                    <Button
-                                        title="Проложить путь"
-                                        onPress={() => setNavPickerOpen(true)}
-                                    />
-                                </>
-                            ) : null}
-                        </Pressable>
-                    </Pressable>
-                </Modal>
+                    <Ionicons
+                        name={fullscreen ? "contract-outline" : "expand-outline"}
+                        size={20}
+                        color={colors.text}
+                    />
+                </Pressable>
+            </View>
+        ), [currentRegion, insets.top, locationAllowed, pois, searchHit]);
 
-                <Modal
-                    visible={navVisible}
-                    transparent
-                    animationType="fade"
-                    onRequestClose={() => setNavPickerOpen(false)}
-                >
-                    <Pressable
-                        style={styles.modalRoot}
-                        onPress={() => setNavPickerOpen(false)}
-                    >
-                        <Pressable
-                            style={styles.modalCard}
-                            onPress={(e) => e.stopPropagation()}
-                        >
-                            <Text style={[textStyles.subtitle, styles.callTitle]}>
-                                Открыть маршрут в
-                            </Text>
-                            <Text
-                                style={[
-                                    textStyles.caption,
-                                    styles.callMeta,
-                                    { marginBottom: 4 },
-                                ]}
-                            >
-                                Точка старта — ваше местоположение (если разрешена
-                                геолокация). Иначе откроется только точка на карте.
-                            </Text>
-                            <ScrollView
-                                style={{ maxHeight: 320 }}
-                                keyboardShouldPersistTaps="handled"
-                            >
-                                <NavOption
-                                    icon="map-outline"
-                                    title="Яндекс Карты"
-                                    onPress={() =>
-                                        panel && openNavigator("yandex", panel)
-                                    }
-                                />
-                                <View style={{ height: 10 }} />
-                                <NavOption
-                                    icon="navigate-outline"
-                                    title="2ГИС"
-                                    onPress={() =>
-                                        panel && openNavigator("dgis", panel)
-                                    }
-                                />
-                                <View style={{ height: 10 }} />
-                                <NavOption
-                                    icon="phone-portrait-outline"
-                                    title={
-                                        Platform.OS === "ios"
-                                            ? "Карты (Apple)"
-                                            : "Карты на телефоне"
-                                    }
-                                    onPress={() =>
-                                        panel && openNavigator("system", panel)
-                                    }
-                                />
-                            </ScrollView>
-                            <Button
-                                title="Отмена"
-                                variant="secondary"
-                                onPress={() => setNavPickerOpen(false)}
+        const destCoords = useCallback((d: DetailPanel) => {
+            if (d.kind === "poi") {
+                return { lat: d.poi.lat, lng: d.poi.lng };
+            }
+            return { lat: d.hit.lat, lng: d.hit.lng };
+        }, []);
+
+        const openNavigator = useCallback(
+            async (app: ExternalNavigatorApp, d: DetailPanel) => {
+                const { lat, lng } = destCoords(d);
+                let origin: { lat: number; lng: number } | undefined;
+                if (Platform.OS !== "web") {
+                    const perm = await Location.requestForegroundPermissionsAsync();
+                    if (perm.status === Location.PermissionStatus.GRANTED) {
+                        setLocationAllowed(true);
+                        try {
+                            const pos = await Location.getCurrentPositionAsync({
+                                accuracy: Location.Accuracy.Balanced,
+                            });
+                            origin = {
+                                lat: pos.coords.latitude,
+                                lng: pos.coords.longitude,
+                            };
+                        } catch {
+                            origin = undefined;
+                        }
+                    }
+                }
+                openRouteInExternalNavigator(app, { lat, lng }, origin);
+                setNavPickerOpen(false);
+                setPanel(null);
+            },
+            [destCoords],
+        );
+
+        const detailVisible = panel !== null && !navPickerOpen;
+        const navVisible = navPickerOpen && panel !== null;
+
+        const renderDetailContent = () => (
+            <>
+                {panel?.kind === "poi" ? (
+                    <>
+                        <View style={styles.modalHeader}>
+                            <View style={{ flex: 1, gap: 4 }}>
+                                <Text style={[textStyles.subtitle, styles.callTitle]}>
+                                    {panel.poi.name}
+                                </Text>
+                                <Text style={[textStyles.caption, styles.callMeta]}>
+                                    {districtPoiLayerLabel(panel.poi)}
+                                </Text>
+                            </View>
+                            <Pressable onPress={() => setPanel(null)} hitSlop={12}>
+                                <Ionicons name="close" size={26} color={colors.textDim} />
+                            </Pressable>
+                        </View>
+                        {panel.poi.photoUrl ? (
+                            <Image
+                                source={{ uri: panel.poi.photoUrl }}
+                                style={styles.poiPhoto}
+                                resizeMode="cover"
                             />
-                        </Pressable>
-                    </Pressable>
+                        ) : (
+                            <View style={[styles.poiPhoto, { alignItems: "center", justifyContent: "center" }]}>
+                                <Ionicons name="image-outline" size={48} color={colors.textDim} />
+                            </View>
+                        )}
+                        <Text style={[textStyles.body, { color: colors.textMuted }]}>
+                            {panel.poi.address}
+                        </Text>
+                        {panel.poi.schedule ? (
+                            <Text style={[textStyles.caption, { color: colors.textDim, lineHeight: 20 }]}>
+                                {panel.poi.schedule}
+                            </Text>
+                        ) : null}
+                        <Button title="Проложить путь" onPress={() => setNavPickerOpen(true)} />
+                    </>
+                ) : null}
+                {panel?.kind === "search" ? (
+                    <>
+                        <View style={styles.modalHeader}>
+                            <View style={{ flex: 1, gap: 4 }}>
+                                <Text style={[textStyles.subtitle, styles.callTitle]}>
+                                    {panel.hit.title}
+                                </Text>
+                                <Text style={[textStyles.caption, styles.callMeta]}>
+                                    Адрес из поиска
+                                </Text>
+                            </View>
+                            <Pressable onPress={() => setPanel(null)} hitSlop={12}>
+                                <Ionicons name="close" size={26} color={colors.textDim} />
+                            </Pressable>
+                        </View>
+                        <View style={[styles.poiPhoto, { alignItems: "center", justifyContent: "center" }]}>
+                            <Ionicons name="search" size={48} color={colors.warning} />
+                        </View>
+                        <Text style={[textStyles.body, { color: colors.textMuted }]}>
+                            {panel.hit.address}
+                        </Text>
+                        <Button title="Проложить путь" onPress={() => setNavPickerOpen(true)} />
+                    </>
+                ) : null}
+            </>
+        );
+
+        const renderNavContent = () => (
+            <>
+                <Text style={[textStyles.subtitle, styles.callTitle]}>
+                    Открыть маршрут в
+                </Text>
+                <Text style={[textStyles.caption, styles.callMeta, { marginBottom: 4 }]}>
+                    Точка старта — ваше местоположение (если разрешена геолокация).
+                    Иначе откроется только точка на карте.
+                </Text>
+                <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
+                    <NavOption
+                        icon="map-outline"
+                        title="Яндекс Карты"
+                        onPress={() => panel && openNavigator("yandex", panel)}
+                    />
+                    <View style={{ height: 10 }} />
+                    <NavOption
+                        icon="navigate-outline"
+                        title="2ГИС"
+                        onPress={() => panel && openNavigator("dgis", panel)}
+                    />
+                    <View style={{ height: 10 }} />
+                    <NavOption
+                        icon="phone-portrait-outline"
+                        title={Platform.OS === "ios" ? "Карты (Apple)" : "Карты на телефоне"}
+                        onPress={() => panel && openNavigator("system", panel)}
+                    />
+                </ScrollView>
+                <Button
+                    title="Отмена"
+                    variant="secondary"
+                    onPress={() => setNavPickerOpen(false)}
+                />
+            </>
+        );
+
+        return (
+            <View style={styles.wrap}>
+                {!isFullscreen && renderMapView(false)}
+
+                <Modal
+                    visible={isFullscreen}
+                    animationType="fade"
+                    statusBarTranslucent
+                    onRequestClose={() => setIsFullscreen(false)}
+                >
+                    <View style={mapFullStyles.fullscreenRoot}>
+                        {renderMapView(true)}
+
+                        {detailVisible && (
+                            <Pressable
+                                style={[StyleSheet.absoluteFill, styles.modalRoot]}
+                                onPress={() => setPanel(null)}
+                            >
+                                <Pressable
+                                    style={styles.modalCard}
+                                    onPress={(e) => e.stopPropagation()}
+                                >
+                                    {renderDetailContent()}
+                                </Pressable>
+                            </Pressable>
+                        )}
+
+                        {navVisible && (
+                            <Pressable
+                                style={[StyleSheet.absoluteFill, styles.modalRoot]}
+                                onPress={() => setNavPickerOpen(false)}
+                            >
+                                <Pressable
+                                    style={styles.modalCard}
+                                    onPress={(e) => e.stopPropagation()}
+                                >
+                                    {renderNavContent()}
+                                </Pressable>
+                            </Pressable>
+                        )}
+                    </View>
                 </Modal>
+
+                {!isFullscreen && (
+                    <>
+                        <Modal
+                            visible={detailVisible}
+                            transparent
+                            animationType="slide"
+                            onRequestClose={() => setPanel(null)}
+                        >
+                            <Pressable style={styles.modalRoot} onPress={() => setPanel(null)}>
+                                <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+                                    {renderDetailContent()}
+                                </Pressable>
+                            </Pressable>
+                        </Modal>
+
+                        <Modal
+                            visible={navVisible}
+                            transparent
+                            animationType="fade"
+                            onRequestClose={() => setNavPickerOpen(false)}
+                        >
+                            <Pressable style={styles.modalRoot} onPress={() => setNavPickerOpen(false)}>
+                                <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+                                    {renderNavContent()}
+                                </Pressable>
+                            </Pressable>
+                        </Modal>
+                    </>
+                )}
             </View>
         );
     },
 );
+
+const mapFullStyles = StyleSheet.create({
+    fullscreenRoot: {
+        flex: 1,
+        backgroundColor: "#000",
+    },
+    mapWrap: {
+        flex: 1,
+        position: "relative",
+    },
+    map: {
+        flex: 1,
+    },
+    expandBtn: {
+        position: "absolute",
+        top: 12,
+        right: 12,
+        width: 36,
+        height: 36,
+        borderRadius: 8,
+        backgroundColor: colors.bgElevated,
+        borderWidth: 1,
+        borderColor: colors.border,
+        alignItems: "center",
+        justifyContent: "center",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.18,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    expandBtnPressed: { opacity: 0.75 },
+});
 
 function NavOption({
     icon,

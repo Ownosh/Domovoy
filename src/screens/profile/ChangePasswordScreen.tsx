@@ -19,11 +19,12 @@ export function ChangePasswordScreen({ navigation }: Props) {
     const [next, setNext] = useState("");
     const [again, setAgain] = useState("");
     const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+    const [loading, setLoading] = useState(false);
 
     const clearError = (field: keyof FieldErrors) =>
         setFieldErrors((e) => ({ ...e, [field]: undefined }));
 
-    const submit = () => {
+    const submit = async () => {
         const errors: FieldErrors = {};
 
         if (!current) {
@@ -47,7 +48,9 @@ export function ChangePasswordScreen({ navigation }: Props) {
             return;
         }
 
-        const ok = changePassword(current, next);
+        setLoading(true);
+        const ok = await changePassword(current, next);
+        setLoading(false);
         if (!ok) {
             setFieldErrors({ current: "Текущий пароль неверен" });
             return;
@@ -85,7 +88,7 @@ export function ChangePasswordScreen({ navigation }: Props) {
                     error={fieldErrors.again}
                 />
                 <View style={styles.gapLg} />
-                <Button title="Обновить пароль" onPress={submit} />
+                <Button title="Обновить пароль" onPress={submit} loading={loading} />
             </Card>
         </ScreenLayout>
     );

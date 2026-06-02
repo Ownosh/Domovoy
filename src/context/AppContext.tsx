@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { apiLogin, apiLogout, apiRegister, apiChangePassword } from "../api/auth";
 import { apiFetchNews } from "../api/news";
+import { apiFetchVotes, apiCreateVote, apiCastVote } from "../api/votes";
+import { apiFetchNeighborAds, apiCreateNeighborAd, apiDeleteNeighborAd, apiExtendNeighborAd, apiReportNeighborAd } from "../api/neighborAds";
 import { clearTokens } from "../api/client";
 import React, {
     createContext,
@@ -141,20 +143,16 @@ type Action =
     | { type: "DELETE_ACCOUNT" }
     | { type: "SET_VERIFICATION_STATUS"; payload: VerificationState }
     | { type: "ARCHIVE_EXPIRED_NEIGHBOR_ADS" }
-    | {
-          type: "ADD_NEIGHBOR_AD";
-          payload: Omit<
-              NeighborAd,
-              "id" | "createdAt" | "expiresAt" | "archived"
-          >;
-      }
+    | { type: "ADD_NEIGHBOR_AD"; payload: NeighborAd }
     | { type: "EXTEND_NEIGHBOR_AD"; payload: string }
     | { type: "DELETE_NEIGHBOR_AD"; payload: string }
     | { type: "REPORT_NEIGHBOR_AD"; payload: string }
     | { type: "ADD_VOTE"; payload: Vote }
     | { type: "CAST_VOTE"; payload: VoteCast }
     | { type: "SET_ENVIRONMENT_RATING"; payload: EnvironmentRatingSnapshot }
-    | { type: "SET_NEWS"; payload: NewsItem[] };
+    | { type: "SET_NEWS"; payload: NewsItem[] }
+    | { type: "SET_VOTES"; payload: { votes: Vote[]; casts: VoteCast[] } }
+    | { type: "SET_NEIGHBOR_ADS"; payload: NeighborAd[] };
 
 function appealRecipientUserIds(appeal: Appeal): string[] {
     const ids = new Set<string>();
@@ -329,18 +327,8 @@ function reducer(state: AppState, action: Action): AppState {
                         : ad,
                 ),
             };
-        case "ADD_NEIGHBOR_AD": {
-            const id = `ad_${Date.now()}`;
-            const now = new Date().toISOString();
-            const ad: NeighborAd = {
-                ...action.payload,
-                id,
-                createdAt: now,
-                expiresAt: new Date(Date.now() + NEIGHBOR_AD_TTL_MS).toISOString(),
-                archived: false,
-            };
-            return { ...state, neighborAds: [ad, ...state.neighborAds] };
-        }
+        case "ADD_NEIGHBOR_AD":
+            return { ...state, neighborAds: [action.payload, ...state.neighborAds] };
         case "EXTEND_NEIGHBOR_AD":
             return {
                 ...state,
@@ -404,6 +392,14 @@ function reducer(state: AppState, action: Action): AppState {
         }
         case "SET_NEWS":
             return { ...state, news: action.payload };
+        case "SET_VOTES":
+            return {
+                ...state,
+                votes: action.payload.votes,
+                voteCasts: action.payload.casts,
+            };
+        case "SET_NEIGHBOR_ADS":
+            return { ...state, neighborAds: action.payload };
         default:
             return state;
     }
@@ -687,7 +683,7 @@ type AppContextValue = {
         category: NeighborAdCategory;
         imageUrl?: string;
         showPhone: boolean;
-    }) => { ok: true } | { ok: false; reason: string };
+    }) => Promise<{ ok: true } | { ok: false; reason: string }>;
     extendNeighborAd: (id: string) => void;
     deleteNeighborAd: (id: string) => void;
     reportNeighborAd: (id: string) => void;
@@ -697,7 +693,7 @@ type AppContextValue = {
     }) => { ok: true } | { ok: false; reason: string };
     addResidentVote: (
         input: ResidentVoteCreateInput,
-    ) => { ok: true } | { ok: false; reason: string };
+    ) => Promise<{ ok: true } | { ok: false; reason: string }>;
     environmentRating: EnvironmentRatingSnapshot | null;
     setEnvironmentRating: (input: EnvironmentRatingSubmitInput) => void;
 };
@@ -744,12 +740,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         if (!state.sessionActive || !state.account) return;
         apiFetchNews()
-            .then((items) => {
-                if (items.length > 0) {
-                    dispatch({ type: "SET_NEWS", payload: items });
-                }
-            })
+            .then((items) => { if (items.length > 0) dispatch({ type: "SET_NEWS", payload: items }); })
             .catch((err) => console.warn("[news] fetch failed:", err));
+        apiFetchVotes()
+            .then((data) => { if (data.votes.length > 0 || data.casts.length > 0) dispatch({ type: "SET_VOTES", payload: data }); })
+            .catch((err) => console.warn("[votes] fetch failed:", err));
+        apiFetchNeighborAds()
+            .then((ads) => { if (ads.length > 0) dispatch({ type: "SET_NEIGHBOR_ADS", payload: ads }); })
+            .catch((err) => console.warn("[neighbor-ads] fetch failed:", err));
     }, [state.sessionActive, state.account?.user.id]);
 
     useEffect(() => {
@@ -974,13 +972,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
 
     const addNeighborAd = useCallback(
-        (input: {
+        async (input: {
             title: string;
             body: string;
             category: NeighborAdCategory;
             imageUrl?: string;
             showPhone: boolean;
-        }): { ok: true } | { ok: false; reason: string } => {
+        }): Promise<{ ok: true } | { ok: false; reason: string }> => {
             if (!state.account?.user) {
                 return { ok: false, reason: "Войдите в аккаунт" };
             }
@@ -990,12 +988,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     reason: "Публиковать могут только верифицированные жильцы",
                 };
             }
-            const buildingKey = buildBuildingKey(state.account.profile.building);
-            dispatch({
-                type: "ADD_NEIGHBOR_AD",
-                payload: {
-                    authorUserId: state.account.user.id,
-                    buildingKey,
+            try {
+                const newAd = await apiCreateNeighborAd({
                     title: input.title.trim(),
                     body: input.body.trim(),
                     category: input.category,
@@ -1004,23 +998,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     authorPhone: input.showPhone
                         ? state.account.profile.phone.trim()
                         : undefined,
-                },
-            });
-            return { ok: true };
+                });
+                dispatch({
+                    type: "ADD_NEIGHBOR_AD",
+                    payload: normalizeNeighborAdRaw(newAd),
+                });
+                return { ok: true };
+            } catch (e: any) {
+                return { ok: false, reason: e?.message ?? "Ошибка сервера" };
+            }
         },
         [state.account, state.verification],
     );
 
     const extendNeighborAd = useCallback((id: string) => {
         dispatch({ type: "EXTEND_NEIGHBOR_AD", payload: id });
+        apiExtendNeighborAd(id).catch(() => {});
     }, []);
 
     const deleteNeighborAd = useCallback((id: string) => {
         dispatch({ type: "DELETE_NEIGHBOR_AD", payload: id });
+        apiDeleteNeighborAd(id).catch(() => {});
     }, []);
 
     const reportNeighborAd = useCallback((id: string) => {
         dispatch({ type: "REPORT_NEIGHBOR_AD", payload: id });
+        apiReportNeighborAd(id).catch(() => {});
     }, []);
 
     const castVote = useCallback(
@@ -1057,25 +1060,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 state.account.profile.apartmentAreaSqm > 0
                     ? state.account.profile.apartmentAreaSqm
                     : 42;
-            dispatch({
-                type: "CAST_VOTE",
-                payload: {
-                    voteId: input.voteId,
-                    userId: state.account.user.id,
-                    optionId: input.optionId,
-                    votedAt: new Date().toISOString(),
-                    areaSqm,
-                },
-            });
+            const cast = {
+                voteId: input.voteId,
+                userId: state.account.user.id,
+                optionId: input.optionId,
+                votedAt: new Date().toISOString(),
+                areaSqm,
+            };
+            dispatch({ type: "CAST_VOTE", payload: cast });
+            apiCastVote({ voteId: input.voteId, optionId: input.optionId, areaSqm }).catch(() => {});
             return { ok: true };
         },
         [state.account, state.verification, state.votes],
     );
 
     const addResidentVote = useCallback(
-        (
+        async (
             input: ResidentVoteCreateInput,
-        ): { ok: true } | { ok: false; reason: string } => {
+        ): Promise<{ ok: true } | { ok: false; reason: string }> => {
             if (!state.account?.user) {
                 return { ok: false, reason: "Войдите в аккаунт" };
             }
@@ -1100,33 +1102,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     reason: "Нужно от 2 до 4 вариантов ответа (подписи вариантов)",
                 };
             }
-            const id = `v_${Date.now()}`;
-            const options: VoteOption[] = labels.map((label, i) => ({
-                id: `${id}_o${i + 1}`,
-                label,
-            }));
-            const durationMs = input.durationDays * 24 * 60 * 60 * 1000;
             const prof = state.account.profile;
             const namePart = prof.name?.trim();
             const createdByLabel = namePart
                 ? `${namePart}, кв. ${prof.apartment || "—"}`
                 : `Кв. ${prof.apartment || "—"}`;
-            const vote: Vote = {
-                id,
-                buildingKey: buildBuildingKey(prof.building),
-                sponsor: "residents",
-                trial: false,
-                createdByLabel,
-                topic,
-                description,
-                options,
-                visibility: input.visibility,
-                createdAt: new Date().toISOString(),
-                endsAt: new Date(Date.now() + durationMs).toISOString(),
-                closed: false,
-            };
-            dispatch({ type: "ADD_VOTE", payload: vote });
-            return { ok: true };
+            try {
+                const serverVote = await apiCreateVote({
+                    topic,
+                    description,
+                    visibility: input.visibility,
+                    optionLabels: labels,
+                    durationDays: input.durationDays,
+                    createdByLabel,
+                });
+                dispatch({ type: "ADD_VOTE", payload: normalizeVoteRaw(serverVote) });
+                return { ok: true };
+            } catch (e: any) {
+                return { ok: false, reason: e?.message ?? "Ошибка создания голосования" };
+            }
         },
         [state.account, state.verification],
     );

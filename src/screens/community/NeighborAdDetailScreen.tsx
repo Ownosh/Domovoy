@@ -33,6 +33,10 @@ export function NeighborAdDetailScreen({ route, navigation }: Props) {
     const isAuthor = user?.id === ad.authorUserId;
 
     const onCall = () => {
+        if (!ad.showPhone) {
+            Alert.alert("Номер скрыт", "Автор не указал телефон для звонка.");
+            return;
+        }
         const raw = (ad.authorPhone ?? "").replace(/\D/g, "");
         if (!raw) {
             Alert.alert("Нет номера", "Автор не указал телефон для звонка.");
@@ -40,13 +44,6 @@ export function NeighborAdDetailScreen({ route, navigation }: Props) {
         }
         const tel = raw.startsWith("7") ? raw : `7${raw}`;
         Linking.openURL(`tel:+${tel}`).catch(() => {});
-    };
-
-    const onMessage = () => {
-        Alert.alert(
-            "Сообщение",
-            "В рабочей версии здесь будет чат с автором внутри приложения.",
-        );
     };
 
     const onReport = () => {
@@ -90,25 +87,15 @@ export function NeighborAdDetailScreen({ route, navigation }: Props) {
 
             {!isAuthor && (
                 <View style={styles.actions}>
-                    <Button title="Написать автору" onPress={onMessage} />
+                    <Button title="Позвонить" onPress={onCall} />
                     <View style={styles.gap} />
-                    {ad.showPhone ? (
-                        <Button
-                            title="Позвонить"
-                            onPress={onCall}
-                            variant="secondary"
-                        />
-                    ) : (
-                        <Text style={[textStyles.caption, styles.hint]}>
-                            Автор не оставил номер для звонка
-                        </Text>
-                    )}
-                    <View style={styles.gap} />
-                    <Pressable onPress={onReport}>
-                        <Text style={[textStyles.caption, styles.report]}>
-                            Пожаловаться (модерация УК)
-                        </Text>
-                    </Pressable>
+                    <View style={styles.reportWrap}>
+                        <Pressable onPress={onReport}>
+                            <Text style={[textStyles.caption, styles.report]}>
+                                Пожаловаться (модерация УК)
+                            </Text>
+                        </Pressable>
+                    </View>
                 </View>
             )}
 
@@ -159,5 +146,6 @@ const styles = StyleSheet.create({
     actions: { marginTop: spacing.lg },
     gap: { height: spacing.md },
     hint: { color: colors.textDim },
+    reportWrap: { alignItems: "center" },
     report: { color: colors.danger, textDecorationLine: "underline" },
 });

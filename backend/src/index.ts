@@ -8,6 +8,8 @@ import { migrate } from "./db/migrate";
 import authRoutes from "./routes/auth";
 import buildingsRoutes from "./routes/buildings";
 import newsRoutes from "./routes/news";
+import votesRoutes from "./routes/votes";
+import neighborAdsRoutes from "./routes/neighborAds";
 
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
@@ -29,6 +31,8 @@ const authLimiter = rateLimit({
 app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/buildings", buildingsRoutes);
 app.use("/api/news", newsRoutes);
+app.use("/api/votes", votesRoutes);
+app.use("/api/neighbor-ads", neighborAdsRoutes);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 

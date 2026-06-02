@@ -127,7 +127,6 @@ export function HomeScreen() {
     const navigation = useNavigation<MainTabNavigationProp>();
     const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
     const [notifOpen, setNotifOpen] = useState(false);
-    const [createOpen, setCreateOpen] = useState(false);
     const {
         news,
         votes,
@@ -374,104 +373,6 @@ export function HomeScreen() {
                 </Pressable>
             </Modal>
 
-            <Modal
-                visible={createOpen}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setCreateOpen(false)}
-            >
-                <Pressable
-                    style={styles.sheetBackdrop}
-                    onPress={() => setCreateOpen(false)}
-                >
-                    <Pressable
-                        style={styles.createSheet}
-                        onPress={(e) => e.stopPropagation()}
-                    >
-                        <View style={styles.sheetHeader}>
-                            <Text style={[textStyles.subtitle, styles.sheetTitle]}>
-                                Добавить
-                            </Text>
-                            <Pressable
-                                onPress={() => setCreateOpen(false)}
-                                hitSlop={12}
-                                style={styles.sheetClose}
-                            >
-                                <Ionicons name="close" size={26} color={colors.text} />
-                            </Pressable>
-                        </View>
-                        <Pressable
-                            style={({ pressed }) => [
-                                styles.createRow,
-                                pressed && styles.createRowPressed,
-                            ]}
-                            onPress={() => {
-                                setCreateOpen(false);
-                                openCommunity("NeighborAdNew", {
-                                    presetCategory: "sell",
-                                });
-                            }}
-                        >
-                            <Ionicons
-                                name="megaphone-outline"
-                                size={22}
-                                color={colors.primary}
-                            />
-                            <View style={styles.createRowText}>
-                                <Text
-                                    style={[textStyles.subtitle, styles.createRowTitle]}
-                                >
-                                    Объявление соседа
-                                </Text>
-                                <Text
-                                    style={[textStyles.caption, styles.createRowSub]}
-                                >
-                                    Короткое объявление для соседей по дому
-                                </Text>
-                            </View>
-                            <Ionicons
-                                name="chevron-forward"
-                                size={18}
-                                color={colors.textDim}
-                            />
-                        </Pressable>
-                        <Pressable
-                            style={({ pressed }) => [
-                                styles.createRow,
-                                pressed && styles.createRowPressed,
-                            ]}
-                            onPress={() => {
-                                setCreateOpen(false);
-                                openCommunity("VoteNew");
-                            }}
-                        >
-                            <Ionicons
-                                name="bar-chart-outline"
-                                size={22}
-                                color={colors.accent}
-                            />
-                            <View style={styles.createRowText}>
-                                <Text
-                                    style={[textStyles.subtitle, styles.createRowTitle]}
-                                >
-                                    Голосование
-                                </Text>
-                                <Text
-                                    style={[textStyles.caption, styles.createRowSub]}
-                                >
-                                    Тема, варианты ответа и срок опроса
-                                </Text>
-                            </View>
-                            <Ionicons
-                                name="chevron-forward"
-                                size={18}
-                                color={colors.textDim}
-                            />
-                        </Pressable>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
             <View style={styles.feedColumn}>
                 <ScrollView
                     style={styles.feedScroll}
@@ -568,17 +469,6 @@ export function HomeScreen() {
                         })
                     )}
                 </ScrollView>
-                <Pressable
-                    onPress={() => setCreateOpen(true)}
-                    hitSlop={10}
-                    accessibilityLabel="Добавить объявление или голосование"
-                    style={({ pressed }) => [
-                        styles.fab,
-                        pressed && styles.fabPressed,
-                    ]}
-                >
-                    <Ionicons name="add" size={28} color={colors.bg} />
-                </Pressable>
             </View>
         </ScreenLayout>
     );

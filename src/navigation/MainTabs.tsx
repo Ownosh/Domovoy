@@ -40,7 +40,7 @@ export function MainTabs() {
                 name="Appeals"
                 component={AppealsNavigator}
                 options={{
-                    title: "Обращения",
+                    title: "Сообщество",
                     tabBarIcon: ({ color, size }) => (
                         <Ionicons name="chatbox-ellipses-outline" size={size} color={color} />
                     ),

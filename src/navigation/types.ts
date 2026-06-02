@@ -46,6 +46,11 @@ export type AppealsStackParamList = {
     AppealsList: undefined;
     AppealNew: { defaultKind?: "personal" | "collective" } | undefined;
     AppealDetail: { id: string };
+    NeighborAdNew: { presetCategory?: NeighborAdCategory } | undefined;
+    NeighborAdDetail: { id: string };
+    VoteDetail: { id: string };
+    VoteCreateInfo: undefined;
+    VoteNew: undefined;
 };
 
 export type ProfileStackParamList = {

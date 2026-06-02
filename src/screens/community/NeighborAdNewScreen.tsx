@@ -42,18 +42,21 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
     }, [preset]);
     const [showPhone, setShowPhone] = useState(false);
     const [err, setErr] = useState("");
+    const [submitting, setSubmitting] = useState(false);
 
-    const submit = () => {
+    const submit = async () => {
         if (!title.trim() || !body.trim()) {
             setErr("Заполните заголовок и текст");
             return;
         }
-        const r = addNeighborAd({
+        setSubmitting(true);
+        const r = await addNeighborAd({
             title: title.trim(),
             body: body.trim(),
             category,
             showPhone,
         });
+        setSubmitting(false);
         if (!r.ok) {
             setErr("reason" in r ? r.reason : "");
             return;
@@ -124,7 +127,7 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
                     <Text style={[textStyles.caption, styles.err]}>{err}</Text>
                 )}
                 <View style={styles.gapLg} />
-                <Button title="Опубликовать" onPress={submit} />
+                <Button title={submitting ? "Отправка..." : "Опубликовать"} onPress={submit} disabled={submitting} />
             </Card>
         </ScreenLayout>
     );

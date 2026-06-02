@@ -2,7 +2,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React, { useMemo, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+    FlatList,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
+} from "react-native";
 import { AppealStatusBadge, Card, ScreenLayout } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
 import type {
@@ -12,32 +19,74 @@ import type {
 import { buildBuildingKey } from "../../utils/buildingKey";
 import { colors, radius, spacing, textStyles } from "../../theme";
 import { isArchivedAppeal } from "../../utils/appeals";
+import type { NeighborAd, Vote } from "../../types";
+import { voteSourceLine } from "../../utils/voteSponsor";
 
 type Nav = NativeStackNavigationProp<AppealsStackParamList>;
-type FeedTab = "mine" | "house";
+type CommunityTab = "appeals" | "collective" | "votes" | "ads";
+
+const COMMUNITY_TABS: { id: CommunityTab; label: string }[] = [
+    { id: "appeals", label: "Обращения" },
+    { id: "collective", label: "Коллективные обращения" },
+    { id: "votes", label: "Голосования" },
+    { id: "ads", label: "Мои объявления" },
+];
 
 export function AppealsListScreen() {
     const navigation = useNavigation<Nav>();
-    const { appeals, profile, user } = useApp();
-    const [tab, setTab] = useState<FeedTab>("mine");
+    const { appeals, profile, user, votes, neighborAds } = useApp();
+    const [tab, setTab] = useState<CommunityTab>("appeals");
     const houseKey = buildBuildingKey(profile.building);
+    const uid = user ? String(user.id) : null;
 
     const activeAppeals = appeals.filter((item) => !isArchivedAppeal(item));
 
-    const list = useMemo(() => {
-        if (!user) return activeAppeals;
-        if (tab === "mine") {
-            return activeAppeals.filter((a) => a.authorUserId === user.id);
-        }
+    const bkLower = houseKey.toLowerCase();
+
+    const personalAppeals = useMemo(() => {
+        if (!user) return activeAppeals.filter((a) => a.kind === "personal");
         return activeAppeals.filter(
-            (a) =>
-                a.kind === "collective" && a.buildingKey === houseKey,
+            (a) => a.kind === "personal" && a.authorUserId === String(user.id),
         );
-    }, [activeAppeals, tab, user, houseKey]);
+    }, [activeAppeals, user]);
+
+    const collectiveAppeals = useMemo(
+        () =>
+            activeAppeals.filter(
+                (a) => a.kind === "collective" && a.buildingKey === houseKey,
+            ),
+        [activeAppeals, houseKey],
+    );
+
+    const myVoteLabel = useMemo(() => {
+        const namePart = profile.name?.trim();
+        const apt = profile.apartment || "—";
+        return namePart ? `${namePart}, кв. ${apt}` : `Кв. ${apt}`;
+    }, [profile.name, profile.apartment]);
+
+    const myVotes = useMemo(() => {
+        if (!user) return [];
+        return votes.filter(
+            (v) =>
+                v.buildingKey.toLowerCase() === bkLower &&
+                v.sponsor === "residents" &&
+                v.createdByLabel === myVoteLabel,
+        );
+    }, [votes, bkLower, user, myVoteLabel]);
+
+    const myAds = useMemo(() => {
+        if (!uid) return [];
+        return neighborAds.filter(
+            (a) =>
+                a.authorUserId === uid &&
+                a.buildingKey.toLowerCase() === bkLower &&
+                !a.archived,
+        );
+    }, [neighborAds, bkLower, uid]);
 
     return (
         <ScreenLayout
-            title="Обращения"
+            title="Сообщество"
             scroll={false}
             contentStyle={styles.flex}
             rightAccessory={
@@ -61,89 +110,151 @@ export function AppealsListScreen() {
                 </Pressable>
             }
         >
-            <View style={styles.tabs}>
-                <Pressable
-                    onPress={() => setTab("mine")}
-                    style={[styles.tab, tab === "mine" && styles.tabOn]}
+            <View style={styles.tabsBar}>
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.filterRow}
+                    style={styles.tabsScroll}
+                    nestedScrollEnabled
                 >
-                    <Text
-                        style={[
-                            textStyles.caption,
-                            tab === "mine" ? styles.tabTextOn : styles.tabText,
-                        ]}
-                    >
-                        Мои
-                    </Text>
-                </Pressable>
-                <Pressable
-                    onPress={() => setTab("house")}
-                    style={[styles.tab, tab === "house" && styles.tabOn]}
-                >
-                    <Text
-                        style={[
-                            textStyles.caption,
-                            tab === "house" ? styles.tabTextOn : styles.tabText,
-                        ]}
-                    >
-                        Коллективные обращения
-                    </Text>
-                </Pressable>
+                    {COMMUNITY_TABS.map((t) => (
+                        <Pressable
+                            key={t.id}
+                            onPress={() => setTab(t.id)}
+                            style={[styles.tab, tab === t.id && styles.tabOn]}
+                        >
+                            <Text
+                                style={[
+                                    textStyles.caption,
+                                    tab === t.id ? styles.tabTextOn : styles.tabText,
+                                ]}
+                            >
+                                {t.label}
+                            </Text>
+                        </Pressable>
+                    ))}
+                </ScrollView>
             </View>
             <View style={styles.content}>
-                <FlatList
-                    data={list}
-                    keyExtractor={(i) => i.id}
-                    contentContainerStyle={styles.list}
-                    ListEmptyComponent={
-                        <Text style={[textStyles.body, styles.empty]}>
-                            {tab === "mine"
-                                ? "Пока нет ваших обращений."
-                                : "Нет коллективных обращений по вашему дому."}
-                        </Text>
-                    }
-                    renderItem={({ item }) => (
-                        <Pressable
-                            onPress={() =>
-                                navigation.navigate("AppealDetail", { id: item.id })
-                            }
-                        >
-                            <Card style={styles.row}>
-                                <View style={styles.rowTop}>
-                                    <View style={styles.badges}>
-                                        <AppealStatusBadge status={item.status} />
-                                        {item.kind === "collective" && (
-                                            <Text
-                                                style={[
-                                                    textStyles.caption,
-                                                    styles.colBadge,
-                                                ]}
-                                            >
-                                                Коллективное
-                                            </Text>
-                                        )}
+                {tab === "appeals" || tab === "collective" ? (
+                    <FlatList
+                        data={tab === "appeals" ? personalAppeals : collectiveAppeals}
+                        keyExtractor={(i) => i.id}
+                        contentContainerStyle={styles.list}
+                        ListEmptyComponent={
+                            <Text style={[textStyles.body, styles.empty]}>
+                                {tab === "appeals"
+                                    ? "Пока нет обращений."
+                                    : "Нет коллективных обращений по вашему дому."}
+                            </Text>
+                        }
+                        renderItem={({ item }) => (
+                            <Pressable
+                                onPress={() =>
+                                    navigation.navigate("AppealDetail", {
+                                        id: item.id,
+                                    })
+                                }
+                            >
+                                <Card style={styles.row}>
+                                    <View style={styles.rowTop}>
+                                        <View style={styles.badges}>
+                                            <AppealStatusBadge status={item.status} />
+                                            {item.kind === "collective" && (
+                                                <Text
+                                                    style={[
+                                                        textStyles.caption,
+                                                        styles.colBadge,
+                                                    ]}
+                                                >
+                                                    Коллективное
+                                                </Text>
+                                            )}
+                                        </View>
+                                        <Text style={[textStyles.caption, styles.date]}>
+                                            {formatDate(item.createdAt)}
+                                        </Text>
                                     </View>
-                                    <Text
-                                        style={[textStyles.caption, styles.date]}
-                                    >
-                                        {formatDate(item.createdAt)}
+                                    <Text style={[textStyles.subtitle, styles.title]}>
+                                        {item.title}
                                     </Text>
-                                </View>
-                                <Text
-                                    style={[textStyles.subtitle, styles.title]}
-                                >
-                                    {item.title}
-                                </Text>
-                                <Text
-                                    style={[textStyles.caption, styles.category]}
-                                >
-                                    {item.category}
-                                </Text>
-                            </Card>
-                        </Pressable>
-                    )}
-                />
+                                    <Text style={[textStyles.caption, styles.category]}>
+                                        {item.category}
+                                    </Text>
+                                </Card>
+                            </Pressable>
+                        )}
+                    />
+                ) : null}
+
+                {tab === "votes" ? (
+                    <FlatList
+                        data={myVotes}
+                        keyExtractor={(i) => String(i.id)}
+                        contentContainerStyle={styles.list}
+                        ListEmptyComponent={
+                            <Text style={[textStyles.body, styles.empty]}>
+                                Вы ещё не создавали голосований.
+                            </Text>
+                        }
+                        renderItem={({ item }) => (
+                            <Pressable
+                                onPress={() =>
+                                    navigation.navigate("VoteDetail", {
+                                        id: String(item.id),
+                                    })
+                                }
+                            >
+                                <VoteRow vote={item} />
+                            </Pressable>
+                        )}
+                    />
+                ) : null}
+
+                {tab === "ads" ? (
+                    <FlatList
+                        data={myAds}
+                        keyExtractor={(i) => String(i.id)}
+                        contentContainerStyle={styles.list}
+                        ListEmptyComponent={
+                            <Text style={[textStyles.body, styles.empty]}>
+                                Вы ещё не публиковали объявления.
+                            </Text>
+                        }
+                        renderItem={({ item }) => (
+                            <Pressable
+                                onPress={() =>
+                                    navigation.navigate("NeighborAdDetail", {
+                                        id: String(item.id),
+                                    })
+                                }
+                            >
+                                <AdRow ad={item} />
+                            </Pressable>
+                        )}
+                    />
+                ) : null}
                 <Pressable
-                    onPress={() => navigation.navigate("AppealNew", tab === "house" ? { defaultKind: "collective" } : undefined)}
+                    onPress={() => {
+                        if (tab === "appeals") {
+                            navigation.navigate("AppealNew");
+                            return;
+                        }
+                        if (tab === "collective") {
+                            navigation.navigate("AppealNew", {
+                                defaultKind: "collective",
+                            });
+                            return;
+                        }
+                        if (tab === "votes") {
+                            navigation.navigate("VoteNew");
+                            return;
+                        }
+                        navigation.navigate("NeighborAdNew", {
+                            presetCategory: "sell",
+                        });
+                    }}
                     hitSlop={10}
                     style={({ pressed }) => [
                         styles.fab,
@@ -154,6 +265,48 @@ export function AppealsListScreen() {
                 </Pressable>
             </View>
         </ScreenLayout>
+    );
+}
+
+function VoteRow({ vote }: { vote: Vote }) {
+    const ended = vote.closed || new Date(vote.endsAt).getTime() <= Date.now();
+    return (
+        <Card style={styles.row}>
+            <Text style={[textStyles.caption, styles.meta]}>
+                {ended ? "Завершено" : "Идёт"} ·{" "}
+                {vote.visibility === "open" ? "открытое" : "тайное"} ·{" "}
+                {voteSourceLine(vote)}
+            </Text>
+            <Text style={[textStyles.subtitle, styles.title]}>{vote.topic}</Text>
+            <Text style={[textStyles.caption, styles.category]}>
+                {vote.createdByLabel}
+            </Text>
+        </Card>
+    );
+}
+
+const adCatRu: Record<NeighborAd["category"], string> = {
+    sell: "Продаю",
+    buy: "Ищу",
+    lost: "Потеряно",
+    found: "Найдено",
+    service: "Услуга",
+    invite: "Приглашаю",
+    other: "Другое",
+};
+
+function AdRow({ ad }: { ad: NeighborAd }) {
+    return (
+        <Card style={styles.row}>
+            <Text style={[textStyles.caption, styles.meta]}>
+                {adCatRu[ad.category]}
+                {ad.pendingModeration ? " · на проверке УК" : ""}
+            </Text>
+            <Text style={[textStyles.subtitle, styles.title]}>{ad.title}</Text>
+            <Text style={[textStyles.caption, styles.category]} numberOfLines={2}>
+                {ad.body}
+            </Text>
+        </Card>
     );
 }
 
@@ -170,11 +323,16 @@ function formatDate(iso: string) {
 }
 
 const styles = StyleSheet.create({
-    flex: { flex: 1 },
-    tabs: {
+    // Важно: не даём горизонтальному ScrollView "растягиваться" по высоте,
+    // иначе он съедает пространство и список визуально уезжает вниз.
+    flex: { flex: 1, gap: 0 },
+    tabsBar: { marginBottom: spacing.md },
+    tabsScroll: { flexGrow: 0, flexShrink: 0 },
+    filterRow: {
         flexDirection: "row",
         gap: spacing.sm,
-        marginBottom: spacing.md,
+        flexGrow: 0,
+        alignItems: "center",
     },
     tab: {
         paddingHorizontal: spacing.lg,
@@ -183,6 +341,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: colors.border,
         backgroundColor: colors.surface,
+        alignSelf: "flex-start",
     },
     tabOn: {
         borderColor: colors.primary,
@@ -211,6 +370,7 @@ const styles = StyleSheet.create({
     date: { color: colors.textDim },
     title: { color: colors.text },
     category: { color: colors.textMuted },
+    meta: { color: colors.textDim },
     empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.xl },
     fab: {
         position: "absolute",

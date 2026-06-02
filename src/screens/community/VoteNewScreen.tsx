@@ -25,18 +25,21 @@ export function VoteNewScreen({ navigation }: Props) {
     const [opt4, setOpt4] = useState("");
     const [durationDays, setDurationDays] = useState<3 | 7 | 14>(7);
     const [err, setErr] = useState("");
+    const [submitting, setSubmitting] = useState(false);
 
-    const submit = () => {
+    const submit = async () => {
         const labels = [opt1, opt2, opt3, opt4]
             .map((s) => s.trim())
             .filter(Boolean);
-        const r = addResidentVote({
+        setSubmitting(true);
+        const r = await addResidentVote({
             topic: topic.trim(),
             description: description.trim(),
             visibility,
             optionLabels: labels,
             durationDays,
         });
+        setSubmitting(false);
         if (!r.ok) {
             setErr("reason" in r ? r.reason : "");
             return;
@@ -161,7 +164,7 @@ export function VoteNewScreen({ navigation }: Props) {
                     <Text style={[textStyles.caption, styles.err]}>{err}</Text>
                 )}
                 <View style={styles.gapLg} />
-                <Button title="Создать голосование" onPress={submit} />
+                <Button title={submitting ? "Отправка..." : "Создать голосование"} onPress={submitting ? undefined : submit} />
             </Card>
         </ScreenLayout>
     );

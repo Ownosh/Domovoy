@@ -1,6 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { AppealsScreenProps } from "../../navigation/types";
 import React, { useState } from "react";
+import { useNavigation } from "@react-navigation/native";
+
+function useModalBack() {
+    const nav = useNavigation();
+    const parentRouteNames = nav.getParent()?.getState()?.routeNames;
+    const isModal = parentRouteNames?.includes("Main");
+    return () => isModal ? nav.getParent()?.goBack() : nav.goBack();
+}
 import {
     Alert,
     Modal,
@@ -30,6 +38,7 @@ type Props = AppealsScreenProps<"AppealDetail">;
 export function AppealDetailScreen({ route, navigation }: Props) {
     const { appeals, deleteAppeal, joinAppeal, verification, user, profile } =
         useApp();
+    const goBack = useModalBack();
     const item = appeals.find((a) => a.id === route.params.id);
     const [joinOpen, setJoinOpen] = useState(false);
     const [joinComment, setJoinComment] = useState("");
@@ -40,20 +49,20 @@ export function AppealDetailScreen({ route, navigation }: Props) {
         return (
             <ScreenLayout
                 title="Обращение"
-                onBack={() => navigation.goBack()}
+                onBack={goBack}
             >
                 <Text style={[textStyles.body, styles.miss]}>
                     Запись не найдена
                 </Text>
-                <Button title="Назад" onPress={() => navigation.goBack()} />
+                <Button title="Назад" onPress={goBack} />
             </ScreenLayout>
         );
     }
 
-    const isAuthor = user?.id === item.authorUserId;
+    const isAuthor = String(user?.id) === String(item.authorUserId);
     const uniqueCount = collectiveUniqueApartmentCount(item);
     const myBuildingKey = buildBuildingKey(profile.building);
-    const sameHouseAsAppeal = item.buildingKey === myBuildingKey;
+    const sameHouseAsAppeal = item.buildingKey.toLowerCase() === myBuildingKey.toLowerCase();
     const alreadyJoined =
         !!user && item.participants.some((p) => p.userId === user.id);
     const verified = isVerifiedResident(verification);
@@ -76,15 +85,15 @@ export function AppealDetailScreen({ route, navigation }: Props) {
                     style: "destructive",
                     onPress: () => {
                         deleteAppeal(item.id);
-                        navigation.popToTop();
+                        goBack();
                     },
                 },
             ],
         );
     };
 
-    const submitJoin = () => {
-        const r = joinAppeal({
+    const submitJoin = async () => {
+        const r = await joinAppeal({
             appealId: item.id,
             comment: joinComment.trim() || joinPhotoNote.trim() || undefined,
             photoUri: joinPhotoNote.trim() ? `note:${joinPhotoNote.trim()}` : undefined,
@@ -100,8 +109,8 @@ export function AppealDetailScreen({ route, navigation }: Props) {
         Alert.alert("", "Вы присоединились к обращению");
     };
 
-    const quickJoin = () => {
-        const r = joinAppeal({
+    const quickJoin = async () => {
+        const r = await joinAppeal({
             appealId: item.id,
             anonymous: false,
         });
@@ -116,7 +125,7 @@ export function AppealDetailScreen({ route, navigation }: Props) {
         <ScreenLayout
             title="Обращение"
             scroll
-            onBack={() => navigation.goBack()}
+            onBack={goBack}
         >
             <Card>
                 <View style={styles.top}>
@@ -221,16 +230,27 @@ export function AppealDetailScreen({ route, navigation }: Props) {
             )}
 
             {isAuthor && (
-                <Pressable
-                    onPress={onDelete}
-                    hitSlop={10}
-                    style={({ pressed }) => [
-                        styles.deleteBtn,
-                        pressed && styles.deleteBtnPressed,
-                    ]}
-                >
-                    <Ionicons name="trash-outline" size={20} color={colors.bg} />
-                </Pressable>
+                <View style={styles.authorBtns}>
+                    <Pressable
+                        onPress={() => {
+                            Alert.alert("Редактирование", "При редактировании все данные и результаты сбросятся, статус вернётся к «Новое». Продолжить?", [
+                                { text: "Отмена", style: "cancel" },
+                                { text: "Продолжить", onPress: () => navigation.navigate("AppealNew", { editId: item.id }) },
+                            ]);
+                        }}
+                        hitSlop={10}
+                        style={({ pressed }) => [styles.editBtn, pressed && styles.editBtnPressed]}
+                    >
+                        <Ionicons name="create-outline" size={20} color={colors.bg} />
+                    </Pressable>
+                    <Pressable
+                        onPress={onDelete}
+                        hitSlop={10}
+                        style={({ pressed }) => [styles.deleteBtn, pressed && styles.deleteBtnPressed]}
+                    >
+                        <Ionicons name="trash-outline" size={20} color={colors.bg} />
+                    </Pressable>
+                </View>
             )}
 
             <Modal
@@ -343,9 +363,28 @@ const styles = StyleSheet.create({
     partName: { color: colors.text },
     partCmt: { color: colors.textMuted, marginTop: spacing.xs },
     warn: { color: colors.warning, marginTop: spacing.md, lineHeight: 20 },
-    deleteBtn: {
-        alignSelf: "flex-end",
+    authorBtns: {
+        flexDirection: "row",
+        justifyContent: "flex-end",
+        gap: spacing.md,
         marginTop: spacing.lg,
+    },
+    editBtn: {
+        width: 46,
+        height: 46,
+        borderRadius: 23,
+        backgroundColor: colors.primary,
+        alignItems: "center",
+        justifyContent: "center",
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.28,
+        shadowRadius: 8,
+        elevation: 3,
+    },
+    editBtnPressed: { opacity: 0.9, transform: [{ scale: 0.98 }] },
+    deleteBtn: {
+        marginTop: 0,
         width: 46,
         height: 46,
         borderRadius: 23,

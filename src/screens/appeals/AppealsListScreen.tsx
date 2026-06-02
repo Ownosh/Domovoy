@@ -26,9 +26,9 @@ type Nav = NativeStackNavigationProp<AppealsStackParamList>;
 type CommunityTab = "appeals" | "collective" | "votes" | "ads";
 
 const COMMUNITY_TABS: { id: CommunityTab; label: string }[] = [
-    { id: "appeals", label: "Обращения" },
-    { id: "collective", label: "Коллективные обращения" },
-    { id: "votes", label: "Голосования" },
+    { id: "appeals", label: "Мои обращения" },
+    { id: "collective", label: "Мои коллективные обращения" },
+    { id: "votes", label: "Мои голосования" },
     { id: "ads", label: "Мои объявления" },
 ];
 
@@ -53,9 +53,12 @@ export function AppealsListScreen() {
     const collectiveAppeals = useMemo(
         () =>
             activeAppeals.filter(
-                (a) => a.kind === "collective" && a.buildingKey === houseKey,
+                (a) =>
+                    a.kind === "collective" &&
+                    uid !== null &&
+                    String(a.authorUserId) === String(uid),
             ),
-        [activeAppeals, houseKey],
+        [activeAppeals, uid],
     );
 
     const myVoteLabel = useMemo(() => {
@@ -150,38 +153,19 @@ export function AppealsListScreen() {
                             </Text>
                         }
                         renderItem={({ item }) => (
-                            <Pressable
-                                onPress={() =>
-                                    navigation.navigate("AppealDetail", {
-                                        id: item.id,
-                                    })
-                                }
-                            >
+                            <Pressable onPress={() => navigation.navigate("AppealDetail", { id: item.id })}>
                                 <Card style={styles.row}>
                                     <View style={styles.rowTop}>
                                         <View style={styles.badges}>
                                             <AppealStatusBadge status={item.status} />
                                             {item.kind === "collective" && (
-                                                <Text
-                                                    style={[
-                                                        textStyles.caption,
-                                                        styles.colBadge,
-                                                    ]}
-                                                >
-                                                    Коллективное
-                                                </Text>
+                                                <Text style={[textStyles.caption, styles.colBadge]}>Коллективное</Text>
                                             )}
                                         </View>
-                                        <Text style={[textStyles.caption, styles.date]}>
-                                            {formatDate(item.createdAt)}
-                                        </Text>
+                                        <Text style={[textStyles.caption, styles.date]}>{formatDate(item.createdAt)}</Text>
                                     </View>
-                                    <Text style={[textStyles.subtitle, styles.title]}>
-                                        {item.title}
-                                    </Text>
-                                    <Text style={[textStyles.caption, styles.category]}>
-                                        {item.category}
-                                    </Text>
+                                    <Text style={[textStyles.subtitle, styles.title]}>{item.title}</Text>
+                                    <Text style={[textStyles.caption, styles.category]}>{item.category}</Text>
                                 </Card>
                             </Pressable>
                         )}
@@ -199,13 +183,7 @@ export function AppealsListScreen() {
                             </Text>
                         }
                         renderItem={({ item }) => (
-                            <Pressable
-                                onPress={() =>
-                                    navigation.navigate("VoteDetail", {
-                                        id: String(item.id),
-                                    })
-                                }
-                            >
+                            <Pressable onPress={() => navigation.navigate("VoteDetail", { id: String(item.id) })}>
                                 <VoteRow vote={item} />
                             </Pressable>
                         )}
@@ -223,13 +201,7 @@ export function AppealsListScreen() {
                             </Text>
                         }
                         renderItem={({ item }) => (
-                            <Pressable
-                                onPress={() =>
-                                    navigation.navigate("NeighborAdDetail", {
-                                        id: String(item.id),
-                                    })
-                                }
-                            >
+                            <Pressable onPress={() => navigation.navigate("NeighborAdDetail", { id: String(item.id) })}>
                                 <AdRow ad={item} />
                             </Pressable>
                         )}

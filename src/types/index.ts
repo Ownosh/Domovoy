@@ -30,10 +30,14 @@ export type User = {
 export type Profile = {
     name: string;
     phone: string;
-    /** ЖК, улица, дом, корпус — как ввёл житель */
+    /** Ключ дома для матчинга (например "KIR001" или нормализованный адрес) */
     building: string;
+    /** Читаемый адрес для отображения в UI (например "ул. Кирова, д. 1") */
+    buildingName?: string;
     /** Номер квартиры */
     apartment: string;
+    /** Номер подъезда */
+    entrance?: number;
     /** Площадь квартиры, м² — для веса голоса на ОСС */
     apartmentAreaSqm?: number;
 };

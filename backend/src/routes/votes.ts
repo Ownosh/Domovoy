@@ -111,9 +111,9 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         try {
             await conn.beginTransaction();
             const [vr] = await conn.execute<ResultSetHeader>(
-                `INSERT INTO votes (building_key, created_by_label, sponsor, topic, description, visibility, ends_at)
-                 VALUES (?, ?, 'residents', ?, ?, ?, ?)`,
-                [buildingKey, createdByLabel?.trim() ?? "", topic.trim(), description.trim(), visibility ?? "open", endsAt],
+                `INSERT INTO votes (building_key, user_id, created_by_label, sponsor, topic, description, visibility, ends_at)
+                 VALUES (?, ?, ?, 'residents', ?, ?, ?, ?)`,
+                [buildingKey, userId, createdByLabel?.trim() ?? "", topic.trim(), description.trim(), visibility ?? "open", endsAt],
             );
             const voteId = vr.insertId;
             const optionIds: number[] = [];
@@ -150,6 +150,97 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         }
     } catch (err) {
         console.error("[votes POST]", err);
+        return res.status(500).json({ error: "Ошибка сервера" });
+    }
+});
+
+// PATCH /api/votes/:id  — редактировать голосование (сбрасывает все голоса)
+router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
+    const userId = req.userId!;
+    const voteId = Number(req.params.id);
+    const { topic, description, visibility, optionLabels } = req.body as {
+        topic?: string; description?: string; visibility?: string; optionLabels?: string[];
+    };
+
+    if (!topic?.trim() || !description?.trim())
+        return res.status(400).json({ error: "Тема и описание обязательны" });
+    if (!Array.isArray(optionLabels) || optionLabels.length < 2 || optionLabels.length > 4)
+        return res.status(400).json({ error: "Нужно 2–4 варианта ответа" });
+
+    try {
+        const [[vote]] = await pool.query<RowDataPacket[]>(
+            `SELECT id, user_id FROM votes WHERE id = ?`, [voteId],
+        );
+        if (!vote) return res.status(404).json({ error: "Голосование не найдено" });
+        if (Number(vote.user_id) !== userId) return res.status(403).json({ error: "Нет прав" });
+
+        const conn = await pool.getConnection();
+        try {
+            await conn.beginTransaction();
+            await conn.execute(
+                `UPDATE votes SET topic=?, description=?, visibility=?, closed=0 WHERE id=?`,
+                [topic.trim(), description.trim(), visibility ?? "open", voteId],
+            );
+            await conn.execute(`DELETE FROM vote_casts WHERE vote_id=?`, [voteId]);
+            await conn.execute(`DELETE FROM vote_options WHERE vote_id=?`, [voteId]);
+            const optionIds: number[] = [];
+            for (let i = 0; i < optionLabels.length; i++) {
+                const [or] = await conn.execute<ResultSetHeader>(
+                    `INSERT INTO vote_options (vote_id, label, position) VALUES (?, ?, ?)`,
+                    [voteId, optionLabels[i].trim(), i],
+                );
+                optionIds.push(or.insertId);
+            }
+            await conn.commit();
+        } catch (err) {
+            await conn.rollback();
+            throw err;
+        } finally {
+            conn.release();
+        }
+
+        const [[updated]] = await pool.query<RowDataPacket[]>(
+            `SELECT id, building_key, user_id, created_by_label, sponsor, topic, description,
+                    visibility, ends_at, closed, trial, created_at
+             FROM votes WHERE id=?`, [voteId],
+        );
+        const [opts] = await pool.query<RowDataPacket[]>(
+            `SELECT id, label FROM vote_options WHERE vote_id=? ORDER BY position`, [voteId],
+        );
+        return res.json({
+            id: String(updated.id),
+            buildingKey: updated.building_key as string,
+            createdByLabel: String(updated.created_by_label ?? ""),
+            sponsor: updated.sponsor as string,
+            topic: String(updated.topic),
+            description: String(updated.description ?? ""),
+            visibility: updated.visibility as string,
+            endsAt: (updated.ends_at as Date).toISOString(),
+            closed: false,
+            trial: Boolean(updated.trial),
+            createdAt: (updated.created_at as Date).toISOString(),
+            options: opts.map((o) => ({ id: String(o.id), label: String(o.label) })),
+        });
+    } catch (err) {
+        console.error("[votes PATCH]", err);
+        return res.status(500).json({ error: "Ошибка сервера" });
+    }
+});
+
+// DELETE /api/votes/:id  — удалить голосование
+router.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
+    const userId = req.userId!;
+    const voteId = Number(req.params.id);
+    try {
+        const [[vote]] = await pool.query<RowDataPacket[]>(
+            `SELECT user_id FROM votes WHERE id=?`, [voteId],
+        );
+        if (!vote) return res.status(404).json({ error: "Голосование не найдено" });
+        if (Number(vote.user_id) !== userId) return res.status(403).json({ error: "Нет прав" });
+        await pool.execute(`DELETE FROM votes WHERE id=?`, [voteId]);
+        return res.json({ ok: true });
+    } catch (err) {
+        console.error("[votes DELETE]", err);
         return res.status(500).json({ error: "Ошибка сервера" });
     }
 });

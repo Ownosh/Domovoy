@@ -1,9 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { apiLogin, apiLogout, apiRegister, apiChangePassword } from "../api/auth";
 import { apiFetchNews } from "../api/news";
-import { apiFetchVotes, apiCreateVote, apiCastVote } from "../api/votes";
-import { apiFetchNeighborAds, apiCreateNeighborAd, apiDeleteNeighborAd, apiExtendNeighborAd, apiReportNeighborAd } from "../api/neighborAds";
-import { clearTokens } from "../api/client";
+import { apiFetchVotes, apiCreateVote, apiCastVote, apiEditVote, apiDeleteVote } from "../api/votes";
+import { apiFetchNeighborAds, apiCreateNeighborAd, apiDeleteNeighborAd, apiExtendNeighborAd, apiReportNeighborAd, apiEditNeighborAd } from "../api/neighborAds";
+import { apiFetchAppeals, apiCreateAppeal, apiJoinAppeal, apiDeleteAppeal, apiEditAppeal } from "../api/appeals";
+import { clearTokens, ApiError } from "../api/client";
 import React, {
     createContext,
     useCallback,
@@ -152,7 +153,9 @@ type Action =
     | { type: "SET_ENVIRONMENT_RATING"; payload: EnvironmentRatingSnapshot }
     | { type: "SET_NEWS"; payload: NewsItem[] }
     | { type: "SET_VOTES"; payload: { votes: Vote[]; casts: VoteCast[] } }
-    | { type: "SET_NEIGHBOR_ADS"; payload: NeighborAd[] };
+    | { type: "SET_NEIGHBOR_ADS"; payload: NeighborAd[] }
+    | { type: "SET_APPEALS"; payload: Appeal[] }
+    | { type: "REPLACE_APPEAL"; payload: Appeal };
 
 function appealRecipientUserIds(appeal: Appeal): string[] {
     const ids = new Set<string>();
@@ -406,6 +409,15 @@ function reducer(state: AppState, action: Action): AppState {
             };
         case "SET_NEIGHBOR_ADS":
             return { ...state, neighborAds: action.payload };
+        case "SET_APPEALS":
+            return { ...state, appeals: action.payload };
+        case "REPLACE_APPEAL": {
+            const idx = state.appeals.findIndex((a) => a.id === action.payload.id);
+            if (idx < 0) return state;
+            const appeals = [...state.appeals];
+            appeals[idx] = action.payload;
+            return { ...state, appeals };
+        }
         default:
             return state;
     }
@@ -623,11 +635,14 @@ function normalizeProfile(p: Profile | undefined): Profile {
     if (!p) {
         return { name: "", phone: "", building: "", apartment: "" };
     }
+    const entrance = typeof p.entrance === "number" && p.entrance > 0 ? p.entrance : undefined;
     return {
         name: p.name ?? "",
         phone: p.phone ?? "",
         building: p.building ?? "",
+        buildingName: p.buildingName || undefined,
         apartment: p.apartment ?? "",
+        entrance,
         apartmentAreaSqm:
             typeof p.apartmentAreaSqm === "number" && !Number.isNaN(p.apartmentAreaSqm)
                 ? p.apartmentAreaSqm
@@ -659,6 +674,7 @@ type AppContextValue = {
         building: string;
         buildingKey?: string;
         apartment: string;
+        entrance: number;
         dataConsentAt: string;
     }) => Promise<void>;
     logout: () => Promise<void>;
@@ -671,13 +687,13 @@ type AppContextValue = {
         category: string;
         kind: AppealKind;
         entrance?: string;
-    }) => void;
+    }) => Promise<{ ok: true } | { ok: false; reason: string }>;
     joinAppeal: (input: {
         appealId: string;
         comment?: string;
         photoUri?: string;
         anonymous: boolean;
-    }) => { ok: true } | { ok: false; reason: string };
+    }) => Promise<{ ok: true } | { ok: false; reason: string }>;
     deleteAppeal: (id: string) => void;
     markNotificationRead: (id: string) => void;
     toggleNotificationPref: (key: keyof NotificationPrefs) => void;
@@ -693,6 +709,10 @@ type AppContextValue = {
     extendNeighborAd: (id: string) => void;
     deleteNeighborAd: (id: string) => void;
     reportNeighborAd: (id: string) => void;
+    editNeighborAd: (id: string, data: { title: string; body: string; category: NeighborAdCategory; showPhone: boolean; authorPhone?: string }) => Promise<{ ok: true } | { ok: false; reason: string }>;
+    editAppeal: (id: string, data: { title: string; body: string; category: string; entrance?: string }) => Promise<{ ok: true } | { ok: false; reason: string }>;
+    editVote: (id: string, data: { topic: string; description: string; visibility: string; optionLabels: string[] }) => Promise<{ ok: true } | { ok: false; reason: string }>;
+    deleteVote: (id: string) => Promise<void>;
     castVote: (input: {
         voteId: string;
         optionId: string;
@@ -745,19 +765,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         if (!state.sessionActive || !state.account) return;
+
+        const onUnauthorized = (err: unknown) => {
+            if (err instanceof ApiError && err.status === 401) {
+                clearTokens().catch(() => {});
+                dispatch({ type: "SESSION_END" });
+            }
+        };
+
         apiFetchNews()
             .then((items) => { if (items.length > 0) dispatch({ type: "SET_NEWS", payload: items }); })
-            .catch((err) => console.warn("[news] fetch failed:", err));
+            .catch((err) => { console.warn("[news] fetch failed:", err); onUnauthorized(err); });
         apiFetchVotes()
-            .then((data) => {
-                // Важно: всегда обновляем casts для текущего аккаунта,
-                // иначе при смене пользователя могут остаться старые/пустые данные.
-                dispatch({ type: "SET_VOTES", payload: data });
-            })
-            .catch((err) => console.warn("[votes] fetch failed:", err));
+            .then((data) => { dispatch({ type: "SET_VOTES", payload: data }); })
+            .catch((err) => { console.warn("[votes] fetch failed:", err); onUnauthorized(err); });
         apiFetchNeighborAds()
             .then((ads) => { if (ads.length > 0) dispatch({ type: "SET_NEIGHBOR_ADS", payload: ads }); })
-            .catch((err) => console.warn("[neighbor-ads] fetch failed:", err));
+            .catch((err) => { console.warn("[neighbor-ads] fetch failed:", err); onUnauthorized(err); });
+        apiFetchAppeals()
+            .then((list) => { dispatch({ type: "SET_APPEALS", payload: list }); })
+            .catch((err) => { console.warn("[appeals] fetch failed:", err); onUnauthorized(err); });
     }, [state.sessionActive, state.account?.user.id]);
 
     useEffect(() => {
@@ -779,7 +806,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                         name: res.profile.name,
                         phone: res.profile.phone,
                         building: res.profile.building,
+                        buildingName: res.profile.buildingName,
                         apartment: res.profile.apartment,
+                        entrance: res.profile.entrance,
                         apartmentAreaSqm: res.profile.apartmentAreaSqm,
                     },
                     password: "",
@@ -803,6 +832,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             building: string;
             buildingKey?: string;
             apartment: string;
+            entrance: number;
             dataConsentAt: string;
         }): Promise<void> => {
             const res = await apiRegister(data);
@@ -812,7 +842,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     name: res.profile.name,
                     phone: res.profile.phone,
                     building: res.profile.building,
+                    buildingName: res.profile.buildingName,
                     apartment: res.profile.apartment,
+                    entrance: res.profile.entrance,
                     apartmentAreaSqm: res.profile.apartmentAreaSqm,
                 },
                 password: "",
@@ -853,39 +885,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
 
     const addAppeal = useCallback(
-        (input: {
+        async (input: {
             title: string;
             body: string;
             category: string;
             kind: AppealKind;
             entrance?: string;
-        }) => {
-            if (!state.account?.user) return;
-            const buildingKey = buildBuildingKey(state.account.profile.building);
-            dispatch({
-                type: "ADD_APPEAL",
-                payload: {
+        }): Promise<{ ok: true } | { ok: false; reason: string }> => {
+            if (!state.account?.user) return { ok: false, reason: "Войдите в аккаунт" };
+            try {
+                await apiCreateAppeal({
                     title: input.title,
                     body: input.body,
                     category: input.category,
                     kind: input.kind,
                     entrance: input.entrance,
-                    authorUserId: state.account.user.id,
-                    buildingKey,
-                    authorApartment: state.account.profile.apartment,
-                },
-            });
+                });
+                const updated = await apiFetchAppeals();
+                dispatch({ type: "SET_APPEALS", payload: updated });
+                return { ok: true };
+            } catch (e: any) {
+                return { ok: false, reason: e?.message ?? "Ошибка сервера" };
+            }
         },
         [state.account],
     );
 
     const joinAppeal = useCallback(
-        (input: {
+        async (input: {
             appealId: string;
             comment?: string;
             photoUri?: string;
             anonymous: boolean;
-        }): { ok: true } | { ok: false; reason: string } => {
+        }): Promise<{ ok: true } | { ok: false; reason: string }> => {
             if (!state.account?.user) {
                 return { ok: false, reason: "Войдите в аккаунт" };
             }
@@ -895,44 +927,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     reason: "Присоединиться могут только верифицированные жильцы дома",
                 };
             }
-            const appeal = state.appeals.find((a) => a.id === input.appealId);
-            if (!appeal || appeal.kind !== "collective") {
-                return { ok: false, reason: "Обращение не найдено" };
-            }
-            const myKey = buildBuildingKey(state.account.profile.building);
-            if (appeal.buildingKey !== myKey) {
-                return { ok: false, reason: "Это обращение другого дома" };
-            }
-            if (appeal.authorUserId === state.account.user.id) {
-                return { ok: false, reason: "Вы автор этого обращения" };
-            }
-            if (appeal.participants.some((p) => p.userId === state.account!.user.id)) {
-                return { ok: false, reason: "Вы уже присоединились" };
-            }
             const displayName = input.anonymous
                 ? "Анонимно"
                 : state.account.profile.name || "Жилец";
-            const participant: AppealParticipant = {
-                userId: state.account.user.id,
-                apartment: state.account.profile.apartment,
-                entrance: appeal.entrance,
-                displayName,
-                anonymous: input.anonymous,
-                comment: input.comment?.trim() || undefined,
-                photoUri: input.photoUri,
-                joinedAt: new Date().toISOString(),
-            };
-            dispatch({
-                type: "JOIN_APPEAL",
-                payload: { appealId: input.appealId, participant },
-            });
-            return { ok: true };
+            try {
+                await apiJoinAppeal(input.appealId, {
+                    anonymous: input.anonymous,
+                    comment: input.comment?.trim() || undefined,
+                    photoUri: input.photoUri,
+                    displayName,
+                });
+                const updated = await apiFetchAppeals();
+                dispatch({ type: "SET_APPEALS", payload: updated });
+                return { ok: true };
+            } catch (e: any) {
+                const msg: string = e?.message ?? "Ошибка сервера";
+                if (msg.includes("уже присоединились")) return { ok: false, reason: "Вы уже присоединились" };
+                if (msg.includes("другого дома")) return { ok: false, reason: "Это обращение другого дома" };
+                return { ok: false, reason: msg };
+            }
         },
-        [state.account, state.appeals, state.verification],
+        [state.account, state.verification],
     );
 
     const deleteAppeal = useCallback((id: string) => {
         dispatch({ type: "DELETE_APPEAL", payload: id });
+        apiDeleteAppeal(id).catch(() => {});
     }, []);
 
     const markNotificationRead = useCallback((id: string) => {
@@ -1034,6 +1054,55 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const reportNeighborAd = useCallback((id: string) => {
         dispatch({ type: "REPORT_NEIGHBOR_AD", payload: id });
         apiReportNeighborAd(id).catch(() => {});
+    }, []);
+
+    const editNeighborAd = useCallback(
+        async (id: string, data: { title: string; body: string; category: NeighborAdCategory; showPhone: boolean; authorPhone?: string }): Promise<{ ok: true } | { ok: false; reason: string }> => {
+            try {
+                const updated = await apiEditNeighborAd(id, data);
+                dispatch({ type: "SET_NEIGHBOR_ADS", payload: (await apiFetchNeighborAds()) });
+                void updated;
+                return { ok: true };
+            } catch (e: any) {
+                return { ok: false, reason: e?.message ?? "Ошибка сервера" };
+            }
+        }, [],
+    );
+
+    const editAppeal = useCallback(
+        async (id: string, data: { title: string; body: string; category: string; entrance?: string }): Promise<{ ok: true } | { ok: false; reason: string }> => {
+            try {
+                await apiEditAppeal(id, data);
+                const list = await apiFetchAppeals();
+                dispatch({ type: "SET_APPEALS", payload: list });
+                return { ok: true };
+            } catch (e: any) {
+                return { ok: false, reason: e?.message ?? "Ошибка сервера" };
+            }
+        }, [],
+    );
+
+    const editVote = useCallback(
+        async (id: string, data: { topic: string; description: string; visibility: string; optionLabels: string[] }): Promise<{ ok: true } | { ok: false; reason: string }> => {
+            try {
+                await apiEditVote(id, data);
+                const result = await apiFetchVotes();
+                dispatch({ type: "SET_VOTES", payload: result });
+                return { ok: true };
+            } catch (e: any) {
+                return { ok: false, reason: e?.message ?? "Ошибка сервера" };
+            }
+        }, [],
+    );
+
+    const deleteVote = useCallback(async (id: string): Promise<void> => {
+        try {
+            await apiDeleteVote(id);
+            const result = await apiFetchVotes();
+            dispatch({ type: "SET_VOTES", payload: result });
+        } catch {
+            // ignore
+        }
     }, []);
 
     const castVote = useCallback(
@@ -1225,6 +1294,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             extendNeighborAd,
             deleteNeighborAd,
             reportNeighborAd,
+            editNeighborAd,
+            editAppeal,
+            editVote,
+            deleteVote,
             castVote,
             addResidentVote,
             environmentRating: state.environmentRating,
@@ -1263,6 +1336,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             extendNeighborAd,
             deleteNeighborAd,
             reportNeighborAd,
+            editNeighborAd,
+            editAppeal,
+            editVote,
+            deleteVote,
             castVote,
             addResidentVote,
             setEnvironmentRating,

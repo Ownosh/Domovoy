@@ -24,6 +24,7 @@ type FieldErrors = {
     phone?: string;
     building?: string;
     apartment?: string;
+    entrance?: string;
     password?: string;
     password2?: string;
 };
@@ -37,6 +38,7 @@ export function RegisterScreen({ navigation }: Props) {
     const [building, setBuilding] = useState("");
     const [buildingKey, setBuildingKey] = useState("");
     const [apartment, setApartment] = useState("");
+    const [entranceStr, setEntranceStr] = useState("");
     const [password, setPassword] = useState("");
     const [password2, setPassword2] = useState("");
     const [dataConsent, setDataConsent] = useState(false);
@@ -86,12 +88,21 @@ export function RegisterScreen({ navigation }: Props) {
 
         if (!building.trim()) {
             errors.building = "Введите адрес дома";
+        } else if (!buildingKey) {
+            errors.building = "Выберите дом из списка подсказок";
         }
 
         if (!apartment.trim()) {
             errors.apartment = "Введите номер квартиры";
         } else if (!/^\d+$/.test(apartment.trim())) {
             errors.apartment = "Только цифры, например: 42";
+        }
+
+        const entranceNum = parseInt(entranceStr.trim(), 10);
+        if (!entranceStr.trim()) {
+            errors.entrance = "Введите номер подъезда";
+        } else if (Number.isNaN(entranceNum) || entranceNum <= 0) {
+            errors.entrance = "Только цифры, например: 2";
         }
 
         if (!password) {
@@ -126,6 +137,7 @@ export function RegisterScreen({ navigation }: Props) {
                 building,
                 buildingKey: buildingKey || undefined,
                 apartment,
+                entrance: parseInt(entranceStr.trim(), 10),
                 password,
                 dataConsentAt: new Date().toISOString(),
             });
@@ -204,6 +216,15 @@ export function RegisterScreen({ navigation }: Props) {
                             onChangeText={(v) => { setApartment(v.replace(/\D/g, "")); setFieldErrors((e) => ({ ...e, apartment: undefined })); }}
                             keyboardType="number-pad"
                             error={fieldErrors.apartment}
+                        />
+                        <View style={styles.gap} />
+                        <Input
+                            label="Подъезд"
+                            value={entranceStr}
+                            onChangeText={(v) => { setEntranceStr(v.replace(/\D/g, "")); setFieldErrors((e) => ({ ...e, entrance: undefined })); }}
+                            keyboardType="number-pad"
+                            placeholder="Например: 2"
+                            error={fieldErrors.entrance}
                         />
                         <View style={styles.gap} />
                         <Input

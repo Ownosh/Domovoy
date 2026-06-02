@@ -10,6 +10,7 @@ import buildingsRoutes from "./routes/buildings";
 import newsRoutes from "./routes/news";
 import votesRoutes from "./routes/votes";
 import neighborAdsRoutes from "./routes/neighborAds";
+import appealsRoutes from "./routes/appeals";
 
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
@@ -33,6 +34,7 @@ app.use("/api/buildings", buildingsRoutes);
 app.use("/api/news", newsRoutes);
 app.use("/api/votes", votesRoutes);
 app.use("/api/neighbor-ads", neighborAdsRoutes);
+app.use("/api/appeals", appealsRoutes);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 

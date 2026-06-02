@@ -10,15 +10,20 @@ import { colors, radius, spacing, textStyles } from "../../theme";
 type Props = AppealsScreenProps<"AppealNew">;
 
 export function NewAppealScreen({ navigation, route }: Props) {
-    const { addAppeal } = useApp();
-    const [title, setTitle] = useState("");
-    const [body, setBody] = useState("");
-    const [category, setCategory] = useState(appealCategories[0]);
-    const [kind, setKind] = useState<AppealKind>(route.params?.defaultKind ?? "personal");
-    const [entrance, setEntrance] = useState("");
+    const { addAppeal, editAppeal, appeals, profile } = useApp();
+    const editId = route.params?.editId;
+    const existing = editId ? appeals.find((a) => a.id === editId) : undefined;
+    const [title, setTitle] = useState(existing?.title ?? "");
+    const [body, setBody] = useState(existing?.body ?? "");
+    const [category, setCategory] = useState(existing?.category ?? appealCategories[0]);
+    const [kind, setKind] = useState<AppealKind>(existing?.kind ?? route.params?.defaultKind ?? "personal");
+    const [entrance, setEntrance] = useState(
+        existing?.entrance ?? (profile.entrance != null ? String(profile.entrance) : ""),
+    );
     const [err, setErr] = useState("");
+    const [submitting, setSubmitting] = useState(false);
 
-    const submit = () => {
+    const submit = async () => {
         if (!title.trim() || !body.trim()) {
             setErr("Укажите тему и описание");
             return;
@@ -28,19 +33,27 @@ export function NewAppealScreen({ navigation, route }: Props) {
             return;
         }
         setErr("");
-        addAppeal({
-            title: title.trim(),
-            body: body.trim(),
-            category,
-            kind,
-            entrance: kind === "collective" ? entrance.trim() : undefined,
-        });
+        setSubmitting(true);
+        const r = editId
+            ? await editAppeal(editId, {
+                title: title.trim(), body: body.trim(), category,
+                entrance: kind === "collective" ? entrance.trim() : undefined,
+              })
+            : await addAppeal({
+                title: title.trim(), body: body.trim(), category, kind,
+                entrance: kind === "collective" ? entrance.trim() : undefined,
+              });
+        setSubmitting(false);
+        if (!r.ok) {
+            setErr("reason" in r ? r.reason : "Ошибка отправки");
+            return;
+        }
         navigation.popToTop();
     };
 
     return (
         <ScreenLayout
-            title="Новое обращение"
+            title={editId ? "Редактирование" : "Новое обращение"}
             subtitle="Опишите проблему"
             onBack={() => navigation.goBack()}
         >
@@ -144,7 +157,7 @@ export function NewAppealScreen({ navigation, route }: Props) {
                     <Text style={[textStyles.caption, styles.err]}>{err}</Text>
                 )}
                 <View style={styles.gapLg} />
-                <Button title="Отправить" onPress={submit} />
+                <Button title={submitting ? "Сохранение..." : editId ? "Сохранить" : "Отправить"} onPress={submit} disabled={submitting} />
             </Card>
         </ScreenLayout>
     );

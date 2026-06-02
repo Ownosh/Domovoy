@@ -16,11 +16,12 @@ export type AuthStackParamList = {
 };
 
 export type CommunityStackParamList = {
-    NeighborAdNew: { presetCategory?: NeighborAdCategory } | undefined;
+    NeighborAdNew: { presetCategory?: NeighborAdCategory; editId?: string } | undefined;
     NeighborAdDetail: { id: string };
     VoteDetail: { id: string };
     VoteCreateInfo: undefined;
-    VoteNew: undefined;
+    VoteNew: { editId?: string } | undefined;
+    AppealDetail: { id: string };
 };
 
 export type AuthenticatedRootParamList = {
@@ -46,13 +47,13 @@ export type CommunityScreenProps<T extends keyof CommunityStackParamList> =
 
 export type AppealsStackParamList = {
     AppealsList: undefined;
-    AppealNew: { defaultKind?: "personal" | "collective" } | undefined;
+    AppealNew: { defaultKind?: "personal" | "collective"; editId?: string } | undefined;
     AppealDetail: { id: string };
-    NeighborAdNew: { presetCategory?: NeighborAdCategory } | undefined;
+    NeighborAdNew: { presetCategory?: NeighborAdCategory; editId?: string } | undefined;
     NeighborAdDetail: { id: string };
     VoteDetail: { id: string };
     VoteCreateInfo: undefined;
-    VoteNew: undefined;
+    VoteNew: { editId?: string } | undefined;
 };
 
 export type ProfileStackParamList = {

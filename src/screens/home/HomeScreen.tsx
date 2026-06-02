@@ -202,6 +202,7 @@ export function HomeScreen() {
                 item: ap,
             });
         }
+        // Важно: единая сортировка по дате (независимо от типа записи).
         return rows.sort((a, b) => b.sortAt - a.sortAt);
     }, [houseNews, houseVotes, houseAds, houseCollectiveAppeals]);
 
@@ -214,7 +215,8 @@ export function HomeScreen() {
             if (feedFilter === "collective") return row.kind === "appeal";
             return true;
         });
-        return filtered.sort((a, b) => b.sortAt - a.sortAt);
+        // feedRows уже отсортирован по sortAt, сохраняем порядок.
+        return filtered;
     }, [feedRows, feedFilter]);
 
     const openCommunity = useCallback(
@@ -223,7 +225,8 @@ export function HomeScreen() {
             params?: CommunityStackParamList[S],
         ) => {
             const root = getCommunityRoot(navigation);
-            root?.navigate("Community", { screen, params } as never);
+            // initial: false — не добавлять initialRoute под целевым экраном
+            root?.navigate("Community", { screen, params, initial: false } as never);
         },
         [navigation],
     );
@@ -446,9 +449,8 @@ export function HomeScreen() {
                                         appeal={row.item}
                                         showRibbon={feedFilter === "all"}
                                         onOpen={() =>
-                                            navigation.navigate("Appeals", {
-                                                screen: "AppealDetail",
-                                                params: { id: String(row.item.id) },
+                                            openCommunity("AppealDetail", {
+                                                id: String(row.item.id),
                                             })
                                         }
                                     />
@@ -475,7 +477,33 @@ export function HomeScreen() {
 }
 
 function parseNewsSort(dateStr: string): number {
-    const t = Date.parse(`${dateStr}T12:00:00`);
+    // Поддерживаем:
+    // - ISO: 2026-04-01T09:00:00
+    // - Дату: 2026-04-01
+    // - Дату: 01.04.2026 (и опционально время)
+    const raw = (dateStr ?? "").trim();
+    if (!raw) return 0;
+
+    // YYYY-MM-DD → ставим полдень, чтобы не было смещений по TZ при отображении.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        const t = Date.parse(`${raw}T12:00:00`);
+        return Number.isNaN(t) ? 0 : t;
+    }
+
+    // DD.MM.YYYY or DD.MM.YYYY HH:MM
+    const m = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2}))?$/);
+    if (m) {
+        const dd = Number(m[1]);
+        const mm = Number(m[2]);
+        const yyyy = Number(m[3]);
+        const hh = m[4] ? Number(m[4]) : 12;
+        const min = m[5] ? Number(m[5]) : 0;
+        const dt = new Date(yyyy, mm - 1, dd, hh, min, 0, 0);
+        const t = dt.getTime();
+        return Number.isNaN(t) ? 0 : t;
+    }
+
+    const t = Date.parse(raw);
     return Number.isNaN(t) ? 0 : t;
 }
 

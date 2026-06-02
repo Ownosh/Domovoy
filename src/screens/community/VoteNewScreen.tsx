@@ -14,15 +14,17 @@ const DURATIONS: { days: 3 | 7 | 14; label: string }[] = [
     { days: 14, label: "14 дней" },
 ];
 
-export function VoteNewScreen({ navigation }: Props) {
-    const { addResidentVote } = useApp();
-    const [topic, setTopic] = useState("");
-    const [description, setDescription] = useState("");
-    const [visibility, setVisibility] = useState<VoteVisibility>("open");
-    const [opt1, setOpt1] = useState("");
-    const [opt2, setOpt2] = useState("");
-    const [opt3, setOpt3] = useState("");
-    const [opt4, setOpt4] = useState("");
+export function VoteNewScreen({ navigation, route }: Props) {
+    const { addResidentVote, editVote, votes } = useApp();
+    const editId = route?.params?.editId;
+    const existing = editId ? votes.find((v) => v.id === editId) : undefined;
+    const [topic, setTopic] = useState(existing?.topic ?? "");
+    const [description, setDescription] = useState(existing?.description ?? "");
+    const [visibility, setVisibility] = useState<VoteVisibility>((existing?.visibility as VoteVisibility) ?? "open");
+    const [opt1, setOpt1] = useState(existing?.options[0]?.label ?? "");
+    const [opt2, setOpt2] = useState(existing?.options[1]?.label ?? "");
+    const [opt3, setOpt3] = useState(existing?.options[2]?.label ?? "");
+    const [opt4, setOpt4] = useState(existing?.options[3]?.label ?? "");
     const [durationDays, setDurationDays] = useState<3 | 7 | 14>(7);
     const [err, setErr] = useState("");
     const [submitting, setSubmitting] = useState(false);
@@ -32,13 +34,9 @@ export function VoteNewScreen({ navigation }: Props) {
             .map((s) => s.trim())
             .filter(Boolean);
         setSubmitting(true);
-        const r = await addResidentVote({
-            topic: topic.trim(),
-            description: description.trim(),
-            visibility,
-            optionLabels: labels,
-            durationDays,
-        });
+        const r = editId
+            ? await editVote(editId, { topic: topic.trim(), description: description.trim(), visibility, optionLabels: labels })
+            : await addResidentVote({ topic: topic.trim(), description: description.trim(), visibility, optionLabels: labels, durationDays });
         setSubmitting(false);
         if (!r.ok) {
             setErr("reason" in r ? r.reason : "");
@@ -164,7 +162,11 @@ export function VoteNewScreen({ navigation }: Props) {
                     <Text style={[textStyles.caption, styles.err]}>{err}</Text>
                 )}
                 <View style={styles.gapLg} />
-                <Button title={submitting ? "Отправка..." : "Создать голосование"} onPress={submitting ? undefined : submit} />
+                <Button
+                    title={submitting ? "Сохранение..." : editId ? "Сохранить" : "Создать голосование"}
+                    onPress={() => { void submit(); }}
+                    disabled={submitting}
+                />
             </Card>
         </ScreenLayout>
     );

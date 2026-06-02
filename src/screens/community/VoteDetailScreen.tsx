@@ -1,5 +1,6 @@
 import type { CommunityScreenProps } from "../../navigation/types";
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigation } from "@react-navigation/native";
 import {
     Alert,
     StyleSheet,
@@ -13,6 +14,15 @@ import { voteSourceLine } from "../../utils/voteSponsor";
 import { colors, radius, spacing, textStyles } from "../../theme";
 
 type Props = CommunityScreenProps<"VoteDetail">;
+
+// Если экран открыт через Community-модал — закрываем весь модал.
+// Если открыт внутри вкладки (Appeals стек) — просто goBack().
+function useModalBack() {
+    const nav = useNavigation();
+    const parentRouteNames = nav.getParent()?.getState()?.routeNames;
+    const isModal = parentRouteNames?.includes("Main");
+    return () => isModal ? nav.getParent()?.goBack() : nav.goBack();
+}
 
 function voteEnded(vote: Vote): boolean {
     return (
@@ -43,6 +53,7 @@ function aggregate(
 }
 
 export function VoteDetailScreen({ route, navigation }: Props) {
+    const goBack = useModalBack();
     const { votes, voteCasts, castVote, verification, user } = useApp();
     const vote = votes.find((v) => v.id === route.params.id);
     const [tick, setTick] = useState(0);
@@ -73,7 +84,7 @@ export function VoteDetailScreen({ route, navigation }: Props) {
 
     if (!vote) {
         return (
-            <ScreenLayout title="Голосование" onBack={() => navigation.goBack()}>
+            <ScreenLayout title="Голосование" onBack={goBack}>
                 <Text style={[textStyles.body, styles.miss]}>
                     Голосование не найдено
                 </Text>
@@ -101,7 +112,7 @@ export function VoteDetailScreen({ route, navigation }: Props) {
         <ScreenLayout
             title="Голосование"
             scroll
-            onBack={() => navigation.goBack()}
+            onBack={goBack}
         >
             <Card>
                 <Text style={[textStyles.caption, styles.sourceTag]}>

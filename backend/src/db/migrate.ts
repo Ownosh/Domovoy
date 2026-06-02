@@ -44,6 +44,7 @@ export async function migrate(): Promise<void> {
             phone               VARCHAR(50)  NOT NULL DEFAULT '',
             building_key        VARCHAR(120) NULL,
             apartment           VARCHAR(20)  NOT NULL DEFAULT '',
+            entrances           INT          NOT NULL DEFAULT 0,
             apartment_area_sqm  DECIMAL(6,2) NULL,
             created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -94,6 +95,7 @@ export async function migrate(): Promise<void> {
         CREATE TABLE IF NOT EXISTS votes (
             id               BIGINT UNSIGNED        NOT NULL AUTO_INCREMENT,
             building_key     VARCHAR(120)           NOT NULL,
+            user_id          BIGINT UNSIGNED        NULL,
             created_by_label VARCHAR(255)           NOT NULL DEFAULT '',
             sponsor          ENUM('uk','residents') NOT NULL DEFAULT 'residents',
             topic            TEXT                   NOT NULL,
@@ -104,9 +106,12 @@ export async function migrate(): Promise<void> {
             trial            TINYINT(1)             NOT NULL DEFAULT 0,
             created_at       DATETIME               NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
-            INDEX idx_votes_building (building_key, created_at DESC)
+            INDEX idx_votes_building (building_key, created_at DESC),
+            CONSTRAINT fk_vote_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+    // Для существующих БД — добавляем user_id если ещё нет
+    await pool.query(`ALTER TABLE votes ADD COLUMN IF NOT EXISTS user_id BIGINT UNSIGNED NULL`).catch(() => {});
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS vote_options (
@@ -155,6 +160,63 @@ export async function migrate(): Promise<void> {
             PRIMARY KEY (id),
             CONSTRAINT fk_na_user FOREIGN KEY (author_user_id) REFERENCES users(id) ON DELETE CASCADE,
             INDEX idx_na_building (building_key, created_at DESC)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS appeals (
+            id               BIGINT UNSIGNED                                                          NOT NULL AUTO_INCREMENT,
+            user_id          BIGINT UNSIGNED                                                          NOT NULL,
+            title            VARCHAR(500)                                                             NOT NULL,
+            body             TEXT                                                                     NOT NULL,
+            category         VARCHAR(100)                                                             NOT NULL,
+            status           ENUM('new','accepted','in_progress','mass_appeal','resolved','rejected') NOT NULL DEFAULT 'new',
+            kind             ENUM('personal','collective')                                            NOT NULL DEFAULT 'personal',
+            building_key     VARCHAR(120)                                                             NOT NULL,
+            entrance         VARCHAR(20)                                                              DEFAULT NULL,
+            author_apartment VARCHAR(20)                                                              NOT NULL DEFAULT '',
+            escalated_to_uk  BOOLEAN                                                                  NOT NULL DEFAULT FALSE,
+            created_at       DATETIME                                                                 NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at       DATETIME                                                                 NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            resolved_at      DATETIME                                                                 DEFAULT NULL,
+            PRIMARY KEY (id),
+            CONSTRAINT fk_appeals_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_appeals_user_created   (user_id, created_at DESC),
+            INDEX idx_appeals_status_created (status, created_at DESC),
+            INDEX idx_appeals_building_key   (building_key, created_at DESC)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS appeal_photos (
+            id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            appeal_id  BIGINT UNSIGNED NOT NULL,
+            image_url  VARCHAR(500)    NOT NULL,
+            position   INT             NOT NULL DEFAULT 0,
+            created_at DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            CONSTRAINT fk_aph_appeal FOREIGN KEY (appeal_id) REFERENCES appeals(id) ON DELETE CASCADE,
+            INDEX idx_aph_appeal (appeal_id, position)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS appeal_participants (
+            id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            appeal_id    BIGINT UNSIGNED NOT NULL,
+            user_id      BIGINT UNSIGNED NOT NULL,
+            apartment    VARCHAR(20)     NOT NULL,
+            entrance     VARCHAR(20)     DEFAULT NULL,
+            display_name VARCHAR(255)    NOT NULL DEFAULT '',
+            anonymous    BOOLEAN         NOT NULL DEFAULT FALSE,
+            comment      TEXT            DEFAULT NULL,
+            photo_uri    VARCHAR(500)    DEFAULT NULL,
+            joined_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_ap_appeal_user (appeal_id, user_id),
+            CONSTRAINT fk_ap_appeal FOREIGN KEY (appeal_id) REFERENCES appeals(id) ON DELETE CASCADE,
+            CONSTRAINT fk_ap_user   FOREIGN KEY (user_id)   REFERENCES users(id)   ON DELETE CASCADE,
+            INDEX idx_ap_appeal (appeal_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 

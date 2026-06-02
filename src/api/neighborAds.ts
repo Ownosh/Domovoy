@@ -23,6 +23,12 @@ export async function apiDeleteNeighborAd(id: string): Promise<void> {
     await apiRequest(`/neighbor-ads/${id}`, { method: "DELETE" });
 }
 
+export async function apiEditNeighborAd(id: string, data: {
+    title: string; body: string; category: NeighborAdCategory; showPhone: boolean; authorPhone?: string;
+}): Promise<NeighborAd> {
+    return apiRequest<NeighborAd>(`/neighbor-ads/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
 export async function apiExtendNeighborAd(id: string): Promise<{ expiresAt: string }> {
     return apiRequest(`/neighbor-ads/${id}/extend`, { method: "PATCH" });
 }

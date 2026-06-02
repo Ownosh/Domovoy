@@ -31,8 +31,9 @@ const rows: {
     { icon: "trash-outline", title: "Удалить аккаунт", target: "DeleteAccount" },
 ];
 
-function formatProfileSubline(profile: Pick<Profile, "building" | "apartment" | "phone">) {
-    const addr = [profile.building, profile.apartment && `кв. ${profile.apartment}`]
+function formatProfileSubline(profile: Pick<Profile, "building" | "buildingName" | "apartment" | "phone">) {
+    const displayBuilding = profile.buildingName || profile.building;
+    const addr = [displayBuilding, profile.apartment && `кв. ${profile.apartment}`]
         .filter(Boolean)
         .join(" · ");
     return [addr, profile.phone].filter(Boolean).join(" · ");

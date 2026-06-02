@@ -1,5 +1,14 @@
+import { Ionicons } from "@expo/vector-icons";
 import type { CommunityScreenProps } from "../../navigation/types";
 import React from "react";
+import { useNavigation } from "@react-navigation/native";
+
+function useModalBack() {
+    const nav = useNavigation();
+    const parentRouteNames = nav.getParent()?.getState()?.routeNames;
+    const isModal = parentRouteNames?.includes("Main");
+    return () => isModal ? nav.getParent()?.goBack() : nav.goBack();
+}
 import {
     Alert,
     Image,
@@ -16,13 +25,14 @@ import { colors, radius, spacing, textStyles } from "../../theme";
 type Props = CommunityScreenProps<"NeighborAdDetail">;
 
 export function NeighborAdDetailScreen({ route, navigation }: Props) {
+    const goBack = useModalBack();
     const { neighborAds, user, reportNeighborAd, extendNeighborAd, deleteNeighborAd } =
         useApp();
     const ad = neighborAds.find((a) => a.id === route.params.id);
 
     if (!ad) {
         return (
-            <ScreenLayout title="Объявление" onBack={() => navigation.goBack()}>
+            <ScreenLayout title="Объявление" onBack={goBack}>
                 <Text style={[textStyles.body, styles.miss]}>
                     Объявление не найдено
                 </Text>
@@ -30,7 +40,7 @@ export function NeighborAdDetailScreen({ route, navigation }: Props) {
         );
     }
 
-    const isAuthor = user?.id === ad.authorUserId;
+    const isAuthor = String(user?.id) === String(ad.authorUserId);
 
     const onCall = () => {
         if (!ad.showPhone) {
@@ -65,7 +75,7 @@ export function NeighborAdDetailScreen({ route, navigation }: Props) {
         <ScreenLayout
             title="Объявление"
             scroll
-            onBack={() => navigation.goBack()}
+            onBack={goBack}
         >
             <Card>
                 {ad.pendingModeration && (
@@ -107,23 +117,34 @@ export function NeighborAdDetailScreen({ route, navigation }: Props) {
                         variant="secondary"
                     />
                     <View style={styles.gap} />
-                    <Button
-                        title="Удалить"
-                        variant="danger"
-                        onPress={() => {
-                            Alert.alert("Удалить?", "", [
-                                { text: "Отмена", style: "cancel" },
-                                {
-                                    text: "Удалить",
-                                    style: "destructive",
-                                    onPress: () => {
-                                        deleteNeighborAd(ad.id);
-                                        navigation.goBack();
+                    <View style={styles.iconRow}>
+                        <Pressable
+                            hitSlop={10}
+                            onPress={() => navigation.navigate("NeighborAdNew", { editId: ad.id })}
+                            style={({ pressed }) => [styles.iconBtn, styles.iconBtnEdit, pressed && styles.iconBtnPressed]}
+                        >
+                            <Ionicons name="create-outline" size={20} color={colors.bg} />
+                        </Pressable>
+                        <Pressable
+                            hitSlop={10}
+                            onPress={() => {
+                                Alert.alert("Удалить?", "", [
+                                    { text: "Отмена", style: "cancel" },
+                                    {
+                                        text: "Удалить",
+                                        style: "destructive",
+                                        onPress: () => {
+                                            deleteNeighborAd(ad.id);
+                                            navigation.goBack();
+                                        },
                                     },
-                                },
-                            ]);
-                        }}
-                    />
+                                ]);
+                            }}
+                            style={({ pressed }) => [styles.iconBtn, styles.iconBtnDelete, pressed && styles.iconBtnPressed]}
+                        >
+                            <Ionicons name="trash-outline" size={20} color={colors.bg} />
+                        </Pressable>
+                    </View>
                 </View>
             )}
         </ScreenLayout>
@@ -145,6 +166,23 @@ const styles = StyleSheet.create({
     },
     actions: { marginTop: spacing.lg },
     gap: { height: spacing.md },
+    iconRow: { flexDirection: "row", gap: spacing.md },
+    iconBtn: {
+        width: 46, height: 46, borderRadius: 23,
+        alignItems: "center", justifyContent: "center",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.28, shadowRadius: 8, elevation: 3,
+    },
+    iconBtnEdit: {
+        backgroundColor: colors.primary,
+        shadowColor: colors.primary,
+    },
+    iconBtnDelete: {
+        backgroundColor: colors.danger,
+        shadowColor: colors.danger,
+        borderWidth: 1, borderColor: "#f08b8b",
+    },
+    iconBtnPressed: { opacity: 0.9, transform: [{ scale: 0.98 }] },
     hint: { color: colors.textDim },
     reportWrap: { alignItems: "center" },
     report: { color: colors.danger, textDecorationLine: "underline" },

@@ -37,6 +37,7 @@ const RegisterSchema = z.object({
     building: z.string().min(1),
     buildingKey: z.string().optional(),
     apartment: z.string().min(1),
+    entrance: z.number().int().positive(),
     dataConsentAt: z.string(),
 });
 
@@ -47,7 +48,7 @@ router.post("/register", async (req: Request, res: Response) => {
         return;
     }
 
-    const { email, password, name, phone, building, buildingKey: explicitKey, apartment, dataConsentAt } = parsed.data;
+    const { email, password, name, phone, building, buildingKey: explicitKey, apartment, entrance, dataConsentAt } = parsed.data;
 
     const conn = await pool.getConnection();
     try {
@@ -73,8 +74,27 @@ router.post("/register", async (req: Request, res: Response) => {
 
         const userId = userResult.insertId;
 
-        const buildingKey = explicitKey?.trim() || building.trim().toLowerCase().replace(/\s+/g, " ");
         const buildingLabel = building.trim();
+        const normalizedAddress = buildingLabel.toLowerCase().replace(/\s+/g, " ");
+
+        let buildingKey: string;
+        if (explicitKey?.trim()) {
+            buildingKey = explicitKey.trim();
+        } else {
+            const [[existing]] = await conn.query<RowDataPacket[]>(
+                `SELECT building_key FROM buildings
+                 WHERE LOWER(short_name) = ? OR LOWER(address) = ?
+                 LIMIT 1`,
+                [normalizedAddress, normalizedAddress],
+            );
+            if (!existing?.building_key) {
+                await conn.rollback();
+                res.status(400).json({ error: "Дом не найден — выберите адрес из подсказок" });
+                return;
+            }
+            buildingKey = existing.building_key as string;
+        }
+
         await conn.execute(
             `INSERT INTO buildings (building_key, address, short_name)
              VALUES (?, ?, ?)
@@ -82,8 +102,8 @@ router.post("/register", async (req: Request, res: Response) => {
             [buildingKey, buildingLabel, buildingLabel],
         );
         await conn.execute(
-            "INSERT INTO user_profiles (user_id, full_name, phone, building_key, apartment) VALUES (?, ?, ?, ?, ?)",
-            [userId, name, phone, buildingKey, apartment],
+            "INSERT INTO user_profiles (user_id, full_name, phone, building_key, apartment, entrances) VALUES (?, ?, ?, ?, ?, ?)",
+            [userId, name, phone, buildingKey, apartment, entrance],
         );
 
         await conn.commit();
@@ -95,7 +115,7 @@ router.post("/register", async (req: Request, res: Response) => {
             accessToken,
             refreshToken,
             user: { id: userId, email: email.toLowerCase() },
-            profile: { name, phone, building: buildingKey, apartment },
+            profile: { name, phone, building: buildingKey, buildingName: buildingLabel, apartment, entrance: entrance ?? undefined },
         });
     } catch (err) {
         await conn.rollback();
@@ -117,9 +137,11 @@ router.post("/login", async (req: Request, res: Response) => {
     try {
         const [rows] = await pool.execute<RowDataPacket[]>(
             `SELECT u.id, u.email, u.password_hash,
-                    p.full_name, p.phone, p.building_key, p.apartment, p.apartment_area_sqm
+                    p.full_name, p.phone, p.building_key, p.apartment, p.entrances, p.apartment_area_sqm,
+                    COALESCE(b.short_name, p.building_key) AS building_name
              FROM users u
              LEFT JOIN user_profiles p ON p.user_id = u.id
+             LEFT JOIN buildings b ON b.building_key = p.building_key
              WHERE u.email = ? AND u.is_active = 1`,
             [email.toLowerCase()],
         );
@@ -147,7 +169,9 @@ router.post("/login", async (req: Request, res: Response) => {
                 name: (user.full_name as string) ?? "",
                 phone: (user.phone as string) ?? "",
                 building: (user.building_key as string) ?? "",
+                buildingName: (user.building_name as string) || undefined,
                 apartment: (user.apartment as string) ?? "",
+                entrance: Number(user.entrances ?? 0) || undefined,
                 apartmentAreaSqm: (user.apartment_area_sqm as number) ?? undefined,
             },
         });
@@ -216,25 +240,41 @@ router.patch("/profile", requireAuth, async (req: AuthRequest, res: Response) =>
     const userId = req.userId;
     if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
-    const { name, phone, building, buildingKey: explicitKey, apartment, apartmentAreaSqm } = req.body as {
+    const { name, phone, building, buildingKey: explicitKey, apartment, entrance, apartmentAreaSqm } = req.body as {
         name?: string;
         phone?: string;
         building?: string;
         buildingKey?: string;
         apartment?: string;
+        entrance?: number;
         apartmentAreaSqm?: number | null;
     };
 
     try {
-        const buildingKey = explicitKey?.trim()
-            || (building != null ? building.trim().toLowerCase().replace(/\s+/g, " ") : undefined);
-
-        if (buildingKey && building) {
+        let buildingKey: string | undefined;
+        if (building != null) {
+            const buildingLabel = building.trim();
+            const normalizedAddress = buildingLabel.toLowerCase().replace(/\s+/g, " ");
+            if (explicitKey?.trim()) {
+                buildingKey = explicitKey.trim();
+            } else {
+                const [[existing]] = await pool.query<RowDataPacket[]>(
+                    `SELECT building_key FROM buildings
+                     WHERE LOWER(short_name) = ? OR LOWER(address) = ?
+                     LIMIT 1`,
+                    [normalizedAddress, normalizedAddress],
+                );
+                if (!existing?.building_key) {
+                    res.status(400).json({ error: "Дом не найден — выберите адрес из подсказок" });
+                    return;
+                }
+                buildingKey = existing.building_key as string;
+            }
             await pool.execute(
                 `INSERT INTO buildings (building_key, address, short_name)
                  VALUES (?, ?, ?)
                  ON DUPLICATE KEY UPDATE building_key = building_key`,
-                [buildingKey, building.trim(), building.trim()],
+                [buildingKey, buildingLabel, buildingLabel],
             );
         }
 
@@ -244,6 +284,7 @@ router.patch("/profile", requireAuth, async (req: AuthRequest, res: Response) =>
                  phone              = COALESCE(?, phone),
                  building_key       = COALESCE(?, building_key),
                  apartment          = COALESCE(?, apartment),
+                 entrances          = COALESCE(?, entrances),
                  apartment_area_sqm = ?
              WHERE user_id = ?`,
             [
@@ -251,6 +292,7 @@ router.patch("/profile", requireAuth, async (req: AuthRequest, res: Response) =>
                 phone?.trim() ?? null,
                 buildingKey ?? null,
                 apartment?.trim() ?? null,
+                entrance != null ? Number(entrance) : null,
                 apartmentAreaSqm ?? null,
                 userId,
             ],

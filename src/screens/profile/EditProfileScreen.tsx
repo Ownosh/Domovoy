@@ -26,9 +26,12 @@ export function EditProfileScreen({ navigation }: Props) {
     const { profile, updateProfile } = useApp();
     const [name, setName] = useState(profile.name);
     const [phone, setPhone] = useState(profile.phone);
-    const [building, setBuilding] = useState(profile.building);
+    const [building, setBuilding] = useState(profile.buildingName || profile.building);
     const [buildingKey, setBuildingKey] = useState("");
     const [apartment, setApartment] = useState(profile.apartment);
+    const [entranceStr, setEntranceStr] = useState(
+        profile.entrance != null ? String(profile.entrance) : "",
+    );
     const [areaStr, setAreaStr] = useState(
         profile.apartmentAreaSqm != null
             ? String(profile.apartmentAreaSqm)
@@ -57,6 +60,8 @@ export function EditProfileScreen({ navigation }: Props) {
 
         if (!building.trim()) {
             errors.building = "Введите адрес дома";
+        } else if (building.trim() !== (profile.buildingName || profile.building) && !buildingKey) {
+            errors.building = "Выберите дом из списка подсказок";
         }
 
         if (!apartment.trim()) {
@@ -80,12 +85,16 @@ export function EditProfileScreen({ navigation }: Props) {
         setOk(false);
         if (!validate()) return;
         const areaNum = parseFloat(areaStr.replace(",", "."));
+        const entranceNum = parseInt(entranceStr.trim(), 10);
         const profileData = {
             name: name.trim(),
             phone: phone.trim(),
             building: building.trim(),
             buildingKey: buildingKey || undefined,
             apartment: apartment.trim(),
+            entrance: entranceStr.trim() !== "" && !Number.isNaN(entranceNum) && entranceNum > 0
+                ? entranceNum
+                : undefined,
             apartmentAreaSqm:
                 areaStr.trim() === "" || Number.isNaN(areaNum) ? undefined : areaNum,
         };
@@ -97,6 +106,7 @@ export function EditProfileScreen({ navigation }: Props) {
         updateProfile({
             ...profileData,
             building: profileData.buildingKey ?? profileData.building,
+            buildingName: profileData.buildingKey ? profileData.building : undefined,
         });
         setOk(true);
         setTimeout(() => navigation.goBack(), 600);
@@ -144,6 +154,15 @@ export function EditProfileScreen({ navigation }: Props) {
                     onChangeText={(v) => { setApartment(v.replace(/\D/g, "")); clearError("apartment"); }}
                     keyboardType="number-pad"
                     error={fieldErrors.apartment}
+                />
+                <View style={styles.gap} />
+                <Input
+                    label="Подъезд (необязательно)"
+                    value={entranceStr}
+                    onChangeText={(v) => setEntranceStr(v.replace(/\D/g, ""))}
+                    keyboardType="number-pad"
+                    placeholder="Например: 2"
+                    hint="Используется для коллективных обращений"
                 />
                 <View style={styles.gap} />
                 <Input

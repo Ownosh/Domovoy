@@ -16,6 +16,7 @@ export async function apiRegister(data: {
     building: string;
     buildingKey?: string;
     apartment: string;
+    entrance: number;
     dataConsentAt: string;
 }): Promise<AuthResponse> {
     const res = await apiRequest<AuthResponse>("/auth/register", {
@@ -53,6 +54,7 @@ export async function apiUpdateProfile(data: {
     building?: string;
     buildingKey?: string;
     apartment?: string;
+    entrance?: number;
     apartmentAreaSqm?: number | null;
 }): Promise<void> {
     await apiRequest("/auth/profile", {

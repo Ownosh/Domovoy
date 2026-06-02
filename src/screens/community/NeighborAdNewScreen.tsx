@@ -29,18 +29,20 @@ const labels: Record<NeighborAdCategory, string> = {
 };
 
 export function NeighborAdNewScreen({ navigation, route }: Props) {
-    const { addNeighborAd } = useApp();
-    const [title, setTitle] = useState("");
-    const [body, setBody] = useState("");
+    const { addNeighborAd, editNeighborAd, neighborAds, profile } = useApp();
+    const editId = route?.params?.editId;
+    const existing = editId ? neighborAds.find((a) => a.id === editId) : undefined;
+    const [title, setTitle] = useState(existing?.title ?? "");
+    const [body, setBody] = useState(existing?.body ?? "");
     const preset = route.params?.presetCategory;
-    const [category, setCategory] = useState<NeighborAdCategory>("sell");
+    const [category, setCategory] = useState<NeighborAdCategory>(existing?.category ?? "sell");
 
     useEffect(() => {
-        if (preset && categories.includes(preset)) {
+        if (!existing && preset && categories.includes(preset)) {
             setCategory(preset);
         }
-    }, [preset]);
-    const [showPhone, setShowPhone] = useState(false);
+    }, [preset, existing]);
+    const [showPhone, setShowPhone] = useState(existing?.showPhone ?? false);
     const [err, setErr] = useState("");
     const [submitting, setSubmitting] = useState(false);
 
@@ -50,12 +52,12 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
             return;
         }
         setSubmitting(true);
-        const r = await addNeighborAd({
-            title: title.trim(),
-            body: body.trim(),
-            category,
-            showPhone,
-        });
+        const r = editId
+            ? await editNeighborAd(editId, {
+                title: title.trim(), body: body.trim(), category, showPhone,
+                authorPhone: showPhone ? profile.phone.trim() : undefined,
+              })
+            : await addNeighborAd({ title: title.trim(), body: body.trim(), category, showPhone });
         setSubmitting(false);
         if (!r.ok) {
             setErr("reason" in r ? r.reason : "");
@@ -127,7 +129,11 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
                     <Text style={[textStyles.caption, styles.err]}>{err}</Text>
                 )}
                 <View style={styles.gapLg} />
-                <Button title={submitting ? "Отправка..." : "Опубликовать"} onPress={submit} disabled={submitting} />
+                <Button
+                    title={submitting ? "Сохранение..." : editId ? "Сохранить" : "Опубликовать"}
+                    onPress={() => { void submit(); }}
+                    disabled={submitting}
+                />
             </Card>
         </ScreenLayout>
     );

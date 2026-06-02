@@ -18,6 +18,16 @@ export async function apiCreateVote(data: {
     return apiRequest<Vote>("/votes", { method: "POST", body: JSON.stringify(data) });
 }
 
+export async function apiEditVote(id: string, data: {
+    topic: string; description: string; visibility: string; optionLabels: string[];
+}): Promise<Vote> {
+    return apiRequest<Vote>(`/votes/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export async function apiDeleteVote(id: string): Promise<void> {
+    await apiRequest(`/votes/${id}`, { method: "DELETE" });
+}
+
 export async function apiCastVote(data: {
     voteId: string;
     optionId: string;

@@ -113,6 +113,49 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     }
 });
 
+// PATCH /api/neighbor-ads/:id  — редактировать своё объявление
+router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
+    const userId = req.userId!;
+    const adId = Number(req.params.id);
+    const { title, body, category, showPhone, authorPhone } = req.body as {
+        title?: string; body?: string; category?: string; showPhone?: boolean; authorPhone?: string;
+    };
+    if (!title?.trim() || !body?.trim())
+        return res.status(400).json({ error: "Заголовок и текст обязательны" });
+    if (category && !VALID_CATEGORIES.includes(category))
+        return res.status(400).json({ error: "Некорректная категория" });
+    try {
+        const [result] = await pool.execute<ResultSetHeader>(
+            `UPDATE neighbor_ads SET title=?, body=?, category=COALESCE(?,category),
+             show_phone=?, author_phone=?
+             WHERE id=? AND author_user_id=?`,
+            [title.trim(), body.trim(), category ?? null,
+             showPhone ? 1 : 0,
+             showPhone && authorPhone ? authorPhone.trim() : null,
+             adId, userId],
+        );
+        if (result.affectedRows === 0)
+            return res.status(404).json({ error: "Объявление не найдено или нет прав" });
+        const [rows] = await pool.query<RowDataPacket[]>(
+            `SELECT id, author_user_id, building_key, title, body, category, image_url,
+                    show_phone, author_phone, pending_moderation, archived, created_at, expires_at
+             FROM neighbor_ads WHERE id=?`, [adId],
+        );
+        const r = rows[0];
+        return res.json({
+            id: String(r.id), authorUserId: String(r.author_user_id),
+            buildingKey: r.building_key as string, title: String(r.title), body: String(r.body),
+            category: r.category as string, imageUrl: r.image_url ?? undefined,
+            showPhone: Boolean(r.show_phone), authorPhone: r.author_phone ?? undefined,
+            pendingModeration: Boolean(r.pending_moderation), archived: Boolean(r.archived),
+            createdAt: (r.created_at as Date).toISOString(), expiresAt: (r.expires_at as Date).toISOString(),
+        });
+    } catch (err) {
+        console.error("[neighbor-ads edit]", err);
+        return res.status(500).json({ error: "Ошибка сервера" });
+    }
+});
+
 // DELETE /api/neighbor-ads/:id  — удалить своё объявление
 router.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;

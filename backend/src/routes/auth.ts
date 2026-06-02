@@ -35,6 +35,7 @@ const RegisterSchema = z.object({
     name: z.string().min(2),
     phone: z.string().min(1),
     building: z.string().min(1),
+    buildingKey: z.string().optional(),
     apartment: z.string().min(1),
     dataConsentAt: z.string(),
 });
@@ -46,7 +47,7 @@ router.post("/register", async (req: Request, res: Response) => {
         return;
     }
 
-    const { email, password, name, phone, building, apartment, dataConsentAt } = parsed.data;
+    const { email, password, name, phone, building, buildingKey: explicitKey, apartment, dataConsentAt } = parsed.data;
 
     const conn = await pool.getConnection();
     try {
@@ -72,9 +73,17 @@ router.post("/register", async (req: Request, res: Response) => {
 
         const userId = userResult.insertId;
 
+        const buildingKey = explicitKey?.trim() || building.trim().toLowerCase().replace(/\s+/g, " ");
+        const buildingLabel = building.trim();
         await conn.execute(
-            "INSERT INTO user_profiles (user_id, full_name, phone, apartment) VALUES (?, ?, ?, ?)",
-            [userId, name, phone, apartment],
+            `INSERT INTO buildings (building_key, address, short_name)
+             VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE building_key = building_key`,
+            [buildingKey, buildingLabel, buildingLabel],
+        );
+        await conn.execute(
+            "INSERT INTO user_profiles (user_id, full_name, phone, building_key, apartment) VALUES (?, ?, ?, ?, ?)",
+            [userId, name, phone, buildingKey, apartment],
         );
 
         await conn.commit();
@@ -86,7 +95,7 @@ router.post("/register", async (req: Request, res: Response) => {
             accessToken,
             refreshToken,
             user: { id: userId, email: email.toLowerCase() },
-            profile: { name, phone, building: building, apartment },
+            profile: { name, phone, building: buildingKey, apartment },
         });
     } catch (err) {
         await conn.rollback();
@@ -198,6 +207,57 @@ router.post("/logout", requireAuth, async (req: AuthRequest, res: Response) => {
         res.json({ ok: true });
     } catch (err) {
         console.error("[logout]", err);
+        res.status(500).json({ error: "Ошибка сервера" });
+    }
+});
+
+// PATCH /api/auth/profile
+router.patch("/profile", requireAuth, async (req: AuthRequest, res: Response) => {
+    const userId = req.userId;
+    if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+    const { name, phone, building, buildingKey: explicitKey, apartment, apartmentAreaSqm } = req.body as {
+        name?: string;
+        phone?: string;
+        building?: string;
+        buildingKey?: string;
+        apartment?: string;
+        apartmentAreaSqm?: number | null;
+    };
+
+    try {
+        const buildingKey = explicitKey?.trim()
+            || (building != null ? building.trim().toLowerCase().replace(/\s+/g, " ") : undefined);
+
+        if (buildingKey && building) {
+            await pool.execute(
+                `INSERT INTO buildings (building_key, address, short_name)
+                 VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE building_key = building_key`,
+                [buildingKey, building.trim(), building.trim()],
+            );
+        }
+
+        await pool.execute(
+            `UPDATE user_profiles
+             SET full_name          = COALESCE(?, full_name),
+                 phone              = COALESCE(?, phone),
+                 building_key       = COALESCE(?, building_key),
+                 apartment          = COALESCE(?, apartment),
+                 apartment_area_sqm = ?
+             WHERE user_id = ?`,
+            [
+                name?.trim() ?? null,
+                phone?.trim() ?? null,
+                buildingKey ?? null,
+                apartment?.trim() ?? null,
+                apartmentAreaSqm ?? null,
+                userId,
+            ],
+        );
+        res.json({ ok: true });
+    } catch (err) {
+        console.error("[profile patch]", err);
         res.status(500).json({ error: "Ошибка сервера" });
     }
 });

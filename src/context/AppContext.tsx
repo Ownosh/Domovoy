@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { apiLogin, apiLogout, apiRegister, apiChangePassword } from "../api/auth";
+import { apiFetchNews } from "../api/news";
 import { clearTokens } from "../api/client";
 import React, {
     createContext,
@@ -152,7 +153,8 @@ type Action =
     | { type: "REPORT_NEIGHBOR_AD"; payload: string }
     | { type: "ADD_VOTE"; payload: Vote }
     | { type: "CAST_VOTE"; payload: VoteCast }
-    | { type: "SET_ENVIRONMENT_RATING"; payload: EnvironmentRatingSnapshot };
+    | { type: "SET_ENVIRONMENT_RATING"; payload: EnvironmentRatingSnapshot }
+    | { type: "SET_NEWS"; payload: NewsItem[] };
 
 function appealRecipientUserIds(appeal: Appeal): string[] {
     const ids = new Set<string>();
@@ -400,6 +402,8 @@ function reducer(state: AppState, action: Action): AppState {
                 environmentRating: next,
             };
         }
+        case "SET_NEWS":
+            return { ...state, news: action.payload };
         default:
             return state;
     }
@@ -651,6 +655,7 @@ type AppContextValue = {
         name: string;
         phone: string;
         building: string;
+        buildingKey?: string;
         apartment: string;
         dataConsentAt: string;
     }) => Promise<void>;
@@ -737,6 +742,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }, [hydrated]);
 
     useEffect(() => {
+        if (!state.sessionActive || !state.account) return;
+        apiFetchNews()
+            .then((items) => {
+                if (items.length > 0) {
+                    dispatch({ type: "SET_NEWS", payload: items });
+                }
+            })
+            .catch((err) => console.warn("[news] fetch failed:", err));
+    }, [state.sessionActive, state.account?.user.id]);
+
+    useEffect(() => {
         if (!hydrated) return;
         if (skipSave.current) {
             skipSave.current = false;
@@ -777,6 +793,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             name: string;
             phone: string;
             building: string;
+            buildingKey?: string;
             apartment: string;
             dataConsentAt: string;
         }): Promise<void> => {

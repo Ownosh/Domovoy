@@ -35,6 +35,7 @@ export function RegisterScreen({ navigation }: Props) {
     const [email, setEmail] = useState("");
     const [phone, setPhone] = useState("");
     const [building, setBuilding] = useState("");
+    const [buildingKey, setBuildingKey] = useState("");
     const [apartment, setApartment] = useState("");
     const [password, setPassword] = useState("");
     const [password2, setPassword2] = useState("");
@@ -123,6 +124,7 @@ export function RegisterScreen({ navigation }: Props) {
                 email,
                 phone,
                 building,
+                buildingKey: buildingKey || undefined,
                 apartment,
                 password,
                 dataConsentAt: new Date().toISOString(),
@@ -185,9 +187,10 @@ export function RegisterScreen({ navigation }: Props) {
                         <AddressAutocomplete
                             label="Дом или ЖК, адрес"
                             value={building}
-                            onChangeText={(v) => { setBuilding(v); setFieldErrors((e) => ({ ...e, building: undefined })); }}
+                            onChangeText={(v) => { setBuilding(v); setBuildingKey(""); setFieldErrors((e) => ({ ...e, building: undefined })); }}
                             onSelectSuggestion={(item) => {
                                 setBuilding(item.short_name);
+                                setBuildingKey(item.building_key);
                                 setFieldErrors((e) => ({ ...e, building: undefined }));
                             }}
                             placeholder="ЖК, улица, дом"

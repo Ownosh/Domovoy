@@ -14,6 +14,7 @@ export async function apiRegister(data: {
     name: string;
     phone: string;
     building: string;
+    buildingKey?: string;
     apartment: string;
     dataConsentAt: string;
 }): Promise<AuthResponse> {
@@ -44,6 +45,20 @@ export async function apiLogout(): Promise<void> {
     } finally {
         await clearTokens();
     }
+}
+
+export async function apiUpdateProfile(data: {
+    name?: string;
+    phone?: string;
+    building?: string;
+    buildingKey?: string;
+    apartment?: string;
+    apartmentAreaSqm?: number | null;
+}): Promise<void> {
+    await apiRequest("/auth/profile", {
+        method: "PATCH",
+        body: JSON.stringify(data),
+    });
 }
 
 export async function apiChangePassword(

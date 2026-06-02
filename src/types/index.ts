@@ -90,10 +90,11 @@ export type NotificationPrefs = {
 
 export type NewsItem = {
     id: string;
+    buildingKey: string;
     title: string;
     excerpt: string;
     date: string;
-    imageUrl: string;
+    imageUrls: string[];
 };
 
 export type HouseSpec = { label: string; value: string };

@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+    Dimensions,
     Image,
     Modal,
     Pressable,
@@ -10,6 +11,7 @@ import {
     Text,
     View,
 } from "react-native";
+
 import { AppealStatusBadge, Card, ScreenLayout } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
 import type {
@@ -23,6 +25,57 @@ import { isArchivedAppeal } from "../../utils/appeals";
 import { voteSourceLine } from "../../utils/voteSponsor";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { colors, radius, spacing, textStyles } from "../../theme";
+
+const SCREEN_W = Dimensions.get("window").width;
+const SCREEN_H = Dimensions.get("window").height;
+
+const viewerStyles = StyleSheet.create({
+    backdrop: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.96)",
+        justifyContent: "center",
+    },
+    page: {
+        width: SCREEN_W,
+        height: SCREEN_H,
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    img: {
+        width: SCREEN_W,
+        height: SCREEN_H * 0.8,
+    },
+    closeBtn: {
+        position: "absolute",
+        top: 52,
+        right: 20,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: "rgba(0,0,0,0.55)",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    dots: {
+        position: "absolute",
+        bottom: 44,
+        left: 0,
+        right: 0,
+        flexDirection: "row",
+        justifyContent: "center",
+        gap: 8,
+    },
+    dot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: "rgba(255,255,255,0.35)",
+    },
+    dotActive: {
+        backgroundColor: "#fff",
+        transform: [{ scale: 1.2 }],
+    },
+});
 
 const typeMeta: Record<string, { label: string; color: string }> = {
     outage: { label: "Отключения", color: colors.warning },
@@ -87,14 +140,21 @@ export function HomeScreen() {
 
     const buildingKey = buildBuildingKey(profile.building);
 
+    const bkLower = buildingKey.toLowerCase();
+
+    const houseNews = useMemo(
+        () => news.filter((n) => n.buildingKey.toLowerCase() === bkLower),
+        [news, bkLower],
+    );
+
     const houseAds = useMemo(
-        () => neighborAds.filter((a) => a.buildingKey === buildingKey && !a.archived),
-        [neighborAds, buildingKey],
+        () => neighborAds.filter((a) => a.buildingKey.toLowerCase() === bkLower && !a.archived),
+        [neighborAds, bkLower],
     );
 
     const houseVotes = useMemo(
-        () => votes.filter((v) => v.buildingKey === buildingKey),
-        [votes, buildingKey],
+        () => votes.filter((v) => v.buildingKey.toLowerCase() === bkLower),
+        [votes, bkLower],
     );
 
     const houseCollectiveAppeals = useMemo(
@@ -102,10 +162,10 @@ export function HomeScreen() {
             appeals.filter(
                 (a) =>
                     a.kind === "collective" &&
-                    a.buildingKey === buildingKey &&
+                    a.buildingKey.toLowerCase() === bkLower &&
                     !isArchivedAppeal(a),
             ),
-        [appeals, buildingKey],
+        [appeals, bkLower],
     );
 
     const unreadCount = useMemo(
@@ -115,7 +175,7 @@ export function HomeScreen() {
 
     const feedRows = useMemo(() => {
         const rows: FeedRow[] = [];
-        for (const item of news) {
+        for (const item of houseNews) {
             const sortAt = parseNewsSort(item.date);
             rows.push({ key: `n-${item.id}`, sortAt, kind: "news", item });
         }
@@ -144,7 +204,7 @@ export function HomeScreen() {
             });
         }
         return rows.sort((a, b) => b.sortAt - a.sortAt);
-    }, [news, houseVotes, houseAds, houseCollectiveAppeals]);
+    }, [houseNews, houseVotes, houseAds, houseCollectiveAppeals]);
 
     const visibleFeed = useMemo(() => {
         const filtered = feedRows.filter((row) => {
@@ -529,13 +589,161 @@ function parseNewsSort(dateStr: string): number {
     return Number.isNaN(t) ? 0 : t;
 }
 
+function PhotoViewer({
+    urls,
+    initialIndex,
+    visible,
+    onClose,
+}: {
+    urls: string[];
+    initialIndex: number;
+    visible: boolean;
+    onClose: () => void;
+}) {
+    const scrollRef = useRef<ScrollView>(null);
+    const [currentIndex, setCurrentIndex] = useState(initialIndex);
+
+    useEffect(() => {
+        if (!visible) return;
+        setCurrentIndex(initialIndex);
+        const t = setTimeout(() => {
+            scrollRef.current?.scrollTo({ x: initialIndex * SCREEN_W, animated: false });
+        }, 50);
+        return () => clearTimeout(t);
+    }, [visible, initialIndex]);
+
+    return (
+        <Modal
+            visible={visible}
+            transparent
+            animationType="fade"
+            onRequestClose={onClose}
+            statusBarTranslucent
+        >
+            <View style={viewerStyles.backdrop}>
+                <ScrollView
+                    ref={scrollRef}
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    decelerationRate="fast"
+                    onMomentumScrollEnd={(e) => {
+                        const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
+                        setCurrentIndex(idx);
+                    }}
+                >
+                    {urls.map((url, i) => (
+                        <View key={i} style={viewerStyles.page}>
+                            <Image
+                                source={{ uri: url }}
+                                style={viewerStyles.img}
+                                resizeMode="contain"
+                            />
+                        </View>
+                    ))}
+                </ScrollView>
+
+                <Pressable style={viewerStyles.closeBtn} onPress={onClose} hitSlop={16}>
+                    <Ionicons name="close" size={28} color="#fff" />
+                </Pressable>
+
+                {urls.length > 1 && (
+                    <View style={viewerStyles.dots}>
+                        {urls.map((_, i) => (
+                            <View
+                                key={i}
+                                style={[
+                                    viewerStyles.dot,
+                                    i === currentIndex && viewerStyles.dotActive,
+                                ]}
+                            />
+                        ))}
+                    </View>
+                )}
+            </View>
+        </Modal>
+    );
+}
+
+function NewsImage({
+    uri,
+    style,
+    onPress,
+}: {
+    uri: string;
+    style: object;
+    onPress?: () => void;
+}) {
+    const [failed, setFailed] = React.useState(false);
+    if (failed) return null;
+    const img = (
+        <Image
+            source={{ uri }}
+            style={style}
+            resizeMode="cover"
+            onError={() => setFailed(true)}
+        />
+    );
+    if (onPress) {
+        return (
+            <Pressable
+                onPress={onPress}
+                style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
+            >
+                {img}
+            </Pressable>
+        );
+    }
+    return img;
+}
+
 function FeedNewsRow({ item, showRibbon }: { item: NewsItem; showRibbon?: boolean }) {
+    const multi = item.imageUrls.length > 1;
+    const [viewerVisible, setViewerVisible] = useState(false);
+    const [viewerIndex, setViewerIndex] = useState(0);
+
+    const openViewer = (i: number) => {
+        setViewerIndex(i);
+        setViewerVisible(true);
+    };
+
     return (
         <Card style={styles.newsCard} padded>
+            <PhotoViewer
+                urls={item.imageUrls}
+                initialIndex={viewerIndex}
+                visible={viewerVisible}
+                onClose={() => setViewerVisible(false)}
+            />
             {showRibbon ? (
                 <Text style={[textStyles.caption, styles.ribbon]}>Новости УК</Text>
             ) : null}
-            <Image source={{ uri: item.imageUrl }} style={styles.newsImg} />
+            {item.imageUrls.length > 0 ? (
+                multi ? (
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.newsImgScroll}
+                        contentContainerStyle={styles.newsImgScrollContent}
+                        nestedScrollEnabled
+                    >
+                        {item.imageUrls.map((url, i) => (
+                            <NewsImage
+                                key={i}
+                                uri={url}
+                                style={styles.newsImgThumb}
+                                onPress={() => openViewer(i)}
+                            />
+                        ))}
+                    </ScrollView>
+                ) : (
+                    <NewsImage
+                        uri={item.imageUrls[0]}
+                        style={styles.newsImg}
+                        onPress={() => openViewer(0)}
+                    />
+                )
+            ) : null}
             <Text style={[textStyles.caption, styles.newsDate]}>{item.date}</Text>
             <Text style={[textStyles.subtitle, styles.newsTitle]}>{item.title}</Text>
             <Text style={[textStyles.body, styles.newsExcerpt]}>{item.excerpt}</Text>
@@ -814,6 +1022,14 @@ const styles = StyleSheet.create({
         height: 140,
         borderRadius: radius.md,
         marginBottom: spacing.sm,
+        backgroundColor: colors.border,
+    },
+    newsImgScroll: { marginBottom: spacing.sm },
+    newsImgScrollContent: { gap: spacing.sm },
+    newsImgThumb: {
+        width: 220,
+        height: 140,
+        borderRadius: radius.md,
         backgroundColor: colors.border,
     },
     newsDate: { color: colors.textDim },

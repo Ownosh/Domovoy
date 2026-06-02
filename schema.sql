@@ -119,13 +119,24 @@ CREATE TABLE IF NOT EXISTS uk_contacts (
 
 CREATE TABLE IF NOT EXISTS news (
   id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  building_key VARCHAR(120)    NOT NULL,
   title        TEXT            NOT NULL,
   excerpt      TEXT            NOT NULL,
-  image_url    VARCHAR(500)    DEFAULT NULL,
   published_at DATE            NOT NULL,
   created_at   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  INDEX idx_news_published_at (published_at DESC)
+  CONSTRAINT fk_news_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE ON DELETE CASCADE,
+  INDEX idx_news_building_published (building_key, published_at DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS news_photos (
+  id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  news_id    BIGINT UNSIGNED NOT NULL,
+  image_url  VARCHAR(500)    NOT NULL,
+  position   INT             NOT NULL DEFAULT 0,
+  PRIMARY KEY (id),
+  CONSTRAINT fk_np_news FOREIGN KEY (news_id) REFERENCES news(id) ON DELETE CASCADE,
+  INDEX idx_np_news (news_id, position)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================

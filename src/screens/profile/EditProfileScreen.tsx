@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { AddressAutocomplete, Button, Card, Input, ScreenLayout } from "../../components/ui";
 import type { BuildingSuggestion } from "../../api/buildings";
+import { apiUpdateProfile } from "../../api/auth";
 import { useApp } from "../../context/AppContext";
 import { colors, spacing, textStyles } from "../../theme";
 
@@ -26,6 +27,7 @@ export function EditProfileScreen({ navigation }: Props) {
     const [name, setName] = useState(profile.name);
     const [phone, setPhone] = useState(profile.phone);
     const [building, setBuilding] = useState(profile.building);
+    const [buildingKey, setBuildingKey] = useState("");
     const [apartment, setApartment] = useState(profile.apartment);
     const [areaStr, setAreaStr] = useState(
         profile.apartmentAreaSqm != null
@@ -74,19 +76,27 @@ export function EditProfileScreen({ navigation }: Props) {
         return Object.keys(errors).length === 0;
     };
 
-    const save = () => {
+    const save = async () => {
         setOk(false);
         if (!validate()) return;
         const areaNum = parseFloat(areaStr.replace(",", "."));
-        updateProfile({
+        const profileData = {
             name: name.trim(),
             phone: phone.trim(),
             building: building.trim(),
+            buildingKey: buildingKey || undefined,
             apartment: apartment.trim(),
             apartmentAreaSqm:
-                areaStr.trim() === "" || Number.isNaN(areaNum)
-                    ? undefined
-                    : areaNum,
+                areaStr.trim() === "" || Number.isNaN(areaNum) ? undefined : areaNum,
+        };
+        try {
+            await apiUpdateProfile(profileData);
+        } catch {
+            // не блокируем сохранение локально если API недоступен
+        }
+        updateProfile({
+            ...profileData,
+            building: profileData.buildingKey ?? profileData.building,
         });
         setOk(true);
         setTimeout(() => navigation.goBack(), 600);
@@ -117,9 +127,10 @@ export function EditProfileScreen({ navigation }: Props) {
                 <AddressAutocomplete
                     label="Дом или ЖК, адрес"
                     value={building}
-                    onChangeText={(v) => { setBuilding(v); clearError("building"); }}
+                    onChangeText={(v) => { setBuilding(v); setBuildingKey(""); clearError("building"); }}
                     onSelectSuggestion={(item: BuildingSuggestion) => {
                         setBuilding(item.short_name);
+                        setBuildingKey(item.building_key);
                         clearError("building");
                     }}
                     placeholder="ЖК, улица, дом"

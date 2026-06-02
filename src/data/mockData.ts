@@ -51,28 +51,42 @@ export {
     homeMapAnchor,
 } from "./districtPois";
 
+const demoHouseKey = buildBuildingKey(housePassport.address);
+
 export const seedNews: NewsItem[] = [
     {
         id: "n1",
+        buildingKey: demoHouseKey,
         title: "Собрание собственников — 15 апреля",
         excerpt:
             "Очно в актовом зале школы № 1424. Повестка: капремонт фасада, благоустройство двора.",
         date: "2026-04-01",
-        imageUrl: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=600&q=80",
+        imageUrls: [
+            "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=600&q=80",
+            "https://images.unsplash.com/photo-1497366216548-37526070297c?w=600&q=80",
+        ],
     },
     {
         id: "n2",
+        buildingKey: demoHouseKey,
         title: "Плановая промывка системы отопления",
         excerpt: "26–27 апреля возможно снижение температуры теплоносителя в пробных контурах.",
         date: "2026-03-28",
-        imageUrl: "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=600&q=80",
+        imageUrls: [
+            "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=600&q=80",
+        ],
     },
     {
         id: "n3",
+        buildingKey: demoHouseKey,
         title: "Новые контейнеры для раздельного сбора",
         excerpt: "Установлены площадки для пластика и стекла у въезда с ул. Липовая.",
         date: "2026-03-20",
-        imageUrl: "https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=600&q=80",
+        imageUrls: [
+            "https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=600&q=80",
+            "https://images.unsplash.com/photo-1604187351574-c75ca79f5807?w=600&q=80",
+            "https://images.unsplash.com/photo-1563514227147-6d2ff665a6a0?w=600&q=80",
+        ],
     },
 ];
 
@@ -110,8 +124,6 @@ export const seedNotifications: AppNotification[] = [
         read: true,
     },
 ];
-
-const demoHouseKey = buildBuildingKey(housePassport.address);
 
 export const seedAppeals: Appeal[] = [
     {

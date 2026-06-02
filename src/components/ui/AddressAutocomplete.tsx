@@ -135,12 +135,14 @@ export function AddressAutocomplete({
                             >
                                 {item.short_name}
                             </Text>
-                            <Text
-                                style={[textStyles.caption, styles.rowAddr]}
-                                numberOfLines={1}
-                            >
-                                {item.address}
-                            </Text>
+                            {item.address !== item.short_name && (
+                                <Text
+                                    style={[textStyles.caption, styles.rowAddr]}
+                                    numberOfLines={1}
+                                >
+                                    {item.address}
+                                </Text>
+                            )}
                         </Pressable>
                     ))}
                 </View>

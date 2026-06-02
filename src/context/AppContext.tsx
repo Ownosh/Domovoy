@@ -187,14 +187,20 @@ function reducer(state: AppState, action: Action): AppState {
         case "SESSION_START":
             return { ...state, sessionActive: true };
         case "SESSION_END":
-            return { ...state, account: null, sessionActive: false };
+            return { ...state, account: null, sessionActive: false, voteCasts: [] };
         case "LOGIN":
-            return { ...state, account: action.payload, sessionActive: true };
+            return {
+                ...state,
+                account: action.payload,
+                sessionActive: true,
+                voteCasts: [],
+            };
         case "REGISTER":
             return {
                 ...state,
                 account: action.payload,
                 sessionActive: true,
+                voteCasts: [],
             };
         case "UPDATE_PROFILE":
             if (!state.account) return state;
@@ -743,7 +749,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             .then((items) => { if (items.length > 0) dispatch({ type: "SET_NEWS", payload: items }); })
             .catch((err) => console.warn("[news] fetch failed:", err));
         apiFetchVotes()
-            .then((data) => { if (data.votes.length > 0 || data.casts.length > 0) dispatch({ type: "SET_VOTES", payload: data }); })
+            .then((data) => {
+                // Важно: всегда обновляем casts для текущего аккаунта,
+                // иначе при смене пользователя могут остаться старые/пустые данные.
+                dispatch({ type: "SET_VOTES", payload: data });
+            })
             .catch((err) => console.warn("[votes] fetch failed:", err));
         apiFetchNeighborAds()
             .then((ads) => { if (ads.length > 0) dispatch({ type: "SET_NEIGHBOR_ADS", payload: ads }); })
@@ -1047,7 +1057,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 new Date(vote.endsAt).getTime() <= Date.now();
             if (ended) return { ok: false, reason: "Срок голосования истёк" };
             const myKey = buildBuildingKey(state.account.profile.building);
-            if (vote.buildingKey !== myKey) {
+            const voteKey = buildBuildingKey(vote.buildingKey);
+            if (voteKey !== myKey) {
                 return { ok: false, reason: "Голосование другого дома" };
             }
             if (
@@ -1062,7 +1073,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     : 42;
             const cast = {
                 voteId: input.voteId,
-                userId: state.account.user.id,
+                userId: String(state.account.user.id),
                 optionId: input.optionId,
                 votedAt: new Date().toISOString(),
                 areaSqm,

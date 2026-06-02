@@ -34,6 +34,8 @@ export type SafetyStackParamList = {
     EmergencyPhones: undefined;
     EmergencyGuide: undefined;
     EmergencyGuideDetail: { scenario: EmergencyScenarioId };
+    RightsResidents: undefined;
+    RightsUk: undefined;
 };
 
 export type SafetyScreenProps<T extends keyof SafetyStackParamList> =

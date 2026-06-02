@@ -57,7 +57,7 @@ export function VoteDetailScreen({ route, navigation }: Props) {
     const ended = vote ? voteEnded(vote) : true;
     const myCast = vote
         ? voteCasts.find(
-              (c) => c.voteId === vote.id && c.userId === user?.id,
+              (c) => c.voteId === vote.id && String(c.userId) === String(user?.id),
           )
         : undefined;
 
@@ -222,7 +222,7 @@ export function VoteDetailScreen({ route, navigation }: Props) {
                                     key={`${c.userId}_${c.votedAt}`}
                                     style={[textStyles.caption, styles.openRow]}
                                 >
-                                    Участник …{c.userId.slice(-4)} → {label} ·{" "}
+                                    Участник …{String(c.userId ?? "").slice(-4)} → {label} ·{" "}
                                     {formatVotedAt(c.votedAt)}
                                 </Text>
                             );

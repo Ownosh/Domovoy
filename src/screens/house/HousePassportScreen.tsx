@@ -28,6 +28,15 @@ import { colors, radius, spacing, textStyles } from "../../theme";
 
 const STAR_SET = [1, 2, 3, 4, 5] as const;
 
+type HouseTab = "calendar" | "passport" | "schedule" | "rating";
+
+const HOUSE_TABS: { id: HouseTab; label: string }[] = [
+    { id: "calendar", label: "Календарь" },
+    { id: "passport", label: "Паспорт дома" },
+    { id: "schedule", label: "Расписание" },
+    { id: "rating", label: "Оценка УК" },
+];
+
 const ACTIVITY_DOT: Record<HouseCalendarActivityKind, string> = {
     yard: colors.primary,
     pipes: colors.info,
@@ -99,6 +108,7 @@ export function HousePassportScreen() {
     const navigation = useNavigation<MainTabNavigationProp>();
     const h = housePassport;
     const { environmentRating, setEnvironmentRating } = useApp();
+    const [tab, setTab] = useState<HouseTab>("calendar");
     const [viewMonth, setViewMonth] = useState(() => startOfMonth(new Date()));
     const [ratingOpen, setRatingOpen] = useState(false);
     const [courtyard, setCourtyard] = useState<1 | 2 | 3 | 4 | 5>(4);
@@ -234,336 +244,377 @@ export function HousePassportScreen() {
                 </Pressable>
             }
         >
-            <Card>
-                <View style={styles.calHeader}>
-                    <Pressable
-                        onPress={() => setViewMonth((d) => addMonths(d, -1))}
-                        hitSlop={10}
-                        style={({ pressed }) => [
-                            styles.calNav,
-                            pressed && styles.calNavPressed,
-                        ]}
-                    >
-                        <Ionicons name="chevron-back" size={22} color={colors.text} />
-                    </Pressable>
-                    <Text style={[textStyles.subtitle, styles.calTitle]}>
-                        {monthLabelRu(viewMonth)}
-                    </Text>
-                    <Pressable
-                        onPress={() => setViewMonth((d) => addMonths(d, 1))}
-                        hitSlop={10}
-                        style={({ pressed }) => [
-                            styles.calNav,
-                            pressed && styles.calNavPressed,
-                        ]}
-                    >
-                        <Ionicons
-                            name="chevron-forward"
-                            size={22}
-                            color={colors.text}
-                        />
-                    </Pressable>
-                </View>
-                <View style={styles.weekRow}>
-                    {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((w) => (
-                        <Text key={w} style={[textStyles.caption, styles.weekCell]}>
-                            {w}
-                        </Text>
-                    ))}
-                </View>
-                <MonthGrid
-                    y={y}
-                    m0={m0}
-                    byDate={byDate}
-                    onDayPress={(iso) => setDayDetailIso(iso)}
-                />
-                <View style={styles.legend}>
-                    {(Object.keys(ACTIVITY_LABEL) as HouseCalendarActivityKind[]).map(
-                        (kind) => (
-                            <View key={kind} style={styles.legendRow}>
-                                <View
-                                    style={[
-                                        styles.legendDot,
-                                        { backgroundColor: ACTIVITY_DOT[kind] },
-                                    ]}
-                                />
-                                <Text style={[textStyles.caption, styles.legendText]}>
-                                    {ACTIVITY_LABEL[kind]}
-                                </Text>
-                            </View>
-                        ),
-                    )}
-                </View>
-                {activitiesThisMonth.length > 0 ? (
-                    <View style={styles.agenda}>
-                        <Pressable
-                            onPress={() => setAgendaOpen((o) => !o)}
-                            style={({ pressed }) => [
-                                styles.agendaToggle,
-                                pressed && styles.agendaTogglePressed,
-                            ]}
-                        >
-                            <Text style={[textStyles.caption, styles.agendaToggleText]}>
-                                События месяца — подробнее
-                            </Text>
-                            <Ionicons
-                                name={agendaOpen ? "chevron-up" : "chevron-down"}
-                                size={18}
-                                color={colors.textDim}
-                            />
-                        </Pressable>
-                        {agendaOpen ? (
-                            <View style={styles.agendaList}>
-                                {activitiesThisMonth.map((a) => (
-                                <View key={a.id} style={styles.agendaRow}>
-                                    <View
-                                        style={[
-                                            styles.agendaDot,
-                                            { backgroundColor: ACTIVITY_DOT[a.kind] },
-                                        ]}
-                                    />
-                                    <View style={styles.agendaText}>
-                                        <Text
-                                            style={[textStyles.caption, styles.agendaDate]}
-                                        >
-                                            {formatAgendaDate(a.date)}
-                                        </Text>
-                                        <Text
-                                            style={[textStyles.body, styles.agendaTitle2]}
-                                        >
-                                            {a.title}
-                                        </Text>
-                                        <Text
-                                            style={[textStyles.caption, styles.agendaKind]}
-                                        >
-                                            {ACTIVITY_LABEL[a.kind]}
-                                        </Text>
-                                    </View>
-                                </View>
-                                ))}
-                            </View>
-                        ) : null}
-                    </View>
-                ) : (
-                    <Text style={[textStyles.caption, styles.agendaEmpty]}>
-                        На этот месяц запланированных событий в демо-данных нет.
-                    </Text>
-                )}
-            </Card>
-
-            <DayEventsModal
-                visible={dayDetailIso !== null}
-                isoDate={dayDetailIso}
-                activities={
-                    dayDetailIso
-                        ? (byDate.get(dayDetailIso) ?? []).slice().sort((a, b) => a.title.localeCompare(b.title))
-                        : []
-                }
-                onClose={() => setDayDetailIso(null)}
-            />
-
-            <Text style={[textStyles.label, styles.section]}>Паспорт дома</Text>
-            <Card>
-                <Text style={[textStyles.subtitle, styles.addr]}>{h.address}</Text>
-                <View style={styles.stats}>
-                    <View style={styles.stat}>
-                        <Text style={[textStyles.caption, styles.statLabel]}>
-                            Год ввода
-                        </Text>
-                        <Text style={[textStyles.title, styles.statVal]}>
-                            {h.yearBuilt}
-                        </Text>
-                    </View>
-                    <View style={styles.stat}>
-                        <Text style={[textStyles.caption, styles.statLabel]}>
-                            Подъезды
-                        </Text>
-                        <Text style={[textStyles.title, styles.statVal]}>
-                            {h.entrances}
-                        </Text>
-                    </View>
-                    <View style={styles.stat}>
-                        <Text style={[textStyles.caption, styles.statLabel]}>
-                            Квартиры
-                        </Text>
-                        <Text style={[textStyles.title, styles.statVal]}>
-                            {h.apartments}
-                        </Text>
-                    </View>
-                </View>
-            </Card>
-
-            <Text style={[textStyles.label, styles.section]}>Фотографии</Text>
             <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.photos}
+                contentContainerStyle={styles.filterRow}
+                nestedScrollEnabled
             >
-                {h.photoUrls.map((uri, i) => (
-                    <Image
-                        key={uri + i}
-                        source={{ uri }}
-                        style={styles.photo}
-                    />
+                {HOUSE_TABS.map((t) => (
+                    <Pressable
+                        key={t.id}
+                        onPress={() => setTab(t.id)}
+                        style={[styles.filterChip, tab === t.id && styles.filterChipOn]}
+                    >
+                        <Text
+                            style={[
+                                textStyles.caption,
+                                tab === t.id ? styles.filterOnText : styles.filterOffText,
+                            ]}
+                        >
+                            {t.label}
+                        </Text>
+                    </Pressable>
                 ))}
             </ScrollView>
 
-            <Text style={[textStyles.label, styles.section]}>
-                Характеристики
-            </Text>
-            <Card padded={false}>
-                {h.specs.map((row, idx) => (
-                    <View
-                        key={row.label}
-                        style={[
-                            styles.specRow,
-                            idx < h.specs.length - 1 && styles.specBorder,
-                        ]}
-                    >
-                        <Text style={[textStyles.caption, styles.specLabel]}>
-                            {row.label}
-                        </Text>
-                        <Text style={[textStyles.body, styles.specVal]}>
-                            {row.value}
-                        </Text>
-                    </View>
-                ))}
-            </Card>
-
-            <Text style={[textStyles.label, styles.section]}>Оценка</Text>
-            <Card>
-                <Text style={[textStyles.caption, styles.ratingHint]}>
-                    Раз в календарный месяц вы можете один раз оценить двор, подъезд и работу
-                    УК (без привязки к заявке). После отправки изменить оценку за этот месяц
-                    нельзя. Удобнее оценивать ближе к концу месяца — так вы учтёте ситуацию за
-                    большую часть периода.
-                </Text>
-                {ratedThisMonth && environmentRating ? (
-                    <View style={styles.ratingLocked}>
-                        <Text style={[textStyles.subtitle, styles.lockedTitle]}>
-                            Оценка за {formatMonthKeyRu(environmentRating.monthKey)}
-                        </Text>
-                        <Text style={[textStyles.caption, styles.lockedSub]}>
-                            Отправлено{" "}
-                            {new Date(environmentRating.submittedAt).toLocaleString("ru-RU")}
-                        </Text>
-                        <View style={styles.gapMd} />
-                        <StarsSummary label="Двор" value={environmentRating.courtyardStars} />
-                        <StarsSummary label="Подъезд" value={environmentRating.entranceStars} />
-                        <StarsSummary label="УК" value={environmentRating.ukStars} />
-                        {environmentRating.feedbackTagIds &&
-                        environmentRating.feedbackTagIds.length > 0 ? (
-                            <View style={styles.lockedFeedback}>
-                                <Text style={[textStyles.caption, styles.lockedFbTitle]}>
-                                    Отмечено как неудовлетворительно:
-                                </Text>
-                                {environmentRating.feedbackTagIds.map((id) => (
-                                    <Text key={id} style={[textStyles.caption, styles.lockedFbRow]}>
-                                        · {feedbackLabel(id)}
-                                    </Text>
-                                ))}
-                            </View>
-                        ) : null}
-                        {environmentRating.feedbackOther ? (
-                            <Text style={[textStyles.caption, styles.lockedOther]}>
-                                Комментарий: {environmentRating.feedbackOther}
+            {tab === "calendar" ? (
+                <>
+                    <Card>
+                        <View style={styles.calHeader}>
+                            <Pressable
+                                onPress={() => setViewMonth((d) => addMonths(d, -1))}
+                                hitSlop={10}
+                                style={({ pressed }) => [
+                                    styles.calNav,
+                                    pressed && styles.calNavPressed,
+                                ]}
+                            >
+                                <Ionicons name="chevron-back" size={22} color={colors.text} />
+                            </Pressable>
+                            <Text style={[textStyles.subtitle, styles.calTitle]}>
+                                {monthLabelRu(viewMonth)}
                             </Text>
-                        ) : null}
-                    </View>
-                ) : (
-                    <>
-                        <Button
-                            title={ratingToggleLabel}
-                            variant={ratingOpen ? "secondary" : "primary"}
-                            onPress={() => setRatingOpen((o) => !o)}
+                            <Pressable
+                                onPress={() => setViewMonth((d) => addMonths(d, 1))}
+                                hitSlop={10}
+                                style={({ pressed }) => [
+                                    styles.calNav,
+                                    pressed && styles.calNavPressed,
+                                ]}
+                            >
+                                <Ionicons
+                                    name="chevron-forward"
+                                    size={22}
+                                    color={colors.text}
+                                />
+                            </Pressable>
+                        </View>
+                        <View style={styles.weekRow}>
+                            {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((w) => (
+                                <Text key={w} style={[textStyles.caption, styles.weekCell]}>
+                                    {w}
+                                </Text>
+                            ))}
+                        </View>
+                        <MonthGrid
+                            y={y}
+                            m0={m0}
+                            byDate={byDate}
+                            onDayPress={(iso) => setDayDetailIso(iso)}
                         />
-                        {ratingOpen ? (
-                            <View style={styles.ratingForm}>
-                                <StarBlock
-                                    label="Двор и благоустройство"
-                                    value={courtyard}
-                                    onChange={setCourtyard}
-                                />
-                                <View style={styles.gapMd} />
-                                <StarBlock
-                                    label="Подъезд"
-                                    value={entrance}
-                                    onChange={setEntrance}
-                                />
-                                <View style={styles.gapMd} />
-                                <StarBlock
-                                    label="Работа управляющей компании"
-                                    value={ukStars}
-                                    onChange={setUkStars}
-                                />
-                                {needsNegativeDetail ? (
-                                    <View style={styles.negativeBlock}>
-                                        <Text style={[textStyles.caption, styles.negativeTitle]}>
-                                            Если оценка 3 звезды или ниже — отметьте, что не
-                                            понравилось, и/или опишите своими словами:
-                                        </Text>
-                                        <View style={styles.tagWrap}>
-                                            {FEEDBACK_OPTIONS.map((opt) => {
-                                                const on = feedbackTags.includes(opt.id);
-                                                return (
-                                                    <Pressable
-                                                        key={opt.id}
-                                                        onPress={() => toggleFeedbackTag(opt.id)}
-                                                        style={[
-                                                            styles.tagChip,
-                                                            on && styles.tagChipOn,
-                                                        ]}
-                                                    >
-                                                        <Text
-                                                            style={[
-                                                                textStyles.caption,
-                                                                on
-                                                                    ? styles.tagChipTextOn
-                                                                    : styles.tagChipText,
-                                                            ]}
-                                                        >
-                                                            {opt.label}
-                                                        </Text>
-                                                    </Pressable>
-                                                );
-                                            })}
-                                        </View>
-                                        <Input
-                                            label="Свой комментарий"
-                                            value={feedbackOther}
-                                            onChangeText={setFeedbackOther}
-                                            multiline
-                                            placeholder="Необязательно, если выбрали пункты выше"
-                                            style={styles.feedbackArea}
+                        <View style={styles.legend}>
+                            {(Object.keys(ACTIVITY_LABEL) as HouseCalendarActivityKind[]).map(
+                                (kind) => (
+                                    <View key={kind} style={styles.legendRow}>
+                                        <View
+                                            style={[
+                                                styles.legendDot,
+                                                { backgroundColor: ACTIVITY_DOT[kind] },
+                                            ]}
                                         />
+                                        <Text style={[textStyles.caption, styles.legendText]}>
+                                            {ACTIVITY_LABEL[kind]}
+                                        </Text>
+                                    </View>
+                                ),
+                            )}
+                        </View>
+                        {activitiesThisMonth.length > 0 ? (
+                            <View style={styles.agenda}>
+                                <Pressable
+                                    onPress={() => setAgendaOpen((o) => !o)}
+                                    style={({ pressed }) => [
+                                        styles.agendaToggle,
+                                        pressed && styles.agendaTogglePressed,
+                                    ]}
+                                >
+                                    <Text style={[textStyles.caption, styles.agendaToggleText]}>
+                                        События месяца — подробнее
+                                    </Text>
+                                    <Ionicons
+                                        name={agendaOpen ? "chevron-up" : "chevron-down"}
+                                        size={18}
+                                        color={colors.textDim}
+                                    />
+                                </Pressable>
+                                {agendaOpen ? (
+                                    <View style={styles.agendaList}>
+                                        {activitiesThisMonth.map((a) => (
+                                            <View key={a.id} style={styles.agendaRow}>
+                                                <View
+                                                    style={[
+                                                        styles.agendaDot,
+                                                        { backgroundColor: ACTIVITY_DOT[a.kind] },
+                                                    ]}
+                                                />
+                                                <View style={styles.agendaText}>
+                                                    <Text
+                                                        style={[textStyles.caption, styles.agendaDate]}
+                                                    >
+                                                        {formatAgendaDate(a.date)}
+                                                    </Text>
+                                                    <Text
+                                                        style={[textStyles.body, styles.agendaTitle2]}
+                                                    >
+                                                        {a.title}
+                                                    </Text>
+                                                    <Text
+                                                        style={[textStyles.caption, styles.agendaKind]}
+                                                    >
+                                                        {ACTIVITY_LABEL[a.kind]}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                        ))}
                                     </View>
                                 ) : null}
-                                <View style={styles.gapMd} />
-                                <Button title="Отправить" onPress={trySubmitRating} />
                             </View>
-                        ) : null}
-                    </>
-                )}
-            </Card>
+                        ) : (
+                            <Text style={[textStyles.caption, styles.agendaEmpty]}>
+                                На этот месяц запланированных событий в демо-данных нет.
+                            </Text>
+                        )}
+                    </Card>
 
-            <Text style={[textStyles.label, styles.section]}>
-                Расписание уборки и вывоза мусора
-            </Text>
-            {trashPickupSchedule.map((row) => (
-                <Card key={row.id} style={styles.trashCard}>
-                    <Text style={[textStyles.subtitle, styles.trashTitle]}>
-                        {row.title}
+                    <DayEventsModal
+                        visible={dayDetailIso !== null}
+                        isoDate={dayDetailIso}
+                        activities={
+                            dayDetailIso
+                                ? (byDate.get(dayDetailIso) ?? [])
+                                      .slice()
+                                      .sort((a, b) => a.title.localeCompare(b.title))
+                                : []
+                        }
+                        onClose={() => setDayDetailIso(null)}
+                    />
+                </>
+            ) : null}
+
+            {tab === "passport" ? (
+                <>
+                    <Card>
+                        <Text style={[textStyles.subtitle, styles.addr]}>{h.address}</Text>
+                        <View style={styles.stats}>
+                            <View style={styles.stat}>
+                                <Text style={[textStyles.caption, styles.statLabel]}>
+                                    Год ввода
+                                </Text>
+                                <Text style={[textStyles.title, styles.statVal]}>
+                                    {h.yearBuilt}
+                                </Text>
+                            </View>
+                            <View style={styles.stat}>
+                                <Text style={[textStyles.caption, styles.statLabel]}>
+                                    Подъезды
+                                </Text>
+                                <Text style={[textStyles.title, styles.statVal]}>
+                                    {h.entrances}
+                                </Text>
+                            </View>
+                            <View style={styles.stat}>
+                                <Text style={[textStyles.caption, styles.statLabel]}>
+                                    Квартиры
+                                </Text>
+                                <Text style={[textStyles.title, styles.statVal]}>
+                                    {h.apartments}
+                                </Text>
+                            </View>
+                        </View>
+                    </Card>
+
+                    <Text style={[textStyles.label, styles.sectionFirst]}>Фотографии</Text>
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.photos}
+                    >
+                        {h.photoUrls.map((uri, i) => (
+                            <Image key={uri + i} source={{ uri }} style={styles.photo} />
+                        ))}
+                    </ScrollView>
+
+                    <Text style={[textStyles.label, styles.section]}>Характеристики</Text>
+                    <Card padded={false}>
+                        {h.specs.map((row, idx) => (
+                            <View
+                                key={row.label}
+                                style={[
+                                    styles.specRow,
+                                    idx < h.specs.length - 1 && styles.specBorder,
+                                ]}
+                            >
+                                <Text style={[textStyles.caption, styles.specLabel]}>
+                                    {row.label}
+                                </Text>
+                                <Text style={[textStyles.body, styles.specVal]}>
+                                    {row.value}
+                                </Text>
+                            </View>
+                        ))}
+                    </Card>
+                </>
+            ) : null}
+
+            {tab === "schedule" ? (
+                <>
+                    <Text style={[textStyles.label, styles.sectionFirst]}>
+                        Расписание уборки и вывоза мусора
                     </Text>
-                    <Text style={[textStyles.body, styles.trashSchedule]}>
-                        {row.schedule}
-                    </Text>
-                    {row.note ? (
-                        <Text style={[textStyles.caption, styles.trashNote]}>
-                            {row.note}
+                    {trashPickupSchedule.map((row) => (
+                        <Card key={row.id} style={styles.trashCard}>
+                            <Text style={[textStyles.subtitle, styles.trashTitle]}>
+                                {row.title}
+                            </Text>
+                            <Text style={[textStyles.body, styles.trashSchedule]}>
+                                {row.schedule}
+                            </Text>
+                            {row.note ? (
+                                <Text style={[textStyles.caption, styles.trashNote]}>
+                                    {row.note}
+                                </Text>
+                            ) : null}
+                        </Card>
+                    ))}
+                </>
+            ) : null}
+
+            {tab === "rating" ? (
+                <>
+                    <Card>
+                        <Text style={[textStyles.caption, styles.ratingHint]}>
+                            Раз в календарный месяц вы можете один раз оценить двор, подъезд и работу
+                            УК (без привязки к заявке). После отправки изменить оценку за этот месяц
+                            нельзя. Удобнее оценивать ближе к концу месяца — так вы учтёте ситуацию за
+                            большую часть периода.
                         </Text>
-                    ) : null}
-                </Card>
-            ))}
+                        {ratedThisMonth && environmentRating ? (
+                            <View style={styles.ratingLocked}>
+                                <Text style={[textStyles.subtitle, styles.lockedTitle]}>
+                                    Оценка за {formatMonthKeyRu(environmentRating.monthKey)}
+                                </Text>
+                                <Text style={[textStyles.caption, styles.lockedSub]}>
+                                    Отправлено{" "}
+                                    {new Date(environmentRating.submittedAt).toLocaleString("ru-RU")}
+                                </Text>
+                                <View style={styles.gapMd} />
+                                <StarsSummary label="Двор" value={environmentRating.courtyardStars} />
+                                <StarsSummary label="Подъезд" value={environmentRating.entranceStars} />
+                                <StarsSummary label="УК" value={environmentRating.ukStars} />
+                                {environmentRating.feedbackTagIds &&
+                                environmentRating.feedbackTagIds.length > 0 ? (
+                                    <View style={styles.lockedFeedback}>
+                                        <Text style={[textStyles.caption, styles.lockedFbTitle]}>
+                                            Отмечено как неудовлетворительно:
+                                        </Text>
+                                        {environmentRating.feedbackTagIds.map((id) => (
+                                            <Text
+                                                key={id}
+                                                style={[textStyles.caption, styles.lockedFbRow]}
+                                            >
+                                                · {feedbackLabel(id)}
+                                            </Text>
+                                        ))}
+                                    </View>
+                                ) : null}
+                                {environmentRating.feedbackOther ? (
+                                    <Text style={[textStyles.caption, styles.lockedOther]}>
+                                        Комментарий: {environmentRating.feedbackOther}
+                                    </Text>
+                                ) : null}
+                            </View>
+                        ) : (
+                            <>
+                                <Button
+                                    title={ratingToggleLabel}
+                                    variant={ratingOpen ? "secondary" : "primary"}
+                                    onPress={() => setRatingOpen((o) => !o)}
+                                />
+                                {ratingOpen ? (
+                                    <View style={styles.ratingForm}>
+                                        <StarBlock
+                                            label="Двор и благоустройство"
+                                            value={courtyard}
+                                            onChange={setCourtyard}
+                                        />
+                                        <View style={styles.gapMd} />
+                                        <StarBlock
+                                            label="Подъезд"
+                                            value={entrance}
+                                            onChange={setEntrance}
+                                        />
+                                        <View style={styles.gapMd} />
+                                        <StarBlock
+                                            label="Работа управляющей компании"
+                                            value={ukStars}
+                                            onChange={setUkStars}
+                                        />
+                                        {needsNegativeDetail ? (
+                                            <View style={styles.negativeBlock}>
+                                                <Text
+                                                    style={[textStyles.caption, styles.negativeTitle]}
+                                                >
+                                                    Если оценка 3 звезды или ниже — отметьте, что не
+                                                    понравилось, и/или опишите своими словами:
+                                                </Text>
+                                                <View style={styles.tagWrap}>
+                                                    {FEEDBACK_OPTIONS.map((opt) => {
+                                                        const on = feedbackTags.includes(opt.id);
+                                                        return (
+                                                            <Pressable
+                                                                key={opt.id}
+                                                                onPress={() =>
+                                                                    toggleFeedbackTag(opt.id)
+                                                                }
+                                                                style={[
+                                                                    styles.tagChip,
+                                                                    on && styles.tagChipOn,
+                                                                ]}
+                                                            >
+                                                                <Text
+                                                                    style={[
+                                                                        textStyles.caption,
+                                                                        on
+                                                                            ? styles.tagChipTextOn
+                                                                            : styles.tagChipText,
+                                                                    ]}
+                                                                >
+                                                                    {opt.label}
+                                                                </Text>
+                                                            </Pressable>
+                                                        );
+                                                    })}
+                                                </View>
+                                                <Input
+                                                    label="Свой комментарий"
+                                                    value={feedbackOther}
+                                                    onChangeText={setFeedbackOther}
+                                                    multiline
+                                                    placeholder="Необязательно, если выбрали пункты выше"
+                                                    style={styles.feedbackArea}
+                                                />
+                                            </View>
+                                        ) : null}
+                                        <View style={styles.gapMd} />
+                                        <Button title="Отправить" onPress={trySubmitRating} />
+                                    </View>
+                                ) : null}
+                            </>
+                        )}
+                    </Card>
+                </>
+            ) : null}
 
         </ScreenLayout>
     );
@@ -765,6 +816,28 @@ const styles = StyleSheet.create({
     profileButtonPressed: { opacity: 0.6 },
     sectionFirst: { color: colors.textMuted, marginTop: 0 },
     section: { color: colors.textMuted, marginTop: spacing.lg },
+    filterRow: {
+        flexDirection: "row",
+        gap: spacing.sm,
+        paddingBottom: spacing.md,
+        flexGrow: 0,
+        alignItems: "center",
+    },
+    filterChip: {
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+        borderRadius: radius.full,
+        borderWidth: 1,
+        borderColor: colors.border,
+        backgroundColor: colors.surface,
+        alignSelf: "flex-start",
+    },
+    filterChipOn: {
+        borderColor: colors.primary,
+        backgroundColor: colors.primarySoft,
+    },
+    filterOnText: { color: colors.primary },
+    filterOffText: { color: colors.textMuted },
     addr: { color: colors.text },
     stats: {
         flexDirection: "row",

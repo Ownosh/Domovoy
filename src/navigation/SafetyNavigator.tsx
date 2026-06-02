@@ -5,6 +5,8 @@ import {
     EmergencyGuideDetailScreen,
     EmergencyGuideScreen,
     EmergencyPhonesScreen,
+    RightsResidentsScreen,
+    RightsUkScreen,
     SafetyHubScreen,
 } from "../screens/safety";
 
@@ -24,6 +26,8 @@ export function SafetyNavigator() {
                 name="EmergencyGuideDetail"
                 component={EmergencyGuideDetailScreen}
             />
+            <Stack.Screen name="RightsResidents" component={RightsResidentsScreen} />
+            <Stack.Screen name="RightsUk" component={RightsUkScreen} />
         </Stack.Navigator>
     );
 }

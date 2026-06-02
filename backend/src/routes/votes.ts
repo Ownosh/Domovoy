@@ -28,12 +28,15 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
             [buildingKey.toLowerCase()],
         );
 
-        const votes = [];
+        const votes: any[] = [];
+        const openVoteIds: number[] = [];
         for (const v of voteRows) {
             const [opts] = await pool.query<RowDataPacket[]>(
                 `SELECT id, label FROM vote_options WHERE vote_id = ? ORDER BY position`,
                 [v.id],
             );
+            const visibility = (v.visibility as string) ?? "open";
+            if (visibility === "open") openVoteIds.push(Number(v.id));
             votes.push({
                 id: String(v.id),
                 buildingKey: v.building_key as string,
@@ -41,7 +44,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
                 sponsor: v.sponsor as string,
                 topic: String(v.topic),
                 description: String(v.description ?? ""),
-                visibility: v.visibility as string,
+                visibility,
                 endsAt: (v.ends_at as Date).toISOString(),
                 closed: Boolean(v.closed),
                 trial: Boolean(v.trial),
@@ -50,13 +53,23 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
             });
         }
 
+        // Голоса:
+        // - Для открытых голосований отдаём голоса всех участников (чтобы показывать «кто как проголосовал»)
+        // - Для тайных — только голос текущего пользователя (чтобы не раскрывать выборы)
+        const hasOpen = openVoteIds.length > 0;
         const [castRows] = await pool.query<RowDataPacket[]>(
-            `SELECT vote_id, option_id, area_sqm, voted_at FROM vote_casts WHERE user_id = ?`,
-            [userId],
+            hasOpen
+                ? `SELECT vote_id, user_id, option_id, area_sqm, voted_at
+                   FROM vote_casts
+                   WHERE vote_id IN (?) OR user_id = ?`
+                : `SELECT vote_id, user_id, option_id, area_sqm, voted_at
+                   FROM vote_casts
+                   WHERE user_id = ?`,
+            hasOpen ? [openVoteIds, userId] : [userId],
         );
         const casts = castRows.map((c) => ({
             voteId: String(c.vote_id),
-            userId: String(userId),
+            userId: String((c as any).user_id ?? userId),
             optionId: String(c.option_id),
             areaSqm: Number(c.area_sqm),
             votedAt: (c.voted_at as Date).toISOString(),

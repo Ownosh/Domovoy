@@ -30,6 +30,8 @@ import {
 } from "../../components/map/districtMapConstants";
 import { Card, Input, ScreenLayout } from "../../components/ui";
 import { districtPois, homeMapAnchor } from "../../data/mockData";
+import { apiFetchDistrictPois } from "../../api/district";
+import { useApp } from "../../context/AppContext";
 import type { MainTabNavigationProp } from "../../navigation/types";
 import type {
     DistrictMapLayerId,
@@ -70,9 +72,12 @@ const STRIP_FROM_ACTIVE_LAYERS = HIDDEN_CITY_RAIL_IDS;
 
 export function DistrictScreen() {
     const navigation = useNavigation<MainTabNavigationProp>();
+    const { isAuthenticated } = useApp();
     const mapRef = useRef<DistrictMapHandle>(null);
     const [activeLayers, setActiveLayers] =
         useState<DistrictMapLayerId[]>(DEFAULT_ACTIVE_LAYERS);
+    const [pois, setPois] = useState<DistrictPoi[]>(districtPois);
+    const [home, setHome] = useState(homeMapAnchor);
     const [mapInnerWidth, setMapInnerWidth] = useState<number | undefined>(
         undefined,
     );
@@ -106,6 +111,16 @@ export function DistrictScreen() {
     }, []);
 
     useEffect(() => {
+        if (!isAuthenticated) return;
+        apiFetchDistrictPois()
+            .then(({ anchor, pois: fetched }) => {
+                if (fetched.length > 0) setPois(fetched);
+                if (anchor) setHome(anchor);
+            })
+            .catch(() => {});
+    }, [isAuthenticated]);
+
+    useEffect(() => {
         void saveDistrictMapActiveLayers(activeLayers);
     }, [activeLayers]);
 
@@ -116,8 +131,8 @@ export function DistrictScreen() {
     }, []);
 
     const visiblePois = useMemo(
-        () => districtPois.filter((p) => activeLayers.includes(p.layerId)),
-        [activeLayers],
+        () => pois.filter((p) => activeLayers.includes(p.layerId)),
+        [pois, activeLayers],
     );
 
     const baseLayers = useMemo(
@@ -131,8 +146,6 @@ export function DistrictScreen() {
         () => DISTRICT_LAYER_META.filter((m) => m.group === "house"),
         [],
     );
-
-    const home = homeMapAnchor;
 
     const groupedSections = useMemo(() => {
         return DISTRICT_LAYER_META.filter((m) => activeLayers.includes(m.id))

@@ -28,28 +28,35 @@ export async function clearTokens(): Promise<void> {
     ]);
 }
 
+let _refreshPromise: Promise<string | null> | null = null;
+
 async function refreshAccessToken(): Promise<string | null> {
-    const refreshToken = await getRefreshToken();
-    if (!refreshToken) return null;
+    if (_refreshPromise) return _refreshPromise;
 
-    try {
-        const res = await fetch(`${BASE_URL}/auth/refresh`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ refreshToken }),
-        });
-
-        if (!res.ok) {
-            await clearTokens();
+    _refreshPromise = (async () => {
+        const refreshToken = await getRefreshToken();
+        if (!refreshToken) return null;
+        try {
+            const res = await fetch(`${BASE_URL}/auth/refresh`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ refreshToken }),
+            });
+            if (!res.ok) {
+                await clearTokens();
+                return null;
+            }
+            const data = await res.json();
+            await saveTokens(data.accessToken, data.refreshToken);
+            return data.accessToken as string;
+        } catch {
             return null;
+        } finally {
+            _refreshPromise = null;
         }
+    })();
 
-        const data = await res.json();
-        await saveTokens(data.accessToken, data.refreshToken);
-        return data.accessToken;
-    } catch {
-        return null;
-    }
+    return _refreshPromise;
 }
 
 export class ApiError extends Error {

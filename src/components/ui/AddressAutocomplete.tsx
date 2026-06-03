@@ -34,7 +34,8 @@ export function AddressAutocomplete({
     const [notFound, setNotFound] = useState(false);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const activeRef = useRef(true);
-    const justSelectedRef = useRef(false);
+    // true только когда пользователь сам начал вводить (не при инициализации)
+    const dirtyRef = useRef(false);
 
     useEffect(() => {
         activeRef.current = true;
@@ -46,10 +47,8 @@ export function AddressAutocomplete({
     useEffect(() => {
         if (debounceRef.current) clearTimeout(debounceRef.current);
 
-        if (justSelectedRef.current) {
-            justSelectedRef.current = false;
-            return;
-        }
+        // Не ищем пока пользователь не начал редактировать поле
+        if (!dirtyRef.current) return;
 
         const trimmed = value.trim();
 
@@ -76,8 +75,13 @@ export function AddressAutocomplete({
         };
     }, [value]);
 
+    const handleChangeText = (text: string) => {
+        dirtyRef.current = true;
+        onChangeText(text);
+    };
+
     const handleSelect = (item: BuildingSuggestion) => {
-        justSelectedRef.current = true;
+        dirtyRef.current = false;
         if (debounceRef.current) clearTimeout(debounceRef.current);
         setLoading(false);
         setSuggestions([]);
@@ -102,7 +106,7 @@ export function AddressAutocomplete({
                         showDropdown && styles.inputOpen,
                     ]}
                     value={value}
-                    onChangeText={onChangeText}
+                    onChangeText={handleChangeText}
                     placeholder={placeholder}
                     placeholderTextColor={colors.textDim}
                     autoCorrect={false}

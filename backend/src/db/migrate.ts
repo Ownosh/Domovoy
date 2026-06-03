@@ -288,5 +288,28 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    // lat/lng здания — для якоря карты района
+    await pool.query(`ALTER TABLE buildings ADD COLUMN IF NOT EXISTS lat DECIMAL(9,6) DEFAULT NULL`).catch(() => {});
+    await pool.query(`ALTER TABLE buildings ADD COLUMN IF NOT EXISTS lng DECIMAL(9,6) DEFAULT NULL`).catch(() => {});
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS district_pois (
+            id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            building_key VARCHAR(120)    NULL     COMMENT 'NULL = city-wide; задан = только для этого дома',
+            layer_id     VARCHAR(50)     NOT NULL,
+            scope        ENUM('city','house') NOT NULL DEFAULT 'city',
+            name         VARCHAR(500)    NOT NULL,
+            address      VARCHAR(500)    NOT NULL DEFAULT '',
+            lat          DECIMAL(9,6)    NOT NULL,
+            lng          DECIMAL(9,6)    NOT NULL,
+            photo_url    VARCHAR(500)    DEFAULT NULL,
+            schedule     TEXT            DEFAULT NULL,
+            rating       DECIMAL(3,1)    DEFAULT NULL,
+            PRIMARY KEY (id),
+            INDEX idx_dp_scope_layer (scope, layer_id),
+            INDEX idx_dp_building    (building_key)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
     console.log("Migration complete");
 }

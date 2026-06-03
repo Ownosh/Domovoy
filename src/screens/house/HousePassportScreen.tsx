@@ -109,6 +109,16 @@ function monthLabelRu(d: Date): string {
     return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
+function ScheduleDivider() {
+    return (
+        <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <View style={styles.dividerDot} />
+            <View style={styles.dividerLine} />
+        </View>
+    );
+}
+
 export function HousePassportScreen() {
     const navigation = useNavigation<MainTabNavigationProp>();
     const { environmentRating, setEnvironmentRating, isAuthenticated } = useApp();
@@ -503,21 +513,26 @@ export function HousePassportScreen() {
                     <Text style={[textStyles.label, styles.sectionFirst]}>
                         Расписание уборки и вывоза мусора
                     </Text>
-                    {scheduleItems.map((row) => (
-                        <Card key={row.id} style={styles.trashCard}>
-                            <Text style={[textStyles.subtitle, styles.trashTitle]}>
-                                {row.title}
-                            </Text>
-                            <Text style={[textStyles.body, styles.trashSchedule]}>
-                                {row.schedule}
-                            </Text>
-                            {row.note ? (
-                                <Text style={[textStyles.caption, styles.trashNote]}>
-                                    {row.note}
-                                </Text>
-                            ) : null}
-                        </Card>
-                    ))}
+                    <View style={styles.scheduleList}>
+                        {scheduleItems.map((row, index) => (
+                            <React.Fragment key={row.id}>
+                                {index > 0 && <ScheduleDivider />}
+                                <Card style={styles.trashCard}>
+                                    <Text style={[textStyles.subtitle, styles.trashTitle]}>
+                                        {row.title}
+                                    </Text>
+                                    <Text style={[textStyles.body, styles.trashSchedule]}>
+                                        {row.schedule}
+                                    </Text>
+                                    {row.note ? (
+                                        <Text style={[textStyles.caption, styles.trashNote]}>
+                                            {row.note}
+                                        </Text>
+                                    ) : null}
+                                </Card>
+                            </React.Fragment>
+                        ))}
+                    </View>
                 </>
             ) : null}
 
@@ -1063,7 +1078,27 @@ const styles = StyleSheet.create({
     modalEventText: { flex: 1 },
     modalEventTitle: { color: colors.text },
     modalEventKind: { color: colors.textDim, marginTop: spacing.xs },
-    trashCard: { marginBottom: spacing.md, gap: spacing.xs },
+    scheduleList: { gap: 0 },
+    trashCard: { gap: spacing.xs },
+    divider: {
+        flexDirection: "row" as const,
+        alignItems: "center" as const,
+        paddingHorizontal: spacing.lg,
+        marginVertical: spacing.sm,
+    },
+    dividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: colors.border,
+        opacity: 0.5,
+    },
+    dividerDot: {
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: colors.border,
+        marginHorizontal: spacing.md,
+    },
     trashTitle: { color: colors.text },
     trashSchedule: { color: colors.primary },
     trashNote: { color: colors.textMuted, lineHeight: 18 },

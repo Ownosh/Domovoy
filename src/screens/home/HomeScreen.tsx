@@ -122,6 +122,16 @@ function getCommunityRoot(
     return p1?.getParent<RootNav>();
 }
 
+function FeedDivider() {
+    return (
+        <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <View style={styles.dividerDot} />
+            <View style={styles.dividerLine} />
+        </View>
+    );
+}
+
 export function HomeScreen() {
     const navigation = useNavigation<MainTabNavigationProp>();
     const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
@@ -417,36 +427,32 @@ export function HomeScreen() {
                             В этой категории пока пусто.
                         </Text>
                     ) : (
-                        visibleFeed.map((row) => {
-                            if (row.kind === "news") {
-                                return <FeedNewsRow key={row.key} item={row.item} />;
-                            }
-                            if (row.kind === "vote") {
-                                return (
+                        visibleFeed.map((row, index) => (
+                            <React.Fragment key={row.key}>
+                                {index > 0 && <FeedDivider />}
+                                {row.kind === "news" && (
+                                    <FeedNewsRow item={row.item} />
+                                )}
+                                {row.kind === "vote" && (
                                     <FeedVoteRow
-                                        key={row.key}
                                         vote={row.item}
                                         onOpen={() => openCommunity("VoteDetail", { id: String(row.item.id) })}
                                     />
-                                );
-                            }
-                            if (row.kind === "appeal") {
-                                return (
+                                )}
+                                {row.kind === "appeal" && (
                                     <FeedAppealRow
-                                        key={row.key}
                                         appeal={row.item}
                                         onOpen={() => openCommunity("AppealDetail", { id: String(row.item.id) })}
                                     />
-                                );
-                            }
-                            return (
-                                <FeedAdRow
-                                    key={row.key}
-                                    ad={row.item}
-                                    onOpen={() => openCommunity("NeighborAdDetail", { id: String(row.item.id) })}
-                                />
-                            );
-                        })
+                                )}
+                                {row.kind === "ad" && (
+                                    <FeedAdRow
+                                        ad={row.item}
+                                        onOpen={() => openCommunity("NeighborAdDetail", { id: String(row.item.id) })}
+                                    />
+                                )}
+                            </React.Fragment>
+                        ))
                     )}
                 </ScrollView>
             </View>
@@ -611,7 +617,7 @@ function FeedNewsRow({ item }: { item: NewsItem }) {
                 <View style={[styles.typeBadge, styles.typeBadgeNews]}>
                     <Text style={[styles.typeBadgeText, { color: colors.info }]}>Новости УК</Text>
                 </View>
-                <Text style={styles.cardDate}>{item.date}</Text>
+                <Text style={styles.cardDate}>{formatNewsDate(item.date)}</Text>
             </View>
             {item.imageUrls.length > 0 ? (
                 multi ? (
@@ -704,17 +710,32 @@ function FeedAdRow({ ad, onOpen }: { ad: NeighborAd; onOpen: () => void }) {
     );
 }
 
+function fmtDate(d: Date): string {
+    return d.toLocaleDateString("ru-RU", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+    });
+}
+
 function formatDate(iso: string) {
     try {
-        const d = new Date(iso);
-        return d.toLocaleString("ru-RU", {
-            day: "numeric",
-            month: "short",
-            hour: "2-digit",
-            minute: "2-digit",
-        });
+        return fmtDate(new Date(iso));
     } catch {
         return iso;
+    }
+}
+
+function formatNewsDate(dateStr: string): string {
+    try {
+        const raw = (dateStr ?? "").trim();
+        const m = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+        if (m) {
+            return fmtDate(new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])));
+        }
+        return fmtDate(new Date(raw));
+    } catch {
+        return dateStr;
     }
 }
 
@@ -725,7 +746,6 @@ const styles = StyleSheet.create({
     feedScrollContent: {
         paddingBottom: spacing.xxxl * 2,
         paddingTop: spacing.sm,
-        gap: spacing.md,
     },
     fab: {
         position: "absolute",
@@ -894,10 +914,29 @@ const styles = StyleSheet.create({
     newsTitle: { color: colors.text, marginTop: spacing.xs },
     newsExcerpt: { color: colors.textMuted, marginTop: spacing.sm },
     // Новые стили карточек ленты
-    feedCardNews: { borderLeftWidth: 3, borderLeftColor: colors.info, marginBottom: spacing.md },
-    feedCardVote: { borderLeftWidth: 3, borderLeftColor: colors.accent, marginBottom: spacing.md },
-    feedCardAppeal: { borderLeftWidth: 3, borderLeftColor: colors.warning, marginBottom: spacing.md },
-    feedCardAd: { borderLeftWidth: 3, borderLeftColor: colors.primary, marginBottom: spacing.md },
+    feedCardNews: { borderLeftWidth: 3, borderLeftColor: colors.info },
+    feedCardVote: { borderLeftWidth: 3, borderLeftColor: colors.accent },
+    feedCardAppeal: { borderLeftWidth: 3, borderLeftColor: colors.warning },
+    feedCardAd: { borderLeftWidth: 3, borderLeftColor: colors.primary },
+    divider: {
+        flexDirection: "row" as const,
+        alignItems: "center" as const,
+        paddingHorizontal: spacing.lg,
+        marginVertical: spacing.sm,
+    },
+    dividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: colors.border,
+        opacity: 0.5,
+    },
+    dividerDot: {
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: colors.border,
+        marginHorizontal: spacing.md,
+    },
     cardTop: {
         flexDirection: "row" as const,
         justifyContent: "space-between" as const,

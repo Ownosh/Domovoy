@@ -15,6 +15,14 @@ import {
 } from "../../utils/emergencyCache";
 import { colors, spacing, textStyles } from "../../theme";
 
+function sectionAccent(title: string): string {
+    if (title.includes("112")) return colors.danger;
+    if (title.includes("экстренной")) return colors.danger;
+    if (title.includes("Коммунальные")) return colors.warning;
+    if (title.includes("управляющая") || title.includes("Дом")) return colors.primary;
+    return colors.info;
+}
+
 type Props = NativeStackScreenProps<SafetyStackParamList, "EmergencyPhones">;
 
 export function EmergencyPhonesScreen({ navigation }: Props) {
@@ -50,18 +58,27 @@ export function EmergencyPhonesScreen({ navigation }: Props) {
             onBack={() => navigation.goBack()}
         >
             <View style={styles.sections}>
-                {groupEmergencyLinesForDisplay(lines).map((section) => (
-                    <View key={section.title} style={styles.section}>
-                        <Text style={[textStyles.label, styles.sectionTitle]}>
-                            {section.title}
-                        </Text>
-                        <View style={styles.list}>
-                            {section.lines.map((item) => (
-                                <EmergencyCallBlock key={item.id} line={item} />
-                            ))}
+                {groupEmergencyLinesForDisplay(lines).map((section) => {
+                    const accent = sectionAccent(section.title);
+                    return (
+                        <View key={section.title} style={styles.section}>
+                            <Text style={[textStyles.label, styles.sectionTitle]}>
+                                {section.title}
+                            </Text>
+                            <View style={styles.list}>
+                                {section.lines.map((item) => (
+                                    <EmergencyCallBlock
+                                        key={item.id}
+                                        line={item}
+                                        leftBorderColor={accent}
+                                        callAccentColor={accent}
+                                        badgeLabel={section.title}
+                                    />
+                                ))}
+                            </View>
                         </View>
-                    </View>
-                ))}
+                    );
+                })}
             </View>
         </ScreenLayout>
     );

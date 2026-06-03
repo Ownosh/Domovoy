@@ -44,6 +44,16 @@ function formatDate(iso: string) {
     } catch { return iso; }
 }
 
+function Divider() {
+    return (
+        <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <View style={styles.dividerDot} />
+            <View style={styles.dividerLine} />
+        </View>
+    );
+}
+
 function AppealCard({ item, onPress }: { item: Appeal; onPress: () => void }) {
     const isCollective = item.kind === "collective";
     return (
@@ -219,6 +229,7 @@ export function AppealsListScreen() {
                     data={currentData as any[]}
                     keyExtractor={(i) => String(i.id)}
                     contentContainerStyle={styles.list}
+                    ItemSeparatorComponent={() => <Divider />}
                     ListEmptyComponent={
                         <Text style={[textStyles.body, styles.empty]}>{emptyText}</Text>
                     }
@@ -284,7 +295,26 @@ const styles = StyleSheet.create({
     content: { flex: 1 },
     profileButton: { marginTop: spacing.xs },
     profileButtonPressed: { opacity: 0.6 },
-    list: { gap: spacing.md, paddingBottom: spacing.xxxl * 2 },
+    list: { paddingBottom: spacing.xxxl * 2 },
+    divider: {
+        flexDirection: "row" as const,
+        alignItems: "center" as const,
+        paddingHorizontal: spacing.lg,
+        marginVertical: spacing.sm,
+    },
+    dividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: colors.border,
+        opacity: 0.5,
+    },
+    dividerDot: {
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: colors.border,
+        marginHorizontal: spacing.md,
+    },
     empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.xl },
     // Feed-style cards
     feedCard: { gap: spacing.xs },

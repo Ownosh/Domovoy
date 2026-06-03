@@ -37,7 +37,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
             buildingKey: r.building_key as string,
             title: r.title as string,
             excerpt: r.excerpt as string,
-            date: (r.published_at as Date).toISOString().slice(0, 10),
+            date: (() => { const raw = r.published_at; if (raw instanceof Date) { return `${raw.getFullYear()}-${String(raw.getMonth()+1).padStart(2,"0")}-${String(raw.getDate()).padStart(2,"0")}`; } return String(raw).slice(0, 10); })(),
             imageUrls: r.image_urls
                 ? (r.image_urls as string).split("||").filter(Boolean)
                 : [],

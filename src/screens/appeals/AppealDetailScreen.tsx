@@ -64,7 +64,7 @@ export function AppealDetailScreen({ route, navigation }: Props) {
     const myBuildingKey = buildBuildingKey(profile.building);
     const sameHouseAsAppeal = item.buildingKey.toLowerCase() === myBuildingKey.toLowerCase();
     const alreadyJoined =
-        !!user && item.participants.some((p) => p.userId === user.id);
+        !!user && item.participants.some((p) => String(p.userId) === String(user.id));
     const verified = isVerifiedResident(verification);
     const canJoin =
         item.kind === "collective" &&

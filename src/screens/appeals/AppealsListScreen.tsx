@@ -19,8 +19,7 @@ import type {
 import { buildBuildingKey } from "../../utils/buildingKey";
 import { colors, radius, spacing, textStyles } from "../../theme";
 import { isArchivedAppeal } from "../../utils/appeals";
-import type { NeighborAd, Vote } from "../../types";
-import { voteSourceLine } from "../../utils/voteSponsor";
+import type { Appeal, NeighborAd, Vote } from "../../types";
 
 type Nav = NativeStackNavigationProp<AppealsStackParamList>;
 type CommunityTab = "appeals" | "collective" | "votes" | "ads";
@@ -32,6 +31,96 @@ const COMMUNITY_TABS: { id: CommunityTab; label: string }[] = [
     { id: "ads", label: "Мои объявления" },
 ];
 
+const adCatRu: Record<NeighborAd["category"], string> = {
+    sell: "Продаю", buy: "Ищу", lost: "Потеряно",
+    found: "Найдено", service: "Услуга", invite: "Приглашаю", other: "Другое",
+};
+
+function formatDate(iso: string) {
+    try {
+        return new Date(iso).toLocaleDateString("ru-RU", {
+            day: "numeric", month: "short", year: "numeric",
+        });
+    } catch { return iso; }
+}
+
+function AppealCard({ item, onPress }: { item: Appeal; onPress: () => void }) {
+    const isCollective = item.kind === "collective";
+    return (
+        <Pressable onPress={onPress}>
+            <Card style={[styles.feedCard, isCollective ? styles.cardAppeal : styles.cardPersonal]} padded>
+                <View style={styles.cardTop}>
+                    <View style={[styles.typeBadge, isCollective ? styles.badgeAppeal : styles.badgePersonal]}>
+                        <Text style={[styles.typeBadgeText, { color: isCollective ? colors.warning : colors.info }]}>
+                            {isCollective ? "Коллективное обращение" : "Обращение"}
+                        </Text>
+                    </View>
+                    <Text style={styles.cardDate}>{formatDate(item.createdAt)}</Text>
+                </View>
+                <Text style={[textStyles.subtitle, styles.feedTitle]}>{item.title}</Text>
+                <Text style={[styles.cardMeta, { marginTop: spacing.xs }]} numberOfLines={1}>{item.category}</Text>
+                <View style={styles.cardBottom}>
+                    <AppealStatusBadge status={item.status} />
+                    {item.entrance ? (
+                        <Text style={styles.cardMeta}>подъезд {item.entrance}</Text>
+                    ) : null}
+                </View>
+            </Card>
+        </Pressable>
+    );
+}
+
+function VoteCard({ item, onPress }: { item: Vote; onPress: () => void }) {
+    const ended = item.closed || new Date(item.endsAt).getTime() <= Date.now();
+    return (
+        <Pressable onPress={onPress}>
+            <Card style={[styles.feedCard, styles.cardVote]} padded>
+                <View style={styles.cardTop}>
+                    <View style={[styles.typeBadge, styles.badgeVote]}>
+                        <Text style={[styles.typeBadgeText, { color: colors.accent }]}>Голосование</Text>
+                    </View>
+                    <Text style={styles.cardDate}>{formatDate(item.createdAt)}</Text>
+                </View>
+                <Text style={[textStyles.subtitle, styles.feedTitle]}>{item.topic}</Text>
+                <View style={styles.cardBottom}>
+                    <View style={[styles.statusDot, { backgroundColor: ended ? colors.textDim : colors.primary }]} />
+                    <Text style={styles.cardMeta} numberOfLines={1}>
+                        {ended ? "Завершено" : "Активно"} · {item.visibility === "open" ? "открытое" : "тайное"}
+                    </Text>
+                </View>
+            </Card>
+        </Pressable>
+    );
+}
+
+function AdCard({ item, onPress }: { item: NeighborAd; onPress: () => void }) {
+    const msLeft = new Date(item.expiresAt).getTime() - Date.now();
+    const expired = msLeft <= 0;
+    return (
+        <Pressable onPress={onPress}>
+            <Card style={[styles.feedCard, styles.cardAd]} padded>
+                <View style={styles.cardTop}>
+                    <View style={[styles.typeBadge, styles.badgeAd]}>
+                        <Text style={[styles.typeBadgeText, { color: colors.primary }]}>{adCatRu[item.category]}</Text>
+                    </View>
+                    <Text style={styles.cardDate}>{formatDate(item.createdAt)}</Text>
+                </View>
+                <Text style={[textStyles.subtitle, styles.feedTitle]}>{item.title}</Text>
+                <Text style={styles.cardMeta} numberOfLines={2}>{item.body}</Text>
+                <View style={styles.cardBottom}>
+                    <View style={[styles.statusDot, { backgroundColor: expired ? colors.danger : msLeft <= 7 * 24 * 60 * 60 * 1000 ? colors.warning : colors.textDim }]} />
+                    <Text style={[styles.cardMeta, { color: expired ? colors.danger : msLeft <= 7 * 24 * 60 * 60 * 1000 ? colors.warning : colors.textDim }]}>
+                        {expired ? "Истёк" : `до ${new Date(item.expiresAt).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}`}
+                    </Text>
+                    {item.pendingModeration ? (
+                        <Text style={[styles.cardMeta, { color: colors.warning }]}>· на проверке</Text>
+                    ) : null}
+                </View>
+            </Card>
+        </Pressable>
+    );
+}
+
 export function AppealsListScreen() {
     const navigation = useNavigation<Nav>();
     const { appeals, profile, user, votes, neighborAds } = useApp();
@@ -40,7 +129,6 @@ export function AppealsListScreen() {
     const uid = user ? String(user.id) : null;
 
     const activeAppeals = appeals.filter((item) => !isArchivedAppeal(item));
-
     const bkLower = houseKey.toLowerCase();
 
     const personalAppeals = useMemo(() => {
@@ -51,13 +139,9 @@ export function AppealsListScreen() {
     }, [activeAppeals, user]);
 
     const collectiveAppeals = useMemo(
-        () =>
-            activeAppeals.filter(
-                (a) =>
-                    a.kind === "collective" &&
-                    uid !== null &&
-                    String(a.authorUserId) === String(uid),
-            ),
+        () => activeAppeals.filter(
+            (a) => a.kind === "collective" && uid !== null && String(a.authorUserId) === String(uid),
+        ),
         [activeAppeals, uid],
     );
 
@@ -70,22 +154,28 @@ export function AppealsListScreen() {
     const myVotes = useMemo(() => {
         if (!user) return [];
         return votes.filter(
-            (v) =>
-                v.buildingKey.toLowerCase() === bkLower &&
-                v.sponsor === "residents" &&
-                v.createdByLabel === myVoteLabel,
+            (v) => v.buildingKey.toLowerCase() === bkLower && v.sponsor === "residents" && v.createdByLabel === myVoteLabel,
         );
     }, [votes, bkLower, user, myVoteLabel]);
 
     const myAds = useMemo(() => {
         if (!uid) return [];
         return neighborAds.filter(
-            (a) =>
-                a.authorUserId === uid &&
-                a.buildingKey.toLowerCase() === bkLower &&
-                !a.archived,
+            (a) => a.authorUserId === uid && a.buildingKey.toLowerCase() === bkLower && !a.archived,
         );
     }, [neighborAds, bkLower, uid]);
+
+    const currentData = tab === "appeals" ? personalAppeals
+        : tab === "collective" ? collectiveAppeals
+        : tab === "votes" ? myVotes
+        : myAds;
+
+    const emptyText = {
+        appeals: "Пока нет обращений.",
+        collective: "Нет коллективных обращений.",
+        votes: "Вы ещё не создавали голосований.",
+        ads: "Вы ещё не публиковали объявления.",
+    }[tab];
 
     return (
         <ScreenLayout
@@ -94,22 +184,11 @@ export function AppealsListScreen() {
             contentStyle={styles.flex}
             rightAccessory={
                 <Pressable
-                    onPress={() => {
-                        const parent =
-                            navigation.getParent<MainTabNavigationProp>();
-                        parent?.navigate("Profile");
-                    }}
+                    onPress={() => navigation.getParent<MainTabNavigationProp>()?.navigate("Profile")}
                     hitSlop={10}
-                    style={({ pressed }) => [
-                        styles.profileButton,
-                        pressed && styles.profileButtonPressed,
-                    ]}
+                    style={({ pressed }) => [styles.profileButton, pressed && styles.profileButtonPressed]}
                 >
-                    <Ionicons
-                        name="person-circle-outline"
-                        size={30}
-                        color={colors.text}
-                    />
+                    <Ionicons name="person-circle-outline" size={30} color={colors.text} />
                 </Pressable>
             }
         >
@@ -127,111 +206,56 @@ export function AppealsListScreen() {
                             onPress={() => setTab(t.id)}
                             style={[styles.tab, tab === t.id && styles.tabOn]}
                         >
-                            <Text
-                                style={[
-                                    textStyles.caption,
-                                    tab === t.id ? styles.tabTextOn : styles.tabText,
-                                ]}
-                            >
+                            <Text style={[textStyles.caption, tab === t.id ? styles.tabTextOn : styles.tabText]}>
                                 {t.label}
                             </Text>
                         </Pressable>
                     ))}
                 </ScrollView>
             </View>
+
             <View style={styles.content}>
-                {tab === "appeals" || tab === "collective" ? (
-                    <FlatList
-                        data={tab === "appeals" ? personalAppeals : collectiveAppeals}
-                        keyExtractor={(i) => i.id}
-                        contentContainerStyle={styles.list}
-                        ListEmptyComponent={
-                            <Text style={[textStyles.body, styles.empty]}>
-                                {tab === "appeals"
-                                    ? "Пока нет обращений."
-                                    : "Нет коллективных обращений по вашему дому."}
-                            </Text>
-                        }
-                        renderItem={({ item }) => (
-                            <Pressable onPress={() => navigation.navigate("AppealDetail", { id: item.id })}>
-                                <Card style={styles.row}>
-                                    <View style={styles.rowTop}>
-                                        <View style={styles.badges}>
-                                            <AppealStatusBadge status={item.status} />
-                                            {item.kind === "collective" && (
-                                                <Text style={[textStyles.caption, styles.colBadge]}>Коллективное</Text>
-                                            )}
-                                        </View>
-                                        <Text style={[textStyles.caption, styles.date]}>{formatDate(item.createdAt)}</Text>
-                                    </View>
-                                    <Text style={[textStyles.subtitle, styles.title]}>{item.title}</Text>
-                                    <Text style={[textStyles.caption, styles.category]}>{item.category}</Text>
-                                </Card>
-                            </Pressable>
-                        )}
-                    />
-                ) : null}
-
-                {tab === "votes" ? (
-                    <FlatList
-                        data={myVotes}
-                        keyExtractor={(i) => String(i.id)}
-                        contentContainerStyle={styles.list}
-                        ListEmptyComponent={
-                            <Text style={[textStyles.body, styles.empty]}>
-                                Вы ещё не создавали голосований.
-                            </Text>
-                        }
-                        renderItem={({ item }) => (
-                            <Pressable onPress={() => navigation.navigate("VoteDetail", { id: String(item.id) })}>
-                                <VoteRow vote={item} />
-                            </Pressable>
-                        )}
-                    />
-                ) : null}
-
-                {tab === "ads" ? (
-                    <FlatList
-                        data={myAds}
-                        keyExtractor={(i) => String(i.id)}
-                        contentContainerStyle={styles.list}
-                        ListEmptyComponent={
-                            <Text style={[textStyles.body, styles.empty]}>
-                                Вы ещё не публиковали объявления.
-                            </Text>
-                        }
-                        renderItem={({ item }) => (
-                            <Pressable onPress={() => navigation.navigate("NeighborAdDetail", { id: String(item.id) })}>
-                                <AdRow ad={item} />
-                            </Pressable>
-                        )}
-                    />
-                ) : null}
-                <Pressable
-                    onPress={() => {
-                        if (tab === "appeals") {
-                            navigation.navigate("AppealNew");
-                            return;
-                        }
-                        if (tab === "collective") {
-                            navigation.navigate("AppealNew", {
-                                defaultKind: "collective",
-                            });
-                            return;
+                <FlatList
+                    data={currentData as any[]}
+                    keyExtractor={(i) => String(i.id)}
+                    contentContainerStyle={styles.list}
+                    ListEmptyComponent={
+                        <Text style={[textStyles.body, styles.empty]}>{emptyText}</Text>
+                    }
+                    renderItem={({ item }) => {
+                        if (tab === "appeals" || tab === "collective") {
+                            return (
+                                <AppealCard
+                                    item={item as Appeal}
+                                    onPress={() => navigation.navigate("AppealDetail", { id: item.id })}
+                                />
+                            );
                         }
                         if (tab === "votes") {
-                            navigation.navigate("VoteNew");
-                            return;
+                            return (
+                                <VoteCard
+                                    item={item as Vote}
+                                    onPress={() => navigation.navigate("VoteDetail", { id: String(item.id) })}
+                                />
+                            );
                         }
-                        navigation.navigate("NeighborAdNew", {
-                            presetCategory: "sell",
-                        });
+                        return (
+                            <AdCard
+                                item={item as NeighborAd}
+                                onPress={() => navigation.navigate("NeighborAdDetail", { id: String(item.id) })}
+                            />
+                        );
+                    }}
+                />
+                <Pressable
+                    onPress={() => {
+                        if (tab === "appeals") { navigation.navigate("AppealNew"); return; }
+                        if (tab === "collective") { navigation.navigate("AppealNew", { defaultKind: "collective" }); return; }
+                        if (tab === "votes") { navigation.navigate("VoteNew"); return; }
+                        navigation.navigate("NeighborAdNew", { presetCategory: "sell" });
                     }}
                     hitSlop={10}
-                    style={({ pressed }) => [
-                        styles.fab,
-                        pressed && styles.fabPressed,
-                    ]}
+                    style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
                 >
                     <Ionicons name="add" size={28} color={colors.bg} />
                 </Pressable>
@@ -240,72 +264,11 @@ export function AppealsListScreen() {
     );
 }
 
-function VoteRow({ vote }: { vote: Vote }) {
-    const ended = vote.closed || new Date(vote.endsAt).getTime() <= Date.now();
-    return (
-        <Card style={styles.row}>
-            <Text style={[textStyles.caption, styles.meta]}>
-                {ended ? "Завершено" : "Идёт"} ·{" "}
-                {vote.visibility === "open" ? "открытое" : "тайное"} ·{" "}
-                {voteSourceLine(vote)}
-            </Text>
-            <Text style={[textStyles.subtitle, styles.title]}>{vote.topic}</Text>
-            <Text style={[textStyles.caption, styles.category]}>
-                {vote.createdByLabel}
-            </Text>
-        </Card>
-    );
-}
-
-const adCatRu: Record<NeighborAd["category"], string> = {
-    sell: "Продаю",
-    buy: "Ищу",
-    lost: "Потеряно",
-    found: "Найдено",
-    service: "Услуга",
-    invite: "Приглашаю",
-    other: "Другое",
-};
-
-function AdRow({ ad }: { ad: NeighborAd }) {
-    return (
-        <Card style={styles.row}>
-            <Text style={[textStyles.caption, styles.meta]}>
-                {adCatRu[ad.category]}
-                {ad.pendingModeration ? " · на проверке УК" : ""}
-            </Text>
-            <Text style={[textStyles.subtitle, styles.title]}>{ad.title}</Text>
-            <Text style={[textStyles.caption, styles.category]} numberOfLines={2}>
-                {ad.body}
-            </Text>
-        </Card>
-    );
-}
-
-function formatDate(iso: string) {
-    try {
-        return new Date(iso).toLocaleDateString("ru-RU", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-        });
-    } catch {
-        return iso;
-    }
-}
-
 const styles = StyleSheet.create({
-    // Важно: не даём горизонтальному ScrollView "растягиваться" по высоте,
-    // иначе он съедает пространство и список визуально уезжает вниз.
     flex: { flex: 1, gap: 0 },
     tabsBar: { marginBottom: spacing.md },
     tabsScroll: { flexGrow: 0, flexShrink: 0 },
-    filterRow: {
-        flexDirection: "row",
-        gap: spacing.sm,
-        flexGrow: 0,
-        alignItems: "center",
-    },
+    filterRow: { flexDirection: "row", gap: spacing.sm, flexGrow: 0, alignItems: "center" },
     tab: {
         paddingHorizontal: spacing.lg,
         paddingVertical: spacing.sm,
@@ -315,35 +278,43 @@ const styles = StyleSheet.create({
         backgroundColor: colors.surface,
         alignSelf: "flex-start",
     },
-    tabOn: {
-        borderColor: colors.primary,
-        backgroundColor: colors.primarySoft,
-    },
+    tabOn: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
     tabText: { color: colors.textMuted },
     tabTextOn: { color: colors.primary, fontWeight: "600" },
     content: { flex: 1 },
     profileButton: { marginTop: spacing.xs },
     profileButtonPressed: { opacity: 0.6 },
     list: { gap: spacing.md, paddingBottom: spacing.xxxl * 2 },
-    row: { gap: spacing.sm },
-    rowTop: {
+    empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.xl },
+    // Feed-style cards
+    feedCard: { gap: spacing.xs },
+    cardPersonal: { borderLeftWidth: 3, borderLeftColor: colors.info },
+    cardAppeal: { borderLeftWidth: 3, borderLeftColor: colors.warning },
+    cardVote: { borderLeftWidth: 3, borderLeftColor: colors.accent },
+    cardAd: { borderLeftWidth: 3, borderLeftColor: colors.primary },
+    cardTop: {
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
+        marginBottom: spacing.sm,
     },
-    badges: {
+    typeBadge: { paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: 6 },
+    typeBadgeText: { fontSize: 11, fontWeight: "600" },
+    badgePersonal: { backgroundColor: "rgba(91, 159, 212, 0.15)" },
+    badgeAppeal: { backgroundColor: "rgba(232, 162, 61, 0.12)" },
+    badgeVote: { backgroundColor: "rgba(212, 168, 83, 0.12)" },
+    badgeAd: { backgroundColor: "rgba(61, 158, 122, 0.12)" },
+    cardDate: { color: colors.textDim, fontSize: 12 },
+    feedTitle: { color: colors.text, fontSize: 15, fontWeight: "600" },
+    cardBottom: {
         flexDirection: "row",
+        alignItems: "center",
         flexWrap: "wrap",
         gap: spacing.sm,
-        flex: 1,
-        alignItems: "center",
+        marginTop: spacing.sm,
     },
-    colBadge: { color: colors.info, fontWeight: "600" },
-    date: { color: colors.textDim },
-    title: { color: colors.text },
-    category: { color: colors.textMuted },
-    meta: { color: colors.textDim },
-    empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.xl },
+    cardMeta: { color: colors.textMuted, fontSize: 13 },
+    statusDot: { width: 6, height: 6, borderRadius: 3 },
     fab: {
         position: "absolute",
         right: spacing.lg,

@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { CommunityScreenProps } from "../../navigation/types";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigation } from "@react-navigation/native";
 
 function useModalBack() {
@@ -9,6 +9,7 @@ function useModalBack() {
     const isModal = parentRouteNames?.includes("Main");
     return () => isModal ? nav.getParent()?.goBack() : nav.goBack();
 }
+
 import {
     Alert,
     Image,
@@ -24,23 +25,43 @@ import { colors, radius, spacing, textStyles } from "../../theme";
 
 type Props = CommunityScreenProps<"NeighborAdDetail">;
 
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+function formatTimeLeft(ms: number): string {
+    if (ms <= 0) return "Истёк";
+    const totalMin = Math.floor(ms / 60_000);
+    const days = Math.floor(totalMin / (60 * 24));
+    const hours = Math.floor((totalMin % (60 * 24)) / 60);
+    const mins = totalMin % 60;
+    if (days > 0) return `${days} дн. ${hours} ч.`;
+    if (hours > 0) return `${hours} ч. ${mins} мин.`;
+    return `${mins} мин.`;
+}
+
 export function NeighborAdDetailScreen({ route, navigation }: Props) {
     const goBack = useModalBack();
-    const { neighborAds, user, reportNeighborAd, extendNeighborAd, deleteNeighborAd } =
-        useApp();
+    const { neighborAds, user, reportNeighborAd, extendNeighborAd, deleteNeighborAd } = useApp();
     const ad = neighborAds.find((a) => a.id === route.params.id);
+    const [tick, setTick] = useState(0);
+
+    useEffect(() => {
+        const t = setInterval(() => setTick((x) => x + 1), 60_000);
+        return () => clearInterval(t);
+    }, []);
+    void tick;
 
     if (!ad) {
         return (
             <ScreenLayout title="Объявление" onBack={goBack}>
-                <Text style={[textStyles.body, styles.miss]}>
-                    Объявление не найдено
-                </Text>
+                <Text style={[textStyles.body, styles.miss]}>Объявление не найдено</Text>
             </ScreenLayout>
         );
     }
 
     const isAuthor = String(user?.id) === String(ad.authorUserId);
+    const msLeft = new Date(ad.expiresAt).getTime() - Date.now();
+    const expired = msLeft <= 0;
+    const canExtend = isAuthor && msLeft <= WEEK_MS;
 
     const onCall = () => {
         if (!ad.showPhone) {
@@ -58,35 +79,31 @@ export function NeighborAdDetailScreen({ route, navigation }: Props) {
 
     const onReport = () => {
         if (isAuthor) return;
-        Alert.alert(
-            "Жалоба",
-            "Отправить объявление на проверку УК?",
-            [
-                { text: "Отмена", style: "cancel" },
-                {
-                    text: "Отправить",
-                    onPress: () => reportNeighborAd(ad.id),
-                },
-            ],
-        );
+        Alert.alert("Жалоба", "Отправить объявление на проверку УК?", [
+            { text: "Отмена", style: "cancel" },
+            { text: "Отправить", onPress: () => reportNeighborAd(ad.id) },
+        ]);
     };
 
     return (
-        <ScreenLayout
-            title="Объявление"
-            scroll
-            onBack={goBack}
-        >
+        <ScreenLayout title="Объявление" scroll onBack={goBack}>
             <Card>
                 {ad.pendingModeration && (
-                    <Text style={[textStyles.caption, styles.mod]}>
-                        На проверке УК после жалобы
-                    </Text>
+                    <Text style={[textStyles.caption, styles.mod]}>На проверке УК после жалобы</Text>
                 )}
-                {ad.archived && (
-                    <Text style={[textStyles.caption, styles.arch]}>
-                        В архиве (истёк срок 30 дней)
-                    </Text>
+                {ad.archived ? (
+                    <Text style={[textStyles.caption, styles.arch]}>В архиве (истёк срок 30 дней)</Text>
+                ) : (
+                    <View style={styles.timerRow}>
+                        <Ionicons
+                            name="time-outline"
+                            size={14}
+                            color={expired ? colors.danger : msLeft <= WEEK_MS ? colors.warning : colors.textDim}
+                        />
+                        <Text style={[textStyles.caption, expired ? styles.timerExpired : msLeft <= WEEK_MS ? styles.timerWarn : styles.timerOk]}>
+                            {expired ? "Истёк" : `Осталось: ${formatTimeLeft(msLeft)}`}
+                        </Text>
+                    </View>
                 )}
                 <Text style={[textStyles.title, styles.title]}>{ad.title}</Text>
                 <Text style={[textStyles.body, styles.body]}>{ad.body}</Text>
@@ -111,12 +128,21 @@ export function NeighborAdDetailScreen({ route, navigation }: Props) {
 
             {isAuthor && (
                 <View style={styles.actions}>
-                    <Button
-                        title="Продлить на 30 дней"
-                        onPress={() => extendNeighborAd(ad.id)}
-                        variant="secondary"
-                    />
-                    <View style={styles.gap} />
+                    {canExtend && (
+                        <>
+                            <Button
+                                title="Продлить на 30 дней"
+                                onPress={() => extendNeighborAd(ad.id)}
+                                variant="secondary"
+                            />
+                            <View style={styles.gap} />
+                        </>
+                    )}
+                    {!canExtend && (
+                        <Text style={[textStyles.caption, styles.extendHint]}>
+                            Продление доступно за 7 дней до истечения
+                        </Text>
+                    )}
                     <View style={styles.iconRow}>
                         <Pressable
                             hitSlop={10}
@@ -155,6 +181,15 @@ const styles = StyleSheet.create({
     miss: { color: colors.textMuted },
     mod: { color: colors.warning, marginBottom: spacing.sm },
     arch: { color: colors.textDim, marginBottom: spacing.sm },
+    timerRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.xs,
+        marginBottom: spacing.sm,
+    },
+    timerOk: { color: colors.textDim },
+    timerWarn: { color: colors.warning },
+    timerExpired: { color: colors.danger },
     title: { color: colors.text },
     body: { color: colors.textMuted, marginTop: spacing.md, lineHeight: 22 },
     img: {
@@ -166,7 +201,12 @@ const styles = StyleSheet.create({
     },
     actions: { marginTop: spacing.lg },
     gap: { height: spacing.md },
-    iconRow: { flexDirection: "row", gap: spacing.md },
+    extendHint: { color: colors.textDim, marginBottom: spacing.md },
+    iconRow: {
+        flexDirection: "row",
+        gap: spacing.md,
+        alignSelf: "flex-end",
+    },
     iconBtn: {
         width: 46, height: 46, borderRadius: 23,
         alignItems: "center", justifyContent: "center",
@@ -183,7 +223,6 @@ const styles = StyleSheet.create({
         borderWidth: 1, borderColor: "#f08b8b",
     },
     iconBtnPressed: { opacity: 0.9, transform: [{ scale: 0.98 }] },
-    hint: { color: colors.textDim },
     reportWrap: { alignItems: "center" },
     report: { color: colors.danger, textDecorationLine: "underline" },
 });

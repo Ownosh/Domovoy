@@ -3,7 +3,7 @@ import { useNavigation } from "@react-navigation/native";
 import React, { useEffect, useMemo, useState } from "react";
 import {
     Alert,
-    Image,
+    Image as RNImage,
     Modal,
     Pressable,
     ScrollView,
@@ -13,10 +13,15 @@ import {
 } from "react-native";
 import { Button, Card, Input, ScreenLayout } from "../../components/ui";
 import {
-    houseCalendarActivities,
-    housePassport,
-    trashPickupSchedule,
-} from "../../data/mockData";
+    apiFetchBuildingInfo,
+    apiFetchBuildingPhotos,
+    apiFetchBuildingSpecs,
+    apiFetchBuildingCalendar,
+    apiFetchBuildingSchedule,
+    type BuildingInfo,
+    type BuildingSpec,
+    type HouseScheduleItem,
+} from "../../api/buildings";
 import { useApp } from "../../context/AppContext";
 import type { MainTabNavigationProp } from "../../navigation/types";
 import type {
@@ -106,9 +111,24 @@ function monthLabelRu(d: Date): string {
 
 export function HousePassportScreen() {
     const navigation = useNavigation<MainTabNavigationProp>();
-    const h = housePassport;
-    const { environmentRating, setEnvironmentRating } = useApp();
+    const { environmentRating, setEnvironmentRating, isAuthenticated } = useApp();
+    const [buildingInfo, setBuildingInfo] = React.useState<BuildingInfo | null>(null);
+    const [calendarActivities, setCalendarActivities] = useState<HouseCalendarActivity[]>([]);
+    const [photos, setPhotos] = useState<string[]>([]);
+    const [specs, setSpecs] = useState<BuildingSpec[]>([]);
+    const [scheduleItems, setScheduleItems] = useState<HouseScheduleItem[]>([]);
     const [tab, setTab] = useState<HouseTab>("calendar");
+
+    useEffect(() => {
+        if (!isAuthenticated) return;
+        apiFetchBuildingInfo().then(setBuildingInfo).catch(() => {});
+        apiFetchBuildingPhotos().then(setPhotos).catch(() => {});
+        apiFetchBuildingSpecs().then(setSpecs).catch(() => {});
+        apiFetchBuildingSchedule().then(setScheduleItems).catch(() => {});
+        apiFetchBuildingCalendar("2020-01", "2030-12")
+            .then(setCalendarActivities)
+            .catch(() => {});
+    }, [isAuthenticated]);
     const [viewMonth, setViewMonth] = useState(() => startOfMonth(new Date()));
     const [ratingOpen, setRatingOpen] = useState(false);
     const [courtyard, setCourtyard] = useState<1 | 2 | 3 | 4 | 5>(4);
@@ -149,22 +169,22 @@ export function HousePassportScreen() {
 
     const activitiesThisMonth = useMemo(
         () =>
-            houseCalendarActivities
-                .filter((a) => a.date.startsWith(monthPrefix))
-                .sort((a, b) => a.date.localeCompare(b.date)),
-        [monthPrefix],
+            calendarActivities
+                .filter((a: HouseCalendarActivity) => a.date.startsWith(monthPrefix))
+                .sort((a: HouseCalendarActivity, b: HouseCalendarActivity) => a.date.localeCompare(b.date)),
+        [monthPrefix, calendarActivities],
     );
 
     const byDate = useMemo(() => {
         const map = new Map<string, HouseCalendarActivity[]>();
-        for (const a of houseCalendarActivities) {
+        for (const a of calendarActivities) {
             if (!a.date.startsWith(monthPrefix)) continue;
             const list = map.get(a.date) ?? [];
             list.push(a);
             map.set(a.date, list);
         }
         return map;
-    }, [monthPrefix]);
+    }, [monthPrefix, calendarActivities]);
 
     const minStars = Math.min(courtyard, entrance, ukStars);
     const needsNegativeDetail = minStars <= 3;
@@ -355,7 +375,7 @@ export function HousePassportScreen() {
                                                 <View
                                                     style={[
                                                         styles.agendaDot,
-                                                        { backgroundColor: ACTIVITY_DOT[a.kind] },
+                                                        { backgroundColor: ACTIVITY_DOT[a.kind as HouseCalendarActivityKind] },
                                                     ]}
                                                 />
                                                 <View style={styles.agendaText}>
@@ -372,7 +392,7 @@ export function HousePassportScreen() {
                                                     <Text
                                                         style={[textStyles.caption, styles.agendaKind]}
                                                     >
-                                                        {ACTIVITY_LABEL[a.kind]}
+                                                        {ACTIVITY_LABEL[a.kind as HouseCalendarActivityKind]}
                                                     </Text>
                                                 </View>
                                             </View>
@@ -404,66 +424,77 @@ export function HousePassportScreen() {
 
             {tab === "passport" ? (
                 <>
-                    <Card>
-                        <Text style={[textStyles.subtitle, styles.addr]}>{h.address}</Text>
-                        <View style={styles.stats}>
-                            <View style={styles.stat}>
-                                <Text style={[textStyles.caption, styles.statLabel]}>
-                                    Год ввода
+                    {!buildingInfo ? (
+                        <Text style={[textStyles.caption, styles.addr]}>Загрузка данных дома…</Text>
+                    ) : (
+                        <>
+                            <Card>
+                                <Text style={[textStyles.subtitle, styles.addr]}>
+                                    {buildingInfo.address || buildingInfo.shortName}
                                 </Text>
-                                <Text style={[textStyles.title, styles.statVal]}>
-                                    {h.yearBuilt}
-                                </Text>
-                            </View>
-                            <View style={styles.stat}>
-                                <Text style={[textStyles.caption, styles.statLabel]}>
-                                    Подъезды
-                                </Text>
-                                <Text style={[textStyles.title, styles.statVal]}>
-                                    {h.entrances}
-                                </Text>
-                            </View>
-                            <View style={styles.stat}>
-                                <Text style={[textStyles.caption, styles.statLabel]}>
-                                    Квартиры
-                                </Text>
-                                <Text style={[textStyles.title, styles.statVal]}>
-                                    {h.apartments}
-                                </Text>
-                            </View>
-                        </View>
-                    </Card>
+                                {buildingInfo.city ? (
+                                    <Text style={[textStyles.caption, { color: colors.textDim, marginTop: 2 }]}>
+                                        {buildingInfo.city}
+                                    </Text>
+                                ) : null}
+                                <View style={styles.stats}>
+                                    <View style={styles.stat}>
+                                        <Text style={[textStyles.caption, styles.statLabel]}>Год ввода</Text>
+                                        <Text style={[textStyles.title, styles.statVal]}>
+                                            {buildingInfo.yearBuilt ?? "—"}
+                                        </Text>
+                                    </View>
+                                    <View style={styles.stat}>
+                                        <Text style={[textStyles.caption, styles.statLabel]}>Подъезды</Text>
+                                        <Text style={[textStyles.title, styles.statVal]}>
+                                            {buildingInfo.entrances ?? "—"}
+                                        </Text>
+                                    </View>
+                                    <View style={styles.stat}>
+                                        <Text style={[textStyles.caption, styles.statLabel]}>Квартиры</Text>
+                                        <Text style={[textStyles.title, styles.statVal]}>
+                                            {buildingInfo.apartments ?? "—"}
+                                        </Text>
+                                    </View>
+                                </View>
+                            </Card>
 
-                    <Text style={[textStyles.label, styles.sectionFirst]}>Фотографии</Text>
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.photos}
-                    >
-                        {h.photoUrls.map((uri, i) => (
-                            <Image key={uri + i} source={{ uri }} style={styles.photo} />
-                        ))}
-                    </ScrollView>
+                            {photos.length > 0 && (
+                                <>
+                                    <Text style={[textStyles.label, styles.sectionFirst]}>Фотографии</Text>
+                                    <ScrollView
+                                        horizontal
+                                        showsHorizontalScrollIndicator={false}
+                                        contentContainerStyle={styles.photos}
+                                    >
+                                        {photos.map((uri, i) => (
+                                            <RNImage key={uri + i} source={{ uri }} style={styles.photo} />
+                                        ))}
+                                    </ScrollView>
+                                </>
+                            )}
 
-                    <Text style={[textStyles.label, styles.section]}>Характеристики</Text>
-                    <Card padded={false}>
-                        {h.specs.map((row, idx) => (
-                            <View
-                                key={row.label}
-                                style={[
-                                    styles.specRow,
-                                    idx < h.specs.length - 1 && styles.specBorder,
-                                ]}
-                            >
-                                <Text style={[textStyles.caption, styles.specLabel]}>
-                                    {row.label}
-                                </Text>
-                                <Text style={[textStyles.body, styles.specVal]}>
-                                    {row.value}
-                                </Text>
-                            </View>
-                        ))}
-                    </Card>
+                            {specs.length > 0 && (
+                                <>
+                                    <Text style={[textStyles.label, styles.section]}>Характеристики</Text>
+                                    <Card padded={false}>
+                                        {specs.map((row, idx) => (
+                                            <View
+                                                key={row.label}
+                                                style={[
+                                                    styles.specRow,
+                                                    idx < specs.length - 1 && styles.specBorder,
+                                                ]}
+                                            >
+                                                <Text style={[textStyles.caption, styles.specLabel]}>{row.label}</Text>
+                                                <Text style={[textStyles.body, styles.specVal]}>{row.value}</Text>
+                                            </View>
+                                        ))}
+                                    </Card>
+                                </>
+                            )}
+                        </>
+                    )}
                 </>
             ) : null}
 
@@ -472,7 +503,7 @@ export function HousePassportScreen() {
                     <Text style={[textStyles.label, styles.sectionFirst]}>
                         Расписание уборки и вывоза мусора
                     </Text>
-                    {trashPickupSchedule.map((row) => (
+                    {scheduleItems.map((row) => (
                         <Card key={row.id} style={styles.trashCard}>
                             <Text style={[textStyles.subtitle, styles.trashTitle]}>
                                 {row.title}
@@ -672,7 +703,7 @@ function DayEventsModal({
                                     <View
                                         style={[
                                             styles.modalEventDot,
-                                            { backgroundColor: ACTIVITY_DOT[a.kind] },
+                                            { backgroundColor: ACTIVITY_DOT[a.kind as HouseCalendarActivityKind] },
                                         ]}
                                     />
                                     <View style={styles.modalEventText}>
@@ -682,7 +713,7 @@ function DayEventsModal({
                                         <Text
                                             style={[textStyles.caption, styles.modalEventKind]}
                                         >
-                                            {ACTIVITY_LABEL[a.kind]}
+                                            {ACTIVITY_LABEL[a.kind as HouseCalendarActivityKind]}
                                         </Text>
                                     </View>
                                 </View>
@@ -751,7 +782,7 @@ function MonthGrid({
                                     key={a.id}
                                     style={[
                                         styles.miniDot,
-                                        { backgroundColor: ACTIVITY_DOT[a.kind] },
+                                        { backgroundColor: ACTIVITY_DOT[a.kind as HouseCalendarActivityKind] },
                                     ]}
                                 />
                             ))}

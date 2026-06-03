@@ -22,6 +22,7 @@ export type CommunityStackParamList = {
     VoteCreateInfo: undefined;
     VoteNew: { editId?: string } | undefined;
     AppealDetail: { id: string };
+    AppealNew: { defaultKind?: "personal" | "collective"; editId?: string } | undefined;
 };
 
 export type AuthenticatedRootParamList = {

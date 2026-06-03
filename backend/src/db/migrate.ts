@@ -220,5 +220,73 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS house_specs (
+            id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            building_key VARCHAR(120)    NOT NULL,
+            label        VARCHAR(255)    NOT NULL,
+            value        TEXT            NOT NULL,
+            position     INT             NOT NULL DEFAULT 0,
+            PRIMARY KEY (id),
+            INDEX idx_hs_building_position (building_key, position)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS house_photos (
+            id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            building_key VARCHAR(120)    NOT NULL,
+            image_url    VARCHAR(500)    NOT NULL,
+            position     INT             NOT NULL DEFAULT 0,
+            PRIMARY KEY (id),
+            INDEX idx_hph_building_position (building_key, position)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS house_calendar_activities (
+            id            BIGINT UNSIGNED                                            NOT NULL AUTO_INCREMENT,
+            building_key  VARCHAR(120)                                               NOT NULL,
+            activity_date DATE                                                       NOT NULL,
+            title         VARCHAR(500)                                               NOT NULL,
+            kind          ENUM('yard','pipes','meeting','heating','garbage','other') NOT NULL DEFAULT 'other',
+            created_at    DATETIME                                                   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            INDEX idx_hca_building_date (building_key, activity_date)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS trash_pickup_schedule (
+            id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            building_key VARCHAR(120)    NOT NULL,
+            title        VARCHAR(255)    NOT NULL,
+            schedule     VARCHAR(255)    NOT NULL,
+            note         TEXT            DEFAULT NULL,
+            position     INT             NOT NULL DEFAULT 0,
+            PRIMARY KEY (id),
+            INDEX idx_tps_building_position (building_key, position)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS environment_ratings (
+            id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            user_id         BIGINT UNSIGNED NOT NULL,
+            building_key    VARCHAR(120)    NOT NULL,
+            month_key       CHAR(7)         NOT NULL,
+            courtyard_stars TINYINT         NOT NULL,
+            entrance_stars  TINYINT         NOT NULL,
+            uk_stars        TINYINT         NOT NULL,
+            feedback_tags   JSON            DEFAULT NULL,
+            feedback_other  TEXT            DEFAULT NULL,
+            submitted_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_er_user_month (user_id, month_key),
+            CONSTRAINT fk_er_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_er_building_month (building_key, month_key DESC)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
     console.log("Migration complete");
 }

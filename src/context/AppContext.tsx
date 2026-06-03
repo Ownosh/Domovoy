@@ -5,6 +5,7 @@ import { apiFetchVotes, apiCreateVote, apiCastVote, apiEditVote, apiDeleteVote }
 import { apiFetchNeighborAds, apiCreateNeighborAd, apiDeleteNeighborAd, apiExtendNeighborAd, apiReportNeighborAd, apiEditNeighborAd } from "../api/neighborAds";
 import { apiFetchAppeals, apiCreateAppeal, apiJoinAppeal, apiDeleteAppeal, apiEditAppeal } from "../api/appeals";
 import { clearTokens, ApiError } from "../api/client";
+import { apiSubmitRating, apiFetchMyRating } from "../api/ratings";
 import React, {
     createContext,
     useCallback,
@@ -705,6 +706,7 @@ type AppContextValue = {
         category: NeighborAdCategory;
         imageUrl?: string;
         showPhone: boolean;
+        authorPhone?: string;
     }) => Promise<{ ok: true } | { ok: false; reason: string }>;
     extendNeighborAd: (id: string) => void;
     deleteNeighborAd: (id: string) => void;
@@ -785,6 +787,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         apiFetchAppeals()
             .then((list) => { dispatch({ type: "SET_APPEALS", payload: list }); })
             .catch((err) => { console.warn("[appeals] fetch failed:", err); onUnauthorized(err); });
+        apiFetchMyRating()
+            .then((r) => { if (r) dispatch({ type: "SET_ENVIRONMENT_RATING", payload: r }); })
+            .catch(() => {});
     }, [state.sessionActive, state.account?.user.id]);
 
     useEffect(() => {
@@ -1008,6 +1013,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             category: NeighborAdCategory;
             imageUrl?: string;
             showPhone: boolean;
+            authorPhone?: string;
         }): Promise<{ ok: true } | { ok: false; reason: string }> => {
             if (!state.account?.user) {
                 return { ok: false, reason: "Войдите в аккаунт" };
@@ -1025,9 +1031,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     category: input.category,
                     imageUrl: input.imageUrl,
                     showPhone: input.showPhone,
-                    authorPhone: input.showPhone
-                        ? state.account.profile.phone.trim()
-                        : undefined,
+                    authorPhone: input.showPhone ? (input.authorPhone?.trim() || undefined) : undefined,
                 });
                 dispatch({
                     type: "ADD_NEIGHBOR_AD",
@@ -1214,18 +1218,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ALLOWED_RATING_FEEDBACK_TAGS.includes(id),
         );
         const otherTrim = input.feedbackOther?.trim();
-        dispatch({
-            type: "SET_ENVIRONMENT_RATING",
-            payload: {
-                courtyardStars: input.courtyardStars,
-                entranceStars: input.entranceStars,
-                ukStars: input.ukStars,
-                monthKey,
-                feedbackTagIds: tags && tags.length > 0 ? tags : undefined,
-                feedbackOther: otherTrim && otherTrim.length > 0 ? otherTrim : undefined,
-                submittedAt: now.toISOString(),
-            },
-        });
+        const snapshot = {
+            courtyardStars: input.courtyardStars,
+            entranceStars: input.entranceStars,
+            ukStars: input.ukStars,
+            monthKey,
+            feedbackTagIds: tags && tags.length > 0 ? tags : undefined,
+            feedbackOther: otherTrim && otherTrim.length > 0 ? otherTrim : undefined,
+            submittedAt: now.toISOString(),
+        };
+        dispatch({ type: "SET_ENVIRONMENT_RATING", payload: snapshot });
+        apiSubmitRating({
+            monthKey,
+            courtyardStars: input.courtyardStars,
+            entranceStars: input.entranceStars,
+            ukStars: input.ukStars,
+            feedbackTagIds: tags && tags.length > 0 ? (tags as string[]) : undefined,
+            feedbackOther: otherTrim && otherTrim.length > 0 ? otherTrim : undefined,
+        }).catch(() => {});
     }, []);
 
     const visibleNotifications = useMemo(() => {

@@ -22,7 +22,6 @@ import type {
 import type { Appeal, NeighborAd, NewsItem, Vote } from "../../types";
 import { buildBuildingKey } from "../../utils/buildingKey";
 import { isArchivedAppeal } from "../../utils/appeals";
-import { voteSourceLine } from "../../utils/voteSponsor";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { colors, radius, spacing, textStyles } from "../../theme";
 
@@ -420,25 +419,14 @@ export function HomeScreen() {
                     ) : (
                         visibleFeed.map((row) => {
                             if (row.kind === "news") {
-                                return (
-                                    <FeedNewsRow
-                                        key={row.key}
-                                        item={row.item}
-                                        showRibbon={feedFilter === "all"}
-                                    />
-                                );
+                                return <FeedNewsRow key={row.key} item={row.item} />;
                             }
                             if (row.kind === "vote") {
                                 return (
                                     <FeedVoteRow
                                         key={row.key}
                                         vote={row.item}
-                                        showRibbon={feedFilter === "all"}
-                                        onOpen={() =>
-                                            openCommunity("VoteDetail", {
-                                                id: String(row.item.id),
-                                            })
-                                        }
+                                        onOpen={() => openCommunity("VoteDetail", { id: String(row.item.id) })}
                                     />
                                 );
                             }
@@ -447,12 +435,7 @@ export function HomeScreen() {
                                     <FeedAppealRow
                                         key={row.key}
                                         appeal={row.item}
-                                        showRibbon={feedFilter === "all"}
-                                        onOpen={() =>
-                                            openCommunity("AppealDetail", {
-                                                id: String(row.item.id),
-                                            })
-                                        }
+                                        onOpen={() => openCommunity("AppealDetail", { id: String(row.item.id) })}
                                     />
                                 );
                             }
@@ -460,12 +443,7 @@ export function HomeScreen() {
                                 <FeedAdRow
                                     key={row.key}
                                     ad={row.item}
-                                    showRibbon={feedFilter === "all"}
-                                    onOpen={() =>
-                                        openCommunity("NeighborAdDetail", {
-                                            id: String(row.item.id),
-                                        })
-                                    }
+                                    onOpen={() => openCommunity("NeighborAdDetail", { id: String(row.item.id) })}
                                 />
                             );
                         })
@@ -615,27 +593,26 @@ function NewsImage({
     return img;
 }
 
-function FeedNewsRow({ item, showRibbon }: { item: NewsItem; showRibbon?: boolean }) {
+function FeedNewsRow({ item }: { item: NewsItem }) {
     const multi = item.imageUrls.length > 1;
     const [viewerVisible, setViewerVisible] = useState(false);
     const [viewerIndex, setViewerIndex] = useState(0);
-
-    const openViewer = (i: number) => {
-        setViewerIndex(i);
-        setViewerVisible(true);
-    };
+    const openViewer = (i: number) => { setViewerIndex(i); setViewerVisible(true); };
 
     return (
-        <Card style={styles.newsCard} padded>
+        <Card style={[styles.feedCard, styles.feedCardNews]} padded>
             <PhotoViewer
                 urls={item.imageUrls}
                 initialIndex={viewerIndex}
                 visible={viewerVisible}
                 onClose={() => setViewerVisible(false)}
             />
-            {showRibbon ? (
-                <Text style={[textStyles.caption, styles.ribbon]}>Новости УК</Text>
-            ) : null}
+            <View style={styles.cardTop}>
+                <View style={[styles.typeBadge, styles.typeBadgeNews]}>
+                    <Text style={[styles.typeBadgeText, { color: colors.info }]}>Новости УК</Text>
+                </View>
+                <Text style={styles.cardDate}>{item.date}</Text>
+            </View>
             {item.imageUrls.length > 0 ? (
                 multi ? (
                     <ScrollView
@@ -646,121 +623,82 @@ function FeedNewsRow({ item, showRibbon }: { item: NewsItem; showRibbon?: boolea
                         nestedScrollEnabled
                     >
                         {item.imageUrls.map((url, i) => (
-                            <NewsImage
-                                key={i}
-                                uri={url}
-                                style={styles.newsImgThumb}
-                                onPress={() => openViewer(i)}
-                            />
+                            <NewsImage key={i} uri={url} style={styles.newsImgThumb} onPress={() => openViewer(i)} />
                         ))}
                     </ScrollView>
                 ) : (
-                    <NewsImage
-                        uri={item.imageUrls[0]}
-                        style={styles.newsImg}
-                        onPress={() => openViewer(0)}
-                    />
+                    <NewsImage uri={item.imageUrls[0]} style={styles.newsImg} onPress={() => openViewer(0)} />
                 )
             ) : null}
-            <Text style={[textStyles.caption, styles.newsDate]}>{item.date}</Text>
-            <Text style={[textStyles.subtitle, styles.newsTitle]}>{item.title}</Text>
-            <Text style={[textStyles.body, styles.newsExcerpt]}>{item.excerpt}</Text>
+            <Text style={[textStyles.subtitle, styles.feedTitle]}>{item.title}</Text>
+            <Text style={[textStyles.body, styles.feedExcerpt]}>{item.excerpt}</Text>
         </Card>
     );
 }
 
-function FeedAppealRow({
-    appeal,
-    onOpen,
-    showRibbon,
-}: {
-    appeal: Appeal;
-    onOpen: () => void;
-    showRibbon?: boolean;
-}) {
+function FeedAppealRow({ appeal, onOpen }: { appeal: Appeal; onOpen: () => void }) {
     return (
         <Pressable onPress={onOpen}>
-            <Card style={styles.feedCard} padded>
-                {showRibbon ? (
-                    <Text style={[textStyles.caption, styles.ribbon]}>
-                        Коллективное обращение
-                    </Text>
-                ) : null}
-                <View style={styles.appealTop}>
-                    <AppealStatusBadge status={appeal.status} />
-                    {appeal.entrance ? (
-                        <Text style={[textStyles.caption, styles.feedMeta]}>
-                            подъезд {appeal.entrance}
-                        </Text>
-                    ) : null}
+            <Card style={[styles.feedCard, styles.feedCardAppeal]} padded>
+                <View style={styles.cardTop}>
+                    <View style={[styles.typeBadge, styles.typeBadgeAppeal]}>
+                        <Text style={[styles.typeBadgeText, { color: colors.warning }]}>Коллективное обращение</Text>
+                    </View>
+                    <Text style={styles.cardDate}>{formatDate(appeal.createdAt)}</Text>
                 </View>
                 <Text style={[textStyles.subtitle, styles.feedTitle]}>{appeal.title}</Text>
-                <Text style={[textStyles.caption, styles.feedExcerpt]} numberOfLines={2}>
-                    {appeal.body}
-                </Text>
+                <Text style={[textStyles.caption, styles.feedExcerpt]} numberOfLines={2}>{appeal.body}</Text>
+                <View style={styles.cardBottom}>
+                    <AppealStatusBadge status={appeal.status} />
+                    {appeal.entrance ? (
+                        <Text style={styles.cardMeta}>подъезд {appeal.entrance}</Text>
+                    ) : null}
+                </View>
             </Card>
         </Pressable>
     );
 }
 
-function FeedVoteRow({
-    vote,
-    onOpen,
-    showRibbon,
-}: {
-    vote: Vote;
-    onOpen: () => void;
-    showRibbon?: boolean;
-}) {
-    const ended =
-        vote.closed || new Date(vote.endsAt).getTime() <= Date.now();
+function FeedVoteRow({ vote, onOpen }: { vote: Vote; onOpen: () => void }) {
+    const ended = vote.closed || new Date(vote.endsAt).getTime() <= Date.now();
     return (
         <Pressable onPress={onOpen}>
-            <Card style={styles.feedCard} padded>
-                {showRibbon ? (
-                    <Text style={[textStyles.caption, styles.ribbon]}>
-                        Голосование · {voteSourceLine(vote)}
-                    </Text>
-                ) : null}
-                <Text style={[textStyles.caption, styles.feedMeta]}>
-                    {ended ? "Завершено" : "Идёт"} ·{" "}
-                    {vote.visibility === "open" ? "открытое" : "тайное"}
-                    {!showRibbon ? ` · ${voteSourceLine(vote)}` : ""}
-                </Text>
+            <Card style={[styles.feedCard, styles.feedCardVote]} padded>
+                <View style={styles.cardTop}>
+                    <View style={[styles.typeBadge, styles.typeBadgeVote]}>
+                        <Text style={[styles.typeBadgeText, { color: colors.accent }]}>Голосование</Text>
+                    </View>
+                    <Text style={styles.cardDate}>{formatDate(vote.createdAt)}</Text>
+                </View>
                 <Text style={[textStyles.subtitle, styles.feedTitle]}>{vote.topic}</Text>
-                <Text style={[textStyles.caption, styles.feedExcerpt]}>
-                    {vote.createdByLabel}
-                </Text>
+                <View style={styles.cardBottom}>
+                    <View style={[styles.statusDot, { backgroundColor: ended ? colors.textDim : colors.primary }]} />
+                    <Text style={styles.cardMeta} numberOfLines={1}>
+                        {ended ? "Завершено" : "Активно"} · {vote.visibility === "open" ? "открытое" : "тайное"} · {vote.createdByLabel}
+                    </Text>
+                </View>
             </Card>
         </Pressable>
     );
 }
 
-function FeedAdRow({
-    ad,
-    onOpen,
-    showRibbon,
-}: {
-    ad: NeighborAd;
-    onOpen: () => void;
-    showRibbon?: boolean;
-}) {
+function FeedAdRow({ ad, onOpen }: { ad: NeighborAd; onOpen: () => void }) {
     return (
         <Pressable onPress={onOpen}>
-            <Card style={styles.feedCard} padded>
-                {showRibbon ? (
-                    <Text style={[textStyles.caption, styles.ribbon]}>
-                        Объявление соседа
-                    </Text>
-                ) : null}
-                <Text style={[textStyles.caption, styles.feedMeta]}>
-                    {adCatRu[ad.category]}
-                    {ad.pendingModeration ? " · на проверке УК" : ""}
-                </Text>
+            <Card style={[styles.feedCard, styles.feedCardAd]} padded>
+                <View style={styles.cardTop}>
+                    <View style={[styles.typeBadge, styles.typeBadgeAd]}>
+                        <Text style={[styles.typeBadgeText, { color: colors.primary }]}>
+                            {adCatRu[ad.category]}
+                        </Text>
+                    </View>
+                    <Text style={styles.cardDate}>{formatDate(ad.createdAt)}</Text>
+                </View>
                 <Text style={[textStyles.subtitle, styles.feedTitle]}>{ad.title}</Text>
-                <Text style={[textStyles.caption, styles.feedExcerpt]} numberOfLines={2}>
-                    {ad.body}
-                </Text>
+                <Text style={[textStyles.caption, styles.feedExcerpt]} numberOfLines={2}>{ad.body}</Text>
+                {ad.pendingModeration ? (
+                    <Text style={[styles.cardMeta, { color: colors.warning, marginTop: 4 }]}>на проверке УК</Text>
+                ) : null}
             </Card>
         </Pressable>
     );
@@ -786,6 +724,8 @@ const styles = StyleSheet.create({
     feedScroll: { flex: 1 },
     feedScrollContent: {
         paddingBottom: spacing.xxxl * 2,
+        paddingTop: spacing.sm,
+        gap: spacing.md,
     },
     fab: {
         position: "absolute",
@@ -924,7 +864,7 @@ const styles = StyleSheet.create({
     filterOffText: { color: colors.textMuted },
     ribbon: { color: colors.textDim, marginBottom: spacing.xs },
     empty: { color: colors.textMuted, paddingVertical: spacing.lg },
-    feedCard: { gap: spacing.xs, marginBottom: spacing.md },
+    feedCard: { gap: spacing.xs },
     feedMeta: { color: colors.textDim },
     feedTitle: { color: colors.text },
     feedExcerpt: { color: colors.textMuted },
@@ -937,7 +877,7 @@ const styles = StyleSheet.create({
     newsCard: { overflow: "hidden", marginBottom: spacing.md },
     newsImg: {
         width: "100%",
-        height: 140,
+        height: 200,
         borderRadius: radius.md,
         marginBottom: spacing.sm,
         backgroundColor: colors.border,
@@ -945,12 +885,43 @@ const styles = StyleSheet.create({
     newsImgScroll: { marginBottom: spacing.sm },
     newsImgScrollContent: { gap: spacing.sm },
     newsImgThumb: {
-        width: 220,
-        height: 140,
+        width: 260,
+        height: 180,
         borderRadius: radius.md,
         backgroundColor: colors.border,
     },
     newsDate: { color: colors.textDim },
     newsTitle: { color: colors.text, marginTop: spacing.xs },
     newsExcerpt: { color: colors.textMuted, marginTop: spacing.sm },
+    // Новые стили карточек ленты
+    feedCardNews: { borderLeftWidth: 3, borderLeftColor: colors.info, marginBottom: spacing.md },
+    feedCardVote: { borderLeftWidth: 3, borderLeftColor: colors.accent, marginBottom: spacing.md },
+    feedCardAppeal: { borderLeftWidth: 3, borderLeftColor: colors.warning, marginBottom: spacing.md },
+    feedCardAd: { borderLeftWidth: 3, borderLeftColor: colors.primary, marginBottom: spacing.md },
+    cardTop: {
+        flexDirection: "row" as const,
+        justifyContent: "space-between" as const,
+        alignItems: "center" as const,
+        marginBottom: spacing.sm,
+    },
+    typeBadge: {
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 3,
+        borderRadius: 6,
+    },
+    typeBadgeNews: { backgroundColor: "rgba(91, 159, 212, 0.15)" },
+    typeBadgeVote: { backgroundColor: "rgba(212, 168, 83, 0.12)" },
+    typeBadgeAppeal: { backgroundColor: "rgba(232, 162, 61, 0.12)" },
+    typeBadgeAd: { backgroundColor: "rgba(61, 158, 122, 0.12)" },
+    typeBadgeText: { fontSize: 11, fontWeight: "600" as const },
+    cardDate: { color: colors.textDim, fontSize: 12 },
+    cardBottom: {
+        flexDirection: "row" as const,
+        alignItems: "center" as const,
+        flexWrap: "wrap" as const,
+        gap: spacing.sm,
+        marginTop: spacing.sm,
+    },
+    cardMeta: { color: colors.textMuted, fontSize: 13 },
+    statusDot: { width: 6, height: 6, borderRadius: 3 },
 });

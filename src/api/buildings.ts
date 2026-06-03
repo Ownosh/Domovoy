@@ -1,5 +1,37 @@
 import { MOCK_BUILDINGS } from "../data/mockBuildings";
-import { BASE_URL } from "./client";
+import { BASE_URL, apiRequest } from "./client";
+
+export type BuildingInfo = {
+    buildingKey: string;
+    address: string;
+    shortName: string;
+    city: string;
+    yearBuilt: number | null;
+    entrances: number | null;
+    apartments: number | null;
+};
+
+export async function apiFetchBuildingInfo(): Promise<BuildingInfo> {
+    return apiRequest<BuildingInfo>("/buildings/info");
+}
+
+export async function apiFetchBuildingPhotos(): Promise<string[]> {
+    return apiRequest<string[]>("/buildings/photos");
+}
+
+export type BuildingSpec = { label: string; value: string };
+export async function apiFetchBuildingSpecs(): Promise<BuildingSpec[]> {
+    return apiRequest<BuildingSpec[]>("/buildings/specs");
+}
+
+export async function apiFetchBuildingCalendar(from: string, to: string): Promise<import("../types").HouseCalendarActivity[]> {
+    return apiRequest(`/buildings/calendar?from=${from}&to=${to}`);
+}
+
+export type HouseScheduleItem = { id: string; title: string; schedule: string; note?: string };
+export async function apiFetchBuildingSchedule(): Promise<HouseScheduleItem[]> {
+    return apiRequest<HouseScheduleItem[]>("/buildings/schedule");
+}
 
 export type BuildingSuggestion = {
     building_key: string;

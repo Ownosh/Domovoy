@@ -7,6 +7,7 @@ import { VoteCreateInfoScreen } from "../screens/community/VoteCreateInfoScreen"
 import { VoteDetailScreen } from "../screens/community/VoteDetailScreen";
 import { VoteNewScreen } from "../screens/community/VoteNewScreen";
 import { AppealDetailScreen } from "../screens/appeals/AppealDetailScreen";
+import { NewAppealScreen } from "../screens/appeals/NewAppealScreen";
 
 const Stack = createNativeStackNavigator<CommunityStackParamList>();
 
@@ -23,6 +24,7 @@ export function CommunityNavigator() {
             <Stack.Screen name="VoteCreateInfo" component={VoteCreateInfoScreen} />
             <Stack.Screen name="VoteNew" component={VoteNewScreen} />
             <Stack.Screen name="AppealDetail" component={AppealDetailScreen as any} />
+            <Stack.Screen name="AppealNew" component={NewAppealScreen as any} />
         </Stack.Navigator>
     );
 }

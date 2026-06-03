@@ -6,6 +6,7 @@ import {
     Image,
     Modal,
     Pressable,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
@@ -144,7 +145,10 @@ export function HomeScreen() {
         visibleNotifications,
         markNotificationRead,
         profile,
+        refreshFeed,
     } = useApp();
+
+    const onRefresh = useCallback(() => { void refreshFeed(); }, [refreshFeed]);
 
     const buildingKey = buildBuildingKey(profile.building);
 
@@ -392,6 +396,9 @@ export function HomeScreen() {
                     keyboardShouldPersistTaps="handled"
                     keyboardDismissMode="on-drag"
                     showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl refreshing={false} onRefresh={onRefresh} />
+                    }
                 >
                     <ScrollView
                         horizontal

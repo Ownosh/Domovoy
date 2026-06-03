@@ -698,6 +698,7 @@ type AppContextValue = {
     toggleNotificationPref: (key: keyof NotificationPrefs) => void;
     deleteAccount: () => void;
     setVerificationDemo: (status: "pending" | "approved" | "rejected") => void;
+    refreshFeed: () => Promise<void>;
     addNeighborAd: (input: {
         title: string;
         body: string;
@@ -977,6 +978,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const deleteAccount = useCallback(() => {
         dispatch({ type: "DELETE_ACCOUNT" });
         AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
+    }, []);
+
+    const refreshFeed = useCallback(async () => {
+        await Promise.all([
+            apiFetchNews()
+                .then((items) => dispatch({ type: "SET_NEWS", payload: items }))
+                .catch(() => {}),
+            apiFetchVotes()
+                .then((data) => dispatch({ type: "SET_VOTES", payload: data }))
+                .catch(() => {}),
+            apiFetchNeighborAds()
+                .then((ads) => dispatch({ type: "SET_NEIGHBOR_ADS", payload: ads }))
+                .catch(() => {}),
+            apiFetchAppeals()
+                .then((list) => dispatch({ type: "SET_APPEALS", payload: list }))
+                .catch(() => {}),
+        ]);
     }, []);
 
     const setVerificationDemo = useCallback(
@@ -1303,6 +1321,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             toggleNotificationPref,
             deleteAccount,
             setVerificationDemo,
+            refreshFeed,
             addNeighborAd,
             extendNeighborAd,
             deleteNeighborAd,
@@ -1345,6 +1364,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             toggleNotificationPref,
             deleteAccount,
             setVerificationDemo,
+            refreshFeed,
             addNeighborAd,
             extendNeighborAd,
             deleteNeighborAd,

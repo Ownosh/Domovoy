@@ -13,6 +13,7 @@ import neighborAdsRoutes from "./routes/neighborAds";
 import appealsRoutes from "./routes/appeals";
 import ratingsRoutes from "./routes/ratings";
 import districtRoutes from "./routes/district";
+import imagekitRoutes from "./routes/imagekit";
 
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
@@ -21,7 +22,7 @@ const PORT = process.env.PORT ?? 3001;
 
 app.use(helmet());
 app.use(cors({ origin: process.env.FRONTEND_URL ?? "*" }));
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -39,6 +40,7 @@ app.use("/api/neighbor-ads", neighborAdsRoutes);
 app.use("/api/appeals", appealsRoutes);
 app.use("/api/ratings", ratingsRoutes);
 app.use("/api/district", districtRoutes);
+app.use("/api/imagekit", imagekitRoutes);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 

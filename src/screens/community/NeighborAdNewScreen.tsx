@@ -1,12 +1,15 @@
 import type { CommunityScreenProps } from "../../navigation/types";
 import React, { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { Button, Card, Input, ScreenLayout } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
 import type { NeighborAdCategory } from "../../types";
 import { colors, radius, spacing, textStyles } from "../../theme";
 
 type Props = CommunityScreenProps<"NeighborAdNew">;
+
+const MAX_PHOTOS = 5;
 
 const categories: NeighborAdCategory[] = [
     "sell", "buy", "lost", "found", "service", "invite", "other",
@@ -22,6 +25,10 @@ const labels: Record<NeighborAdCategory, string> = {
     other: "Другое",
 };
 
+type PhotoItem =
+    | { kind: "existing"; uri: string }
+    | { kind: "new"; uri: string; base64: string };
+
 export function NeighborAdNewScreen({ navigation, route }: Props) {
     const { addNeighborAd, editNeighborAd, neighborAds, profile } = useApp();
     const editId = route?.params?.editId;
@@ -33,6 +40,9 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
     const [category, setCategory] = useState<NeighborAdCategory>(existing?.category ?? "sell");
     const [phone, setPhone] = useState(existing?.authorPhone ?? "");
     const [useProfilePhone, setUseProfilePhone] = useState(false);
+    const [photos, setPhotos] = useState<PhotoItem[]>(
+        () => (existing?.imageUrls ?? []).map((uri) => ({ kind: "existing" as const, uri })),
+    );
     const [err, setErr] = useState("");
     const [submitting, setSubmitting] = useState(false);
 
@@ -48,6 +58,40 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
         }
     }, [useProfilePhone, profile.phone]);
 
+    const pickPhoto = async () => {
+        if (photos.length >= MAX_PHOTOS) {
+            Alert.alert("Максимум фото", `Можно добавить не более ${MAX_PHOTOS} фото`);
+            return;
+        }
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+            Alert.alert("Нет доступа", "Разрешите доступ к галерее в настройках.");
+            return;
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images"],
+            allowsMultipleSelection: true,
+            selectionLimit: MAX_PHOTOS - photos.length,
+            allowsEditing: false,
+            quality: 0.7,
+            base64: true,
+        });
+        if (!result.canceled) {
+            const newItems: PhotoItem[] = result.assets
+                .filter((a) => a.base64)
+                .map((a) => ({
+                    kind: "new" as const,
+                    uri: a.uri,
+                    base64: `data:image/jpeg;base64,${a.base64!}`,
+                }));
+            setPhotos((prev) => [...prev, ...newItems].slice(0, MAX_PHOTOS));
+        }
+    };
+
+    const removePhoto = (index: number) => {
+        setPhotos((prev) => prev.filter((_, i) => i !== index));
+    };
+
     const submit = async () => {
         if (!title.trim() || !body.trim()) {
             setErr("Заполните заголовок и текст");
@@ -55,12 +99,16 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
         }
         const trimmedPhone = phone.trim();
         const showPhone = trimmedPhone.length > 0;
+
+        const imageUrls = photos.map((p) => (p.kind === "existing" ? p.uri : p.base64));
+
         setSubmitting(true);
         const r = editId
             ? await editNeighborAd(editId, {
                 title: title.trim(),
                 body: body.trim(),
                 category,
+                imageUrls,
                 showPhone,
                 authorPhone: showPhone ? trimmedPhone : undefined,
               })
@@ -68,6 +116,7 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
                 title: title.trim(),
                 body: body.trim(),
                 category,
+                imageUrls,
                 showPhone,
                 authorPhone: showPhone ? trimmedPhone : undefined,
               });
@@ -115,6 +164,25 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
                     style={styles.area}
                 />
                 <View style={styles.gap} />
+                <Text style={[textStyles.label, styles.photoLabel]}>
+                    Фото (необязательно, до {MAX_PHOTOS})
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoRow}>
+                    {photos.map((p, i) => (
+                        <View key={i} style={styles.thumbWrap}>
+                            <Image source={{ uri: p.kind === "existing" ? p.uri : p.base64 }} style={styles.thumb} />
+                            <Pressable onPress={() => removePhoto(i)} style={styles.removeBtn} hitSlop={6}>
+                                <Text style={styles.removeBtnText}>×</Text>
+                            </Pressable>
+                        </View>
+                    ))}
+                    {photos.length < MAX_PHOTOS && (
+                        <Pressable onPress={() => { void pickPhoto(); }} style={styles.addBtn}>
+                            <Text style={styles.addBtnText}>+</Text>
+                        </Pressable>
+                    )}
+                </ScrollView>
+                <View style={styles.gap} />
                 <Input
                     label="Телефон для связи (необязательно)"
                     value={phone}
@@ -146,6 +214,8 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
     );
 }
 
+const THUMB_SIZE = 90;
+
 const styles = StyleSheet.create({
     label: { color: colors.textMuted },
     chips: {
@@ -176,12 +246,36 @@ const styles = StyleSheet.create({
         marginTop: spacing.md,
     },
     checkbox: {
-        width: 20,
-        height: 20,
-        borderRadius: 5,
-        borderWidth: 2,
-        borderColor: colors.border,
+        width: 20, height: 20, borderRadius: 5,
+        borderWidth: 2, borderColor: colors.border,
     },
     checkboxOn: { borderColor: colors.primary, backgroundColor: colors.primary },
     rowText: { color: colors.textMuted },
+    photoLabel: { color: colors.textMuted, marginBottom: spacing.sm },
+    photoRow: { flexDirection: "row", marginBottom: spacing.xs },
+    thumbWrap: {
+        width: THUMB_SIZE, height: THUMB_SIZE,
+        marginRight: spacing.sm,
+        position: "relative",
+    },
+    thumb: {
+        width: THUMB_SIZE, height: THUMB_SIZE,
+        borderRadius: radius.md,
+        backgroundColor: colors.border,
+    },
+    removeBtn: {
+        position: "absolute", top: -6, right: -6,
+        width: 22, height: 22, borderRadius: 11,
+        backgroundColor: colors.danger,
+        alignItems: "center", justifyContent: "center",
+    },
+    removeBtnText: { color: colors.bg, fontSize: 16, lineHeight: 20, fontWeight: "700" },
+    addBtn: {
+        width: THUMB_SIZE, height: THUMB_SIZE,
+        borderRadius: radius.md,
+        borderWidth: 1, borderColor: colors.border, borderStyle: "dashed",
+        alignItems: "center", justifyContent: "center",
+        backgroundColor: colors.surface,
+    },
+    addBtnText: { color: colors.primary, fontSize: 32, lineHeight: 36 },
 });

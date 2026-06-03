@@ -15,6 +15,7 @@ import {
     Image,
     Linking,
     Pressable,
+    ScrollView,
     StyleSheet,
     Text,
     View,
@@ -107,9 +108,13 @@ export function NeighborAdDetailScreen({ route, navigation }: Props) {
                 )}
                 <Text style={[textStyles.title, styles.title]}>{ad.title}</Text>
                 <Text style={[textStyles.body, styles.body]}>{ad.body}</Text>
-                {ad.imageUrl ? (
-                    <Image source={{ uri: ad.imageUrl }} style={styles.img} />
-                ) : null}
+                {ad.imageUrls.length > 0 && (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imgRow}>
+                        {ad.imageUrls.map((uri, i) => (
+                            <Image key={i} source={{ uri }} style={styles.img} />
+                        ))}
+                    </ScrollView>
+                )}
             </Card>
 
             {!isAuthor && (
@@ -192,12 +197,15 @@ const styles = StyleSheet.create({
     timerExpired: { color: colors.danger },
     title: { color: colors.text },
     body: { color: colors.textMuted, marginTop: spacing.md, lineHeight: 22 },
-    img: {
+    imgRow: {
         marginTop: spacing.md,
-        width: "100%",
+    },
+    img: {
+        width: 260,
         height: 180,
         borderRadius: radius.md,
         backgroundColor: colors.border,
+        marginRight: spacing.sm,
     },
     actions: { marginTop: spacing.lg },
     gap: { height: spacing.md },

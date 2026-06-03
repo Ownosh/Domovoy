@@ -252,6 +252,7 @@ function reducer(state: AppState, action: Action): AppState {
                 authorApartment: action.payload.authorApartment,
                 participants: [],
                 escalatedToUk: false,
+                imageUrls: [],
             };
             return { ...state, appeals: [appeal, ...state.appeals] };
         }
@@ -447,6 +448,7 @@ function normalizeAppealRaw(a: Appeal | Record<string, unknown>): Appeal {
         authorApartment: String(r.authorApartment ?? ""),
         participants,
         escalatedToUk: Boolean(r.escalatedToUk),
+        imageUrls: Array.isArray(r.imageUrls) ? r.imageUrls : [],
     };
 }
 
@@ -471,7 +473,7 @@ function normalizeNeighborAdRaw(ad: NeighborAd | Record<string, unknown>): Neigh
         title: String(r.title ?? ""),
         body: String(r.body ?? ""),
         category,
-        imageUrl: r.imageUrl ? String(r.imageUrl) : undefined,
+        imageUrls: Array.isArray(r.imageUrls) ? r.imageUrls : [],
         showPhone: Boolean(r.showPhone),
         authorPhone: r.authorPhone ? String(r.authorPhone) : undefined,
         createdAt: String(r.createdAt ?? new Date().toISOString()),
@@ -688,13 +690,9 @@ type AppContextValue = {
         category: string;
         kind: AppealKind;
         entrance?: string;
+        imageUrls?: string[];
     }) => Promise<{ ok: true } | { ok: false; reason: string }>;
-    joinAppeal: (input: {
-        appealId: string;
-        comment?: string;
-        photoUri?: string;
-        anonymous: boolean;
-    }) => Promise<{ ok: true } | { ok: false; reason: string }>;
+    joinAppeal: (appealId: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
     deleteAppeal: (id: string) => void;
     markNotificationRead: (id: string) => void;
     toggleNotificationPref: (key: keyof NotificationPrefs) => void;
@@ -704,15 +702,15 @@ type AppContextValue = {
         title: string;
         body: string;
         category: NeighborAdCategory;
-        imageUrl?: string;
+        imageUrls?: string[];
         showPhone: boolean;
         authorPhone?: string;
     }) => Promise<{ ok: true } | { ok: false; reason: string }>;
     extendNeighborAd: (id: string) => void;
     deleteNeighborAd: (id: string) => void;
     reportNeighborAd: (id: string) => void;
-    editNeighborAd: (id: string, data: { title: string; body: string; category: NeighborAdCategory; showPhone: boolean; authorPhone?: string }) => Promise<{ ok: true } | { ok: false; reason: string }>;
-    editAppeal: (id: string, data: { title: string; body: string; category: string; entrance?: string }) => Promise<{ ok: true } | { ok: false; reason: string }>;
+    editNeighborAd: (id: string, data: { title: string; body: string; category: NeighborAdCategory; imageUrls?: string[]; showPhone: boolean; authorPhone?: string }) => Promise<{ ok: true } | { ok: false; reason: string }>;
+    editAppeal: (id: string, data: { title: string; body: string; category: string; entrance?: string; imageUrls?: string[] }) => Promise<{ ok: true } | { ok: false; reason: string }>;
     editVote: (id: string, data: { topic: string; description: string; visibility: string; optionLabels: string[] }) => Promise<{ ok: true } | { ok: false; reason: string }>;
     deleteVote: (id: string) => Promise<void>;
     castVote: (input: {
@@ -896,6 +894,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             category: string;
             kind: AppealKind;
             entrance?: string;
+            imageUrls?: string[];
         }): Promise<{ ok: true } | { ok: false; reason: string }> => {
             if (!state.account?.user) return { ok: false, reason: "Войдите в аккаунт" };
             try {
@@ -905,6 +904,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     category: input.category,
                     kind: input.kind,
                     entrance: input.entrance,
+                    imageUrls: input.imageUrls,
                 });
                 const updated = await apiFetchAppeals();
                 dispatch({ type: "SET_APPEALS", payload: updated });
@@ -917,12 +917,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
 
     const joinAppeal = useCallback(
-        async (input: {
-            appealId: string;
-            comment?: string;
-            photoUri?: string;
-            anonymous: boolean;
-        }): Promise<{ ok: true } | { ok: false; reason: string }> => {
+        async (appealId: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
             if (!state.account?.user) {
                 return { ok: false, reason: "Войдите в аккаунт" };
             }
@@ -932,25 +927,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     reason: "Присоединиться могут только верифицированные жильцы дома",
                 };
             }
-            const displayName = input.anonymous
-                ? "Анонимно"
-                : state.account.profile.name || "Жилец";
-            try {
-                await apiJoinAppeal(input.appealId, {
-                    anonymous: input.anonymous,
-                    comment: input.comment?.trim() || undefined,
-                    photoUri: input.photoUri,
-                    displayName,
+            const displayName = state.account.profile.name || "Жилец";
+            // Оптимистичный диспатч — UI обновляется немедленно
+            dispatch({
+                type: "JOIN_APPEAL",
+                payload: {
+                    appealId,
+                    participant: {
+                        userId: String(state.account.user.id),
+                        apartment: state.account.profile.apartment,
+                        entrance: state.account.profile.entrance != null
+                            ? String(state.account.profile.entrance) : undefined,
+                        displayName,
+                        anonymous: false,
+                        joinedAt: new Date().toISOString(),
+                    },
+                },
+            });
+            // Синхронизация с сервером в фоне
+            apiJoinAppeal(appealId, { anonymous: false, displayName })
+                .then(() => apiFetchAppeals())
+                .then((updated) => dispatch({ type: "SET_APPEALS", payload: updated }))
+                .catch(() => {
+                    apiFetchAppeals()
+                        .then((updated) => dispatch({ type: "SET_APPEALS", payload: updated }))
+                        .catch(() => {});
                 });
-                const updated = await apiFetchAppeals();
-                dispatch({ type: "SET_APPEALS", payload: updated });
-                return { ok: true };
-            } catch (e: any) {
-                const msg: string = e?.message ?? "Ошибка сервера";
-                if (msg.includes("уже присоединились")) return { ok: false, reason: "Вы уже присоединились" };
-                if (msg.includes("другого дома")) return { ok: false, reason: "Это обращение другого дома" };
-                return { ok: false, reason: msg };
-            }
+            return { ok: true };
         },
         [state.account, state.verification],
     );
@@ -1011,7 +1014,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             title: string;
             body: string;
             category: NeighborAdCategory;
-            imageUrl?: string;
+            imageUrls?: string[];
             showPhone: boolean;
             authorPhone?: string;
         }): Promise<{ ok: true } | { ok: false; reason: string }> => {
@@ -1029,7 +1032,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     title: input.title.trim(),
                     body: input.body.trim(),
                     category: input.category,
-                    imageUrl: input.imageUrl,
+                    imageUrls: input.imageUrls,
                     showPhone: input.showPhone,
                     authorPhone: input.showPhone ? (input.authorPhone?.trim() || undefined) : undefined,
                 });
@@ -1061,7 +1064,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const editNeighborAd = useCallback(
-        async (id: string, data: { title: string; body: string; category: NeighborAdCategory; showPhone: boolean; authorPhone?: string }): Promise<{ ok: true } | { ok: false; reason: string }> => {
+        async (id: string, data: { title: string; body: string; category: NeighborAdCategory; imageUrls?: string[]; showPhone: boolean; authorPhone?: string }): Promise<{ ok: true } | { ok: false; reason: string }> => {
             try {
                 const updated = await apiEditNeighborAd(id, data);
                 dispatch({ type: "SET_NEIGHBOR_ADS", payload: (await apiFetchNeighborAds()) });
@@ -1074,7 +1077,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
 
     const editAppeal = useCallback(
-        async (id: string, data: { title: string; body: string; category: string; entrance?: string }): Promise<{ ok: true } | { ok: false; reason: string }> => {
+        async (id: string, data: { title: string; body: string; category: string; entrance?: string; imageUrls?: string[] }): Promise<{ ok: true } | { ok: false; reason: string }> => {
             try {
                 await apiEditAppeal(id, data);
                 const list = await apiFetchAppeals();

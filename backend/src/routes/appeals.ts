@@ -20,7 +20,31 @@ async function getProfile(userId: number): Promise<{ buildingKey: string; apartm
     };
 }
 
-function mapAppealRow(v: RowDataPacket, parts: RowDataPacket[]): object {
+async function getAppealPhotos(appealIds: number[]): Promise<Record<number, string[]>> {
+    if (!appealIds.length) return {};
+    const [rows] = await pool.query<RowDataPacket[]>(
+        `SELECT appeal_id, image_url FROM appeal_photos WHERE appeal_id IN (?) ORDER BY appeal_id, position`,
+        [appealIds],
+    );
+    const map: Record<number, string[]> = {};
+    for (const r of rows) {
+        const id = r.appeal_id as number;
+        if (!map[id]) map[id] = [];
+        map[id].push(r.image_url as string);
+    }
+    return map;
+}
+
+async function insertAppealPhotos(appealId: number, imageUrls: string[]): Promise<void> {
+    for (let i = 0; i < imageUrls.length; i++) {
+        await pool.execute(
+            `INSERT INTO appeal_photos (appeal_id, image_url, position) VALUES (?, ?, ?)`,
+            [appealId, imageUrls[i], i],
+        );
+    }
+}
+
+function mapAppealRow(v: RowDataPacket, parts: RowDataPacket[], photoUrls: string[]): object {
     return {
         id: String(v.id),
         authorUserId: String(v.user_id),
@@ -34,6 +58,7 @@ function mapAppealRow(v: RowDataPacket, parts: RowDataPacket[]): object {
         authorApartment: String(v.author_apartment ?? ""),
         escalatedToUk: Boolean(v.escalated_to_uk),
         createdAt: (v.created_at as Date).toISOString(),
+        imageUrls: photoUrls,
         participants: parts.map((p) => ({
             userId: String(p.user_id),
             apartment: String(p.apartment ?? ""),
@@ -60,16 +85,21 @@ async function fetchWithParticipants(appealIds: number[]): Promise<object[]> {
          FROM appeal_participants WHERE appeal_id IN (?)`,
         [appealIds],
     );
+    const photosMap = await getAppealPhotos(appealIds);
     const partsByAppeal = new Map<number, RowDataPacket[]>();
     for (const p of parts) {
         const aid = p.appeal_id as number;
         if (!partsByAppeal.has(aid)) partsByAppeal.set(aid, []);
         partsByAppeal.get(aid)!.push(p);
     }
-    return rows.map((v) => mapAppealRow(v, partsByAppeal.get(v.id as number) ?? []));
+    return rows.map((v) => mapAppealRow(
+        v,
+        partsByAppeal.get(v.id as number) ?? [],
+        photosMap[v.id as number] ?? [],
+    ));
 }
 
-// GET /api/appeals  — свои личные + коллективные дома
+// GET /api/appeals
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     try {
@@ -93,11 +123,11 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
     }
 });
 
-// POST /api/appeals  — создать обращение
+// POST /api/appeals
 router.post("/", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
-    const { title, body, category, kind, entrance } = req.body as {
-        title?: string; body?: string; category?: string; kind?: string; entrance?: string;
+    const { title, body, category, kind, entrance, imageUrls } = req.body as {
+        title?: string; body?: string; category?: string; kind?: string; entrance?: string; imageUrls?: string[];
     };
 
     if (!title?.trim() || !body?.trim())
@@ -115,6 +145,9 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
             [userId, prof.buildingKey, title.trim(), body.trim(), category?.trim() ?? "", kind!, entrance?.trim() || null, prof.apartment],
         );
 
+        const urls = Array.isArray(imageUrls) ? imageUrls : [];
+        await insertAppealPhotos(result.insertId, urls);
+
         const results = await fetchWithParticipants([result.insertId]);
         return res.status(201).json(results[0]);
     } catch (err) {
@@ -123,7 +156,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     }
 });
 
-// POST /api/appeals/:id/join  — присоединиться к коллективному
+// POST /api/appeals/:id/join
 router.post("/:id/join", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     const appealId = Number(req.params.id);
@@ -159,7 +192,6 @@ router.post("/:id/join", requireAuth, async (req: AuthRequest, res) => {
             throw e;
         }
 
-        // Проверка порога эскалации
         if (!appeal.escalated_to_uk && !["resolved", "rejected"].includes(appeal.status as string)) {
             const entranceCond = appeal.entrance
                 ? `AND (ap.entrance IS NULL OR ap.entrance = ${pool.escape(appeal.entrance)})`
@@ -189,12 +221,12 @@ router.post("/:id/join", requireAuth, async (req: AuthRequest, res) => {
     }
 });
 
-// PATCH /api/appeals/:id  — редактировать своё обращение (сбрасывает статус и участников)
+// PATCH /api/appeals/:id
 router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     const appealId = Number(req.params.id);
-    const { title, body, category, entrance } = req.body as {
-        title?: string; body?: string; category?: string; entrance?: string;
+    const { title, body, category, entrance, imageUrls } = req.body as {
+        title?: string; body?: string; category?: string; entrance?: string; imageUrls?: string[];
     };
     if (!title?.trim() || !body?.trim())
         return res.status(400).json({ error: "Тема и описание обязательны" });
@@ -207,6 +239,12 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
         if (result.affectedRows === 0)
             return res.status(404).json({ error: "Обращение не найдено или нет прав" });
         await pool.execute(`DELETE FROM appeal_participants WHERE appeal_id=?`, [appealId]);
+
+        if (Array.isArray(imageUrls)) {
+            await pool.execute(`DELETE FROM appeal_photos WHERE appeal_id=?`, [appealId]);
+            await insertAppealPhotos(appealId, imageUrls);
+        }
+
         const updated = await fetchWithParticipants([appealId]);
         return res.json(updated[0]);
     } catch (err) {
@@ -215,7 +253,7 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     }
 });
 
-// DELETE /api/appeals/:id  — удалить своё обращение
+// DELETE /api/appeals/:id
 router.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     const appealId = Number(req.params.id);

@@ -11,7 +11,14 @@ export const pool = mysql.createPool({
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     waitForConnections: true,
-    connectionLimit: 10,
+    connectionLimit: 2,   // минимум для разработки
+    maxIdle: 1,           // держим не более 1 idle-соединения
+    idleTimeout: 10000,   // закрываем idle через 10 секунд
     charset: "utf8mb4",
     ssl: { rejectUnauthorized: false },
 });
+
+// Закрываем все соединения при остановке — tsx watch должен их освободить
+const shutdown = () => { pool.end().catch(() => {}); };
+process.once("SIGINT",  shutdown);
+process.once("SIGTERM", shutdown);

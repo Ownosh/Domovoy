@@ -11,6 +11,7 @@ export async function apiCreateAppeal(data: {
     category: string;
     kind: string;
     entrance?: string;
+    imageUrls?: string[];
 }): Promise<Appeal> {
     return apiRequest<Appeal>("/appeals", {
         method: "POST",
@@ -38,7 +39,7 @@ export async function apiDeleteAppeal(id: string): Promise<void> {
 }
 
 export async function apiEditAppeal(id: string, data: {
-    title: string; body: string; category: string; entrance?: string;
+    title: string; body: string; category: string; entrance?: string; imageUrls?: string[];
 }): Promise<Appeal> {
     return apiRequest<Appeal>(`/appeals/${id}`, {
         method: "PATCH",

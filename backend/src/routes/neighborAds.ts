@@ -17,7 +17,32 @@ async function getBuildingKey(userId: number): Promise<string | null> {
     return (row?.building_key as string | null) ?? null;
 }
 
-// GET /api/neighbor-ads  — объявления дома
+async function getPhotos(adIds: number[]): Promise<Record<number, string[]>> {
+    if (!adIds.length) return {};
+    const [rows] = await pool.query<RowDataPacket[]>(
+        `SELECT ad_id, image_url FROM neighbor_ad_photos WHERE ad_id IN (?) ORDER BY ad_id, position`,
+        [adIds],
+    );
+    const map: Record<number, string[]> = {};
+    for (const r of rows) {
+        const id = r.ad_id as number;
+        if (!map[id]) map[id] = [];
+        map[id].push(r.image_url as string);
+    }
+    return map;
+}
+
+async function insertPhotos(adId: number, imageUrls: string[]): Promise<void> {
+    if (!imageUrls.length) return;
+    for (let i = 0; i < imageUrls.length; i++) {
+        await pool.execute(
+            `INSERT INTO neighbor_ad_photos (ad_id, image_url, position, is_primary) VALUES (?, ?, ?, ?)`,
+            [adId, imageUrls[i], i, i === 0 ? 1 : 0],
+        );
+    }
+}
+
+// GET /api/neighbor-ads
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     try {
@@ -26,13 +51,16 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
 
         const [rows] = await pool.query<RowDataPacket[]>(
             `SELECT id, author_user_id, building_key, title, body, category,
-                    image_url, show_phone, author_phone, pending_moderation, archived,
+                    show_phone, author_phone, pending_moderation, archived,
                     created_at, expires_at
              FROM neighbor_ads
              WHERE LOWER(building_key) = ?
              ORDER BY created_at DESC`,
             [buildingKey.toLowerCase()],
         );
+
+        const adIds = rows.map((r) => r.id as number);
+        const photosMap = await getPhotos(adIds);
 
         const ads = rows.map((r) => ({
             id: String(r.id),
@@ -41,7 +69,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
             title: String(r.title),
             body: String(r.body),
             category: r.category as string,
-            imageUrl: (r.image_url as string | null) ?? undefined,
+            imageUrls: photosMap[r.id as number] ?? [],
             showPhone: Boolean(r.show_phone),
             authorPhone: (r.author_phone as string | null) ?? undefined,
             pendingModeration: Boolean(r.pending_moderation),
@@ -57,14 +85,14 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
     }
 });
 
-// POST /api/neighbor-ads  — создать объявление
+// POST /api/neighbor-ads
 router.post("/", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
-    const { title, body, category, imageUrl, showPhone, authorPhone } = req.body as {
+    const { title, body, category, imageUrls, showPhone, authorPhone } = req.body as {
         title?: string;
         body?: string;
         category?: string;
-        imageUrl?: string;
+        imageUrls?: string[];
         showPhone?: boolean;
         authorPhone?: string;
     };
@@ -81,17 +109,20 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         const expiresAt = new Date(Date.now() + AD_TTL_MS);
         const [result] = await pool.execute<ResultSetHeader>(
             `INSERT INTO neighbor_ads
-                (author_user_id, building_key, title, body, category, image_url, show_phone, author_phone, expires_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                (author_user_id, building_key, title, body, category, show_phone, author_phone, expires_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 userId, buildingKey, title.trim(), body.trim(), category,
-                imageUrl ?? null, showPhone ? 1 : 0,
+                showPhone ? 1 : 0,
                 showPhone && authorPhone ? authorPhone.trim() : null,
                 expiresAt,
             ],
         );
 
         const adId = result.insertId;
+        const urls = Array.isArray(imageUrls) ? imageUrls : [];
+        await insertPhotos(adId, urls);
+
         return res.status(201).json({
             id: String(adId),
             authorUserId: String(userId),
@@ -99,7 +130,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
             title: title.trim(),
             body: body.trim(),
             category,
-            imageUrl: imageUrl ?? undefined,
+            imageUrls: urls,
             showPhone: Boolean(showPhone),
             authorPhone: showPhone && authorPhone ? authorPhone.trim() : undefined,
             pendingModeration: false,
@@ -113,12 +144,12 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     }
 });
 
-// PATCH /api/neighbor-ads/:id  — редактировать своё объявление
+// PATCH /api/neighbor-ads/:id
 router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     const adId = Number(req.params.id);
-    const { title, body, category, showPhone, authorPhone } = req.body as {
-        title?: string; body?: string; category?: string; showPhone?: boolean; authorPhone?: string;
+    const { title, body, category, imageUrls, showPhone, authorPhone } = req.body as {
+        title?: string; body?: string; category?: string; imageUrls?: string[]; showPhone?: boolean; authorPhone?: string;
     };
     if (!title?.trim() || !body?.trim())
         return res.status(400).json({ error: "Заголовок и текст обязательны" });
@@ -129,23 +160,33 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
             `UPDATE neighbor_ads SET title=?, body=?, category=COALESCE(?,category),
              show_phone=?, author_phone=?
              WHERE id=? AND author_user_id=?`,
-            [title.trim(), body.trim(), category ?? null,
-             showPhone ? 1 : 0,
-             showPhone && authorPhone ? authorPhone.trim() : null,
-             adId, userId],
+            [
+                title.trim(), body.trim(), category ?? null,
+                showPhone ? 1 : 0,
+                showPhone && authorPhone ? authorPhone.trim() : null,
+                adId, userId,
+            ],
         );
         if (result.affectedRows === 0)
             return res.status(404).json({ error: "Объявление не найдено или нет прав" });
+
+        if (Array.isArray(imageUrls)) {
+            await pool.execute(`DELETE FROM neighbor_ad_photos WHERE ad_id = ?`, [adId]);
+            await insertPhotos(adId, imageUrls);
+        }
+
         const [rows] = await pool.query<RowDataPacket[]>(
-            `SELECT id, author_user_id, building_key, title, body, category, image_url,
+            `SELECT id, author_user_id, building_key, title, body, category,
                     show_phone, author_phone, pending_moderation, archived, created_at, expires_at
              FROM neighbor_ads WHERE id=?`, [adId],
         );
+        const photosMap = await getPhotos([adId]);
         const r = rows[0];
         return res.json({
             id: String(r.id), authorUserId: String(r.author_user_id),
             buildingKey: r.building_key as string, title: String(r.title), body: String(r.body),
-            category: r.category as string, imageUrl: r.image_url ?? undefined,
+            category: r.category as string,
+            imageUrls: photosMap[adId] ?? [],
             showPhone: Boolean(r.show_phone), authorPhone: r.author_phone ?? undefined,
             pendingModeration: Boolean(r.pending_moderation), archived: Boolean(r.archived),
             createdAt: (r.created_at as Date).toISOString(), expiresAt: (r.expires_at as Date).toISOString(),
@@ -156,7 +197,7 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     }
 });
 
-// DELETE /api/neighbor-ads/:id  — удалить своё объявление
+// DELETE /api/neighbor-ads/:id
 router.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     const adId = Number(req.params.id);
@@ -174,7 +215,7 @@ router.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
     }
 });
 
-// PATCH /api/neighbor-ads/:id/extend  — продлить на 30 дней
+// PATCH /api/neighbor-ads/:id/extend
 router.patch("/:id/extend", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     const adId = Number(req.params.id);
@@ -193,14 +234,11 @@ router.patch("/:id/extend", requireAuth, async (req: AuthRequest, res) => {
     }
 });
 
-// POST /api/neighbor-ads/:id/report  — пожаловаться
+// POST /api/neighbor-ads/:id/report
 router.post("/:id/report", requireAuth, async (_req: AuthRequest, res) => {
     const adId = Number(_req.params.id);
     try {
-        await pool.execute(
-            `UPDATE neighbor_ads SET pending_moderation = 1 WHERE id = ?`,
-            [adId],
-        );
+        await pool.execute(`UPDATE neighbor_ads SET pending_moderation = 1 WHERE id = ?`, [adId]);
         return res.json({ ok: true });
     } catch (err) {
         console.error("[neighbor-ads report]", err);

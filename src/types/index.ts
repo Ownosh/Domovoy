@@ -66,6 +66,7 @@ export type Appeal = {
     authorApartment: string;
     participants: AppealParticipant[];
     escalatedToUk?: boolean;
+    imageUrls: string[];
 };
 
 export type NotificationType =
@@ -180,7 +181,7 @@ export type NeighborAd = {
     title: string;
     body: string;
     category: NeighborAdCategory;
-    imageUrl?: string;
+    imageUrls: string[];
     showPhone: boolean;
     /** Если showPhone — номер для звонка (как в профиле на момент публикации) */
     authorPhone?: string;

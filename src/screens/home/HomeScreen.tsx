@@ -689,9 +689,20 @@ function FeedVoteRow({ vote, onOpen }: { vote: Vote; onOpen: () => void }) {
 }
 
 function FeedAdRow({ ad, onOpen }: { ad: NeighborAd; onOpen: () => void }) {
+    const [viewerVisible, setViewerVisible] = useState(false);
+    const [viewerIndex, setViewerIndex] = useState(0);
+    const openViewer = (i: number) => { setViewerIndex(i); setViewerVisible(true); };
+    const multi = ad.imageUrls.length > 1;
+
     return (
         <Pressable onPress={onOpen}>
             <Card style={[styles.feedCard, styles.feedCardAd]} padded>
+                <PhotoViewer
+                    urls={ad.imageUrls}
+                    initialIndex={viewerIndex}
+                    visible={viewerVisible}
+                    onClose={() => setViewerVisible(false)}
+                />
                 <View style={styles.cardTop}>
                     <View style={[styles.typeBadge, styles.typeBadgeAd]}>
                         <Text style={[styles.typeBadgeText, { color: colors.primary }]}>
@@ -700,6 +711,23 @@ function FeedAdRow({ ad, onOpen }: { ad: NeighborAd; onOpen: () => void }) {
                     </View>
                     <Text style={styles.cardDate}>{formatDate(ad.createdAt)}</Text>
                 </View>
+                {ad.imageUrls.length > 0 ? (
+                    multi ? (
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={styles.newsImgScroll}
+                            contentContainerStyle={styles.newsImgScrollContent}
+                            nestedScrollEnabled
+                        >
+                            {ad.imageUrls.map((url, i) => (
+                                <NewsImage key={i} uri={url} style={styles.newsImgThumb} onPress={() => openViewer(i)} />
+                            ))}
+                        </ScrollView>
+                    ) : (
+                        <NewsImage uri={ad.imageUrls[0]} style={styles.newsImg} onPress={() => openViewer(0)} />
+                    )
+                ) : null}
                 <Text style={[textStyles.subtitle, styles.feedTitle]}>{ad.title}</Text>
                 <Text style={[textStyles.caption, styles.feedExcerpt]} numberOfLines={2}>{ad.body}</Text>
                 {ad.pendingModeration ? (

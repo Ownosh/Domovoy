@@ -288,6 +288,25 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    // Фото дома и обращений хранятся как base64 data URI
+    await pool.query(`ALTER TABLE house_photos MODIFY COLUMN image_url MEDIUMTEXT NOT NULL`).catch(() => {});
+    await pool.query(`ALTER TABLE appeal_photos MODIFY COLUMN image_url MEDIUMTEXT NOT NULL`).catch(() => {});
+    await pool.query(`ALTER TABLE appeal_participants MODIFY COLUMN photo_uri MEDIUMTEXT DEFAULT NULL`).catch(() => {});
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS neighbor_ad_photos (
+            id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            ad_id      BIGINT UNSIGNED NOT NULL,
+            image_url  MEDIUMTEXT      NOT NULL,
+            position   INT             NOT NULL DEFAULT 0,
+            is_primary TINYINT(1)      NOT NULL DEFAULT 0,
+            created_at DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            CONSTRAINT fk_nap_ad FOREIGN KEY (ad_id) REFERENCES neighbor_ads(id) ON DELETE CASCADE,
+            INDEX idx_nap_ad (ad_id, position)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
     // lat/lng здания — для якоря карты района
     await pool.query(`ALTER TABLE buildings ADD COLUMN IF NOT EXISTS lat DECIMAL(9,6) DEFAULT NULL`).catch(() => {});
     await pool.query(`ALTER TABLE buildings ADD COLUMN IF NOT EXISTS lng DECIMAL(9,6) DEFAULT NULL`).catch(() => {});

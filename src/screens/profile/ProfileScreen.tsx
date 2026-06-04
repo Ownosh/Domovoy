@@ -1,5 +1,5 @@
 import type { ProfileScreenProps } from "../../navigation/types";
-import React from "react";
+import React, { useCallback } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Card, ScreenLayout } from "../../components/ui";
@@ -40,10 +40,17 @@ function formatProfileSubline(profile: Pick<Profile, "building" | "buildingName"
 }
 
 export function ProfileScreen({ navigation }: Props) {
-    const { profile, user, logout, verification } = useApp();
+    const { profile, user, logout, verification, refreshFeed } = useApp();
+
+    const onRefresh = useCallback(() => { void refreshFeed(); }, [refreshFeed]);
 
     return (
-        <ScreenLayout title="Профиль" subtitle={user?.email ?? ""}>
+        <ScreenLayout
+            title="Профиль"
+            subtitle={user?.email ?? ""}
+            onRefresh={onRefresh}
+            refreshing={false}
+        >
             <Card style={styles.hero}>
                 <View style={styles.avatar}>
                     <Ionicons name="home" size={32} color={colors.primary} />

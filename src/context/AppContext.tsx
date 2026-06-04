@@ -9,6 +9,7 @@ import { apiSubmitRating, apiFetchMyRating } from "../api/ratings";
 import { apiFetchBuildingInfo, apiFetchBuildingPhotos, apiFetchBuildingSpecs, apiFetchBuildingSchedule, apiFetchBuildingCalendar, type BuildingInfo, type BuildingSpec, type HouseScheduleItem } from "../api/buildings";
 import { apiFetchDistrictPois } from "../api/district";
 import { apiFetchNotifications, apiMarkNotificationRead, apiMarkAllNotificationsRead } from "../api/notifications";
+import { apiFetchVerificationStatus, apiSubmitVerification } from "../api/verification";
 import React, {
     createContext,
     useCallback,
@@ -717,7 +718,7 @@ type AppContextValue = {
     logout: () => Promise<void>;
     updateProfile: (p: Partial<Profile>) => void;
     changePassword: (current: string, next: string) => Promise<boolean>;
-    submitVerification: (docType: "lease" | "ownership") => void;
+    submitVerification: (docType: "lease" | "ownership", photoUrl: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
     addAppeal: (input: {
         title: string;
         body: string;
@@ -834,6 +835,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         apiFetchNotifications()
             .then((items) => dispatch({ type: "SET_NOTIFICATIONS", payload: items }))
             .catch(() => {});
+        apiFetchVerificationStatus()
+            .then((v) => dispatch({ type: "SET_VERIFICATION_STATUS", payload: v }))
+            .catch(() => {});
         apiFetchDistrictPois()
             .then(({ anchor, pois }) => dispatch({ type: "SET_DISTRICT", payload: { pois, anchor } }))
             .catch(() => {});
@@ -939,8 +943,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
 
     const submitVerification = useCallback(
-        (docType: "lease" | "ownership") => {
+        async (docType: "lease" | "ownership", photoUrl: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
+            // оптимистично выставляем pending
             dispatch({ type: "SUBMIT_VERIFICATION", payload: { docType } });
+            try {
+                const result = await apiSubmitVerification({ docType, photoUrl });
+                dispatch({ type: "SET_VERIFICATION_STATUS", payload: result });
+                return { ok: true };
+            } catch (e: any) {
+                const reason: string = e?.message ?? "Ошибка отправки";
+                // откатываем если ошибка
+                dispatch({ type: "SET_VERIFICATION_STATUS", payload: { status: "none" } });
+                return { ok: false, reason };
+            }
         },
         [],
     );
@@ -1060,6 +1075,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 .catch(() => {}),
             apiFetchNotifications()
                 .then((items) => dispatch({ type: "SET_NOTIFICATIONS", payload: items }))
+                .catch(() => {}),
+            apiFetchVerificationStatus()
+                .then((v) => dispatch({ type: "SET_VERIFICATION_STATUS", payload: v }))
                 .catch(() => {}),
             apiFetchDistrictPois()
                 .then(({ anchor, pois }) => dispatch({ type: "SET_DISTRICT", payload: { pois, anchor } }))

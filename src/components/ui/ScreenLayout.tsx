@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import {
     Pressable,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
@@ -21,6 +22,8 @@ type Props = {
     rightAccessory?: React.ReactNode;
     onBack?: () => void;
     centerHeader?: boolean;
+    onRefresh?: () => void;
+    refreshing?: boolean;
 };
 
 export function ScreenLayout({
@@ -32,6 +35,8 @@ export function ScreenLayout({
     rightAccessory,
     onBack,
     centerHeader,
+    onRefresh,
+    refreshing = false,
 }: Props) {
     const body = (
         <View
@@ -113,6 +118,11 @@ export function ScreenLayout({
                         keyboardShouldPersistTaps="handled"
                         keyboardDismissMode="on-drag"
                         showsVerticalScrollIndicator={false}
+                        refreshControl={
+                            onRefresh ? (
+                                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                            ) : undefined
+                        }
                     >
                         {body}
                     </ScrollView>

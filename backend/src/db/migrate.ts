@@ -318,6 +318,11 @@ export async function migrate(): Promise<void> {
 
     // Фото хранятся как base64 data URI
     await pool.query(`ALTER TABLE district_pois MODIFY COLUMN photo_url MEDIUMTEXT DEFAULT NULL`).catch(() => {});
+    // verification_requests — фото документа
+    await pool.query(`ALTER TABLE verification_requests ADD COLUMN IF NOT EXISTS photo_url MEDIUMTEXT DEFAULT NULL`).catch(() => {});
+    await pool.query(`ALTER TABLE verification_requests ADD COLUMN IF NOT EXISTS building_key VARCHAR(120) DEFAULT NULL`).catch(() => {});
+    await pool.query(`ALTER TABLE verification_requests ADD COLUMN IF NOT EXISTS comment TEXT DEFAULT NULL`).catch(() => {});
+    await pool.query(`ALTER TABLE verification_requests ADD COLUMN IF NOT EXISTS reviewed_at DATETIME DEFAULT NULL`).catch(() => {});
     await pool.query(`ALTER TABLE house_photos MODIFY COLUMN image_url MEDIUMTEXT NOT NULL`).catch(() => {});
     await pool.query(`ALTER TABLE appeal_photos MODIFY COLUMN image_url MEDIUMTEXT NOT NULL`).catch(() => {});
     await pool.query(`ALTER TABLE appeal_participants MODIFY COLUMN photo_uri MEDIUMTEXT DEFAULT NULL`).catch(() => {});

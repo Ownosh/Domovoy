@@ -1,5 +1,5 @@
 import { apiRequest } from "./client";
-import type { EnvironmentRatingSnapshot } from "../types";
+import type { EnvironmentRatingSnapshot, UkTransparencyStats } from "../types";
 
 export async function apiSubmitRating(data: {
     monthKey: string;
@@ -15,4 +15,8 @@ export async function apiSubmitRating(data: {
 export async function apiFetchMyRating(monthKey?: string): Promise<EnvironmentRatingSnapshot | null> {
     const url = monthKey ? `/ratings/my?month=${monthKey}` : "/ratings/my";
     return apiRequest<EnvironmentRatingSnapshot | null>(url);
+}
+
+export async function apiFetchRatingStats(): Promise<Partial<UkTransparencyStats>> {
+    return apiRequest<Partial<UkTransparencyStats>>("/ratings/stats");
 }

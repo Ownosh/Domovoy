@@ -316,6 +316,9 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    // Фото профиля пользователя
+    await pool.query(`ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS profile_photo MEDIUMTEXT DEFAULT NULL`).catch(() => {});
+
     // Архивирование обращений
     await pool.query(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS manually_archived TINYINT(1) NOT NULL DEFAULT 0`).catch(() => {});
     // resolved_at уже должна быть в таблице, но добавим на случай если нет

@@ -1,6 +1,7 @@
 import type { ProfileScreenProps } from "../../navigation/types";
 import React, { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { AddressAutocomplete, Button, Card, Input, ScreenLayout } from "../../components/ui";
 import type { BuildingSuggestion } from "../../api/buildings";
 import { apiUpdateProfile } from "../../api/auth";
@@ -37,8 +38,29 @@ export function EditProfileScreen({ navigation }: Props) {
             ? String(profile.apartmentAreaSqm)
             : "",
     );
+    const [photoUri, setPhotoUri] = useState<string | null>(profile.profilePhoto ?? null);
+    const [photoBase64, setPhotoBase64] = useState<string | null>(null);
     const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
     const [ok, setOk] = useState(false);
+
+    const pickPhoto = async () => {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+            Alert.alert("Нет доступа", "Разрешите доступ к галерее в настройках.");
+            return;
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images"],
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.7,
+            base64: true,
+        });
+        if (!result.canceled && result.assets[0]) {
+            setPhotoUri(result.assets[0].uri);
+            setPhotoBase64(result.assets[0].base64 ?? null);
+        }
+    };
 
     const clearError = (field: keyof FieldErrors) =>
         setFieldErrors((e) => ({ ...e, [field]: undefined }));
@@ -86,6 +108,10 @@ export function EditProfileScreen({ navigation }: Props) {
         if (!validate()) return;
         const areaNum = parseFloat(areaStr.replace(",", "."));
         const entranceNum = parseInt(entranceStr.trim(), 10);
+        const profilePhotoData = photoBase64
+            ? `data:image/jpeg;base64,${photoBase64}`
+            : photoUri === null ? null : undefined;
+
         const profileData = {
             name: name.trim(),
             phone: phone.trim(),
@@ -97,6 +123,7 @@ export function EditProfileScreen({ navigation }: Props) {
                 : undefined,
             apartmentAreaSqm:
                 areaStr.trim() === "" || Number.isNaN(areaNum) ? undefined : areaNum,
+            profilePhoto: profilePhotoData,
         };
         try {
             await apiUpdateProfile(profileData);
@@ -105,12 +132,12 @@ export function EditProfileScreen({ navigation }: Props) {
                 setFieldErrors((prev) => ({ ...prev, phone: e.message }));
                 return;
             }
-            // остальные ошибки не блокируют локальное сохранение
         }
         updateProfile({
             ...profileData,
             building: profileData.buildingKey ?? profileData.building,
             buildingName: profileData.buildingKey ? profileData.building : undefined,
+            profilePhoto: profilePhotoData ?? profile.profilePhoto,
         });
         setOk(true);
         setTimeout(() => navigation.goBack(), 600);
@@ -122,6 +149,21 @@ export function EditProfileScreen({ navigation }: Props) {
             subtitle="Редактирование профиля"
             onBack={() => navigation.goBack()}
         >
+            <Pressable onPress={() => { void pickPhoto(); }} style={styles.avatarWrap}>
+                {photoUri ? (
+                    <Image source={{ uri: photoUri }} style={styles.avatar} />
+                ) : (
+                    <View style={styles.avatarPlaceholder}>
+                        <Text style={styles.avatarInitial}>
+                            {name.trim()[0]?.toUpperCase() ?? "?"}
+                        </Text>
+                    </View>
+                )}
+                <View style={styles.avatarEdit}>
+                    <Text style={styles.avatarEditText}>Изменить фото</Text>
+                </View>
+            </Pressable>
+
             <Card>
                 <Input
                     label="ФИО"
@@ -190,6 +232,16 @@ export function EditProfileScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
+    avatarWrap: { alignItems: "center", marginBottom: spacing.lg },
+    avatar: { width: 90, height: 90, borderRadius: 45 },
+    avatarPlaceholder: {
+        width: 90, height: 90, borderRadius: 45,
+        backgroundColor: colors.primarySoft,
+        alignItems: "center", justifyContent: "center",
+    },
+    avatarInitial: { fontSize: 36, fontWeight: "700", color: colors.primary },
+    avatarEdit: { marginTop: spacing.sm },
+    avatarEditText: { color: colors.primary, fontSize: 13 },
     gap: { height: spacing.md },
     gapLg: { height: spacing.lg },
     ok: { color: colors.primary, marginTop: spacing.sm },

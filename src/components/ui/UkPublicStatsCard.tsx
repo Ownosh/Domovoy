@@ -4,47 +4,95 @@ import type { UkTransparencyStats } from "../../types";
 import { colors, radius, spacing, textStyles } from "../../theme";
 
 type Props = {
-    stats: UkTransparencyStats;
+    stats: Partial<UkTransparencyStats>;
 };
 
+function Stars({ value }: { value: number | null | undefined }) {
+    if (value == null) return <Text style={styles.noData}>нет данных</Text>;
+    return (
+        <View style={styles.starsRow}>
+            <Text style={[textStyles.title, styles.v]}>{value.toFixed(1)}</Text>
+            <Text style={styles.star}> ★</Text>
+        </View>
+    );
+}
+
+function StatCell({ label, children }: { label: string; children: React.ReactNode }) {
+    return (
+        <View style={styles.cell}>
+            <Text style={[textStyles.caption, styles.k]}>{label}</Text>
+            {children}
+        </View>
+    );
+}
+
 export function UkPublicStatsCard({ stats }: Props) {
-    const when = formatSnapshot(stats.snapshotAtIso);
+    const when = stats.snapshotAtIso ? formatSnapshot(stats.snapshotAtIso) : null;
+    const hasRatings = (stats.ratingsCount ?? 0) > 0;
+
     return (
         <View style={styles.wrap}>
             <Text style={[textStyles.subtitle, styles.title]}>
                 Публичная статистика УК
             </Text>
-            <Text style={[textStyles.caption, styles.note]}>
-                Снимок обновляется автоматически раз в сутки. Ручная корректировка в
-                приложении недоступна.
+            {when && (
+                <Text style={[textStyles.caption, styles.note]}>
+                    Снимок обновляется автоматически раз в сутки.
+                </Text>
+            )}
+
+            {/* Оценки жильцов */}
+            <Text style={[textStyles.caption, styles.sectionLabel]}>
+                Оценки жильцов{hasRatings ? ` · ${stats.ratingsCount} оценок` : ""}
             </Text>
             <View style={styles.grid}>
-                <View style={styles.cell}>
-                    <Text style={[textStyles.caption, styles.k]}>
-                        Средняя оценка заявок (3 мес.)
-                    </Text>
-                    <Text style={[textStyles.title, styles.v]}>
-                        {stats.avgAppealStars3m.toFixed(1)} ★
-                    </Text>
-                </View>
-                <View style={styles.cell}>
-                    <Text style={[textStyles.caption, styles.k]}>
-                        Закрытых обращений (90 дней)
-                    </Text>
-                    <Text style={[textStyles.title, styles.v]}>
-                        {stats.closedAppeals90d}
-                    </Text>
-                </View>
-                <View style={[styles.cell, styles.cellWide]}>
-                    <Text style={[textStyles.caption, styles.k]}>
-                        Закрыто в срок
-                    </Text>
-                    <Text style={[textStyles.title, styles.v]}>
-                        {stats.closedOnTimePercent}%
-                    </Text>
-                </View>
+                <StatCell label="Двор">
+                    <Stars value={stats.avgCourtyardStars} />
+                </StatCell>
+                <StatCell label="Подъезд">
+                    <Stars value={stats.avgEntranceStars} />
+                </StatCell>
+                <StatCell label="УК в целом">
+                    <Stars value={stats.avgUkStars} />
+                </StatCell>
             </View>
-            <Text style={[textStyles.caption, styles.when]}>Данные на: {when}</Text>
+
+            {/* Обращения */}
+            {(stats.avgAppealStars3m != null || stats.closedAppeals90d != null) && (
+                <>
+                    <Text style={[textStyles.caption, styles.sectionLabel]}>Обращения</Text>
+                    <View style={styles.grid}>
+                        {stats.avgAppealStars3m != null && (
+                            <StatCell label="Средняя оценка (3 мес.)">
+                                <View style={styles.starsRow}>
+                                    <Text style={[textStyles.title, styles.v]}>
+                                        {stats.avgAppealStars3m.toFixed(1)}
+                                    </Text>
+                                    <Text style={styles.star}> ★</Text>
+                                </View>
+                            </StatCell>
+                        )}
+                        {stats.closedAppeals90d != null && (
+                            <StatCell label="Закрыто за 90 дней">
+                                <Text style={[textStyles.title, styles.v]}>
+                                    {stats.closedAppeals90d}
+                                </Text>
+                            </StatCell>
+                        )}
+                        {stats.closedOnTimePercent != null && (
+                            <StatCell label="Закрыто в срок">
+                                <Text style={[textStyles.title, styles.v]}>
+                                    {stats.closedOnTimePercent}%
+                                </Text>
+                            </StatCell>
+                        )}
+                    </View>
+                </>
+            )}
+
+            {when && (
+                <Text style={[textStyles.caption, styles.when]}>Данные на: {when}</Text>
+            )}
         </View>
     );
 }
@@ -73,21 +121,30 @@ const styles = StyleSheet.create({
     },
     title: { color: colors.text },
     note: { color: colors.textMuted, lineHeight: 18 },
+    sectionLabel: {
+        color: colors.textDim,
+        marginTop: spacing.xs,
+        fontWeight: "600",
+        textTransform: "uppercase",
+        letterSpacing: 0.5,
+        fontSize: 11,
+    },
     grid: {
         flexDirection: "row",
         flexWrap: "wrap",
         gap: spacing.sm,
-        marginTop: spacing.sm,
     },
     cell: {
         flexGrow: 1,
-        minWidth: "42%",
+        minWidth: "28%",
         backgroundColor: colors.bgElevated,
         borderRadius: radius.md,
         padding: spacing.md,
     },
-    cellWide: { minWidth: "100%" },
-    k: { color: colors.textDim },
-    v: { color: colors.primary, marginTop: spacing.xs },
+    k: { color: colors.textDim, marginBottom: spacing.xs },
+    v: { color: colors.primary },
+    starsRow: { flexDirection: "row", alignItems: "baseline" },
+    star: { color: colors.accent, fontSize: 16 },
+    noData: { color: colors.textDim, fontSize: 13 },
     when: { color: colors.textDim, marginTop: spacing.sm },
 });

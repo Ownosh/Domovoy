@@ -11,7 +11,7 @@ import {
     Text,
     View,
 } from "react-native";
-import { Button, Card, Input, NotificationBell, ScreenLayout } from "../../components/ui";
+import { Button, Card, Input, NotificationBell, ScreenLayout, UkPublicStatsCard } from "../../components/ui";
 import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type { MainTabNavigationProp } from "../../navigation/types";
 import type {
@@ -132,7 +132,7 @@ function AgendaDivider() {
 export function HousePassportScreen() {
     const navigation = useNavigation<MainTabNavigationProp>();
     const {
-        environmentRating, setEnvironmentRating, verification,
+        environmentRating, setEnvironmentRating, verification, ukStats,
         houseInfo: buildingInfo,
         housePhotos: photos,
         houseSpecs: specs,
@@ -542,6 +542,8 @@ export function HousePassportScreen() {
 
             {tab === "rating" ? (
                 <>
+                    <UkPublicStatsCard stats={ukStats} />
+                    <View style={styles.ukGap} />
                     <Card>
                         <Text style={[textStyles.caption, styles.ratingHint]}>
                             Раз в календарный месяц вы можете один раз оценить двор, подъезд и работу
@@ -1145,4 +1147,17 @@ const styles = StyleSheet.create({
     trashTitle: { color: colors.text },
     trashSchedule: { color: colors.primary },
     trashNote: { color: colors.textMuted, lineHeight: 18 },
+    ukGap: { height: spacing.md },
+    ukCard: { borderLeftWidth: 3, borderLeftColor: colors.info, gap: spacing.sm },
+    ukCardTop: { marginBottom: spacing.xs },
+    ukBadge: {
+        alignSelf: "flex-start",
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 3,
+        borderRadius: 6,
+        backgroundColor: "rgba(91, 159, 212, 0.15)",
+    },
+    ukBadgeText: { fontSize: 11, fontWeight: "600", color: colors.info },
+    ukName: { color: colors.text },
+    ukDetail: { color: colors.textMuted },
 });

@@ -151,6 +151,7 @@ router.post("/login", async (req: Request, res: Response) => {
         const [rows] = await pool.execute<RowDataPacket[]>(
             `SELECT u.id, u.email, u.password_hash,
                     p.full_name, p.phone, p.building_key, p.apartment, p.entrances, p.apartment_area_sqm,
+                    p.profile_photo,
                     COALESCE(b.short_name, p.building_key) AS building_name
              FROM users u
              LEFT JOIN user_profiles p ON p.user_id = u.id
@@ -186,6 +187,7 @@ router.post("/login", async (req: Request, res: Response) => {
                 apartment: (user.apartment as string) ?? "",
                 entrance: Number(user.entrances ?? 0) || undefined,
                 apartmentAreaSqm: (user.apartment_area_sqm as number) ?? undefined,
+                profilePhoto: (user.profile_photo as string | null) ?? undefined,
             },
         });
     } catch (err) {
@@ -253,7 +255,7 @@ router.patch("/profile", requireAuth, async (req: AuthRequest, res: Response) =>
     const userId = req.userId;
     if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
-    const { name, phone, building, buildingKey: explicitKey, apartment, entrance, apartmentAreaSqm } = req.body as {
+    const { name, phone, building, buildingKey: explicitKey, apartment, entrance, apartmentAreaSqm, profilePhoto } = req.body as {
         name?: string;
         phone?: string;
         building?: string;
@@ -261,6 +263,7 @@ router.patch("/profile", requireAuth, async (req: AuthRequest, res: Response) =>
         apartment?: string;
         entrance?: number;
         apartmentAreaSqm?: number | null;
+        profilePhoto?: string | null;
     };
 
     try {
@@ -310,7 +313,8 @@ router.patch("/profile", requireAuth, async (req: AuthRequest, res: Response) =>
                  building_key       = COALESCE(?, building_key),
                  apartment          = COALESCE(?, apartment),
                  entrances          = COALESCE(?, entrances),
-                 apartment_area_sqm = ?
+                 apartment_area_sqm = ?,
+                 profile_photo      = COALESCE(?, profile_photo)
              WHERE user_id = ?`,
             [
                 name?.trim() ?? null,
@@ -319,6 +323,7 @@ router.patch("/profile", requireAuth, async (req: AuthRequest, res: Response) =>
                 apartment?.trim() ?? null,
                 entrance != null ? Number(entrance) : null,
                 apartmentAreaSqm ?? null,
+                profilePhoto !== undefined ? profilePhoto : null,
                 userId,
             ],
         );

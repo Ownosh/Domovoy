@@ -60,6 +60,8 @@ function mapAppealRow(v: RowDataPacket, parts: RowDataPacket[], photoUrls: strin
         createdAt: (v.created_at as Date).toISOString(),
         resolvedAt: v.resolved_at ? (v.resolved_at as Date).toISOString() : undefined,
         manuallyArchived: Boolean(v.manually_archived),
+        authorName: (v.author_name as string | null) ?? undefined,
+        authorPhoto: (v.author_photo as string | null) ?? undefined,
         imageUrls: photoUrls,
         participants: parts.map((p) => ({
             userId: String(p.user_id),
@@ -77,10 +79,13 @@ function mapAppealRow(v: RowDataPacket, parts: RowDataPacket[], photoUrls: strin
 async function fetchWithParticipants(appealIds: number[]): Promise<object[]> {
     if (appealIds.length === 0) return [];
     const [rows] = await pool.query<RowDataPacket[]>(
-        `SELECT id, user_id, building_key, title, body, category, kind, status,
-                entrance, author_apartment, escalated_to_uk, created_at,
-                resolved_at, manually_archived
-         FROM appeals WHERE id IN (?) ORDER BY created_at DESC`,
+        `SELECT a.id, a.user_id, a.building_key, a.title, a.body, a.category, a.kind, a.status,
+                a.entrance, a.author_apartment, a.escalated_to_uk, a.created_at,
+                a.resolved_at, a.manually_archived,
+                p.full_name AS author_name, p.profile_photo AS author_photo
+         FROM appeals a
+         LEFT JOIN user_profiles p ON p.user_id = a.user_id
+         WHERE a.id IN (?) ORDER BY a.created_at DESC`,
         [appealIds],
     );
     const [parts] = await pool.query<RowDataPacket[]>(

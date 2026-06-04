@@ -1,4 +1,5 @@
 export { AddressAutocomplete } from "./AddressAutocomplete";
+export { FeedAuthorRow } from "./FeedAuthorRow";
 export { NotificationBell } from "./NotificationBell";
 export { VerificationWall } from "./VerificationWall";
 export { Button } from "./Button";

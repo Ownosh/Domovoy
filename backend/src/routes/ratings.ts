@@ -95,4 +95,34 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     }
 });
 
+// GET /api/ratings/stats — агрегированные оценки дома для публичной статистики УК
+router.get("/stats", requireAuth, async (req: AuthRequest, res) => {
+    const userId = req.userId!;
+    try {
+        const buildingKey = await getBuildingKey(userId);
+        if (!buildingKey) return res.status(400).json({ error: "Профиль не привязан к дому" });
+
+        const [[row]] = await pool.query<RowDataPacket[]>(
+            `SELECT
+                ROUND(AVG(courtyard_stars), 1) AS avg_courtyard,
+                ROUND(AVG(entrance_stars),  1) AS avg_entrance,
+                ROUND(AVG(uk_stars),        1) AS avg_uk,
+                COUNT(*)                        AS ratings_count
+             FROM environment_ratings
+             WHERE LOWER(building_key) = LOWER(?)`,
+            [buildingKey],
+        );
+
+        return res.json({
+            avgCourtyardStars: row?.avg_courtyard != null ? Number(row.avg_courtyard) : null,
+            avgEntranceStars:  row?.avg_entrance  != null ? Number(row.avg_entrance)  : null,
+            avgUkStars:        row?.avg_uk         != null ? Number(row.avg_uk)        : null,
+            ratingsCount:      Number(row?.ratings_count ?? 0),
+        });
+    } catch (err) {
+        console.error("[ratings/stats GET]", err);
+        return res.status(500).json({ error: "Ошибка сервера" });
+    }
+});
+
 export default router;

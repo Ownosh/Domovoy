@@ -56,6 +56,7 @@ export async function apiUpdateProfile(data: {
     apartment?: string;
     entrance?: number;
     apartmentAreaSqm?: number | null;
+    profilePhoto?: string | null;
 }): Promise<void> {
     await apiRequest("/auth/profile", {
         method: "PATCH",

@@ -5,7 +5,7 @@ import { apiFetchVotes, apiCreateVote, apiCastVote, apiEditVote, apiDeleteVote }
 import { apiFetchNeighborAds, apiCreateNeighborAd, apiDeleteNeighborAd, apiExtendNeighborAd, apiReportNeighborAd, apiEditNeighborAd } from "../api/neighborAds";
 import { apiFetchAppeals, apiCreateAppeal, apiJoinAppeal, apiDeleteAppeal, apiEditAppeal, apiArchiveAppeal } from "../api/appeals";
 import { clearTokens, ApiError } from "../api/client";
-import { apiSubmitRating, apiFetchMyRating } from "../api/ratings";
+import { apiSubmitRating, apiFetchMyRating, apiFetchRatingStats } from "../api/ratings";
 import { apiFetchBuildingInfo, apiFetchBuildingPhotos, apiFetchBuildingSpecs, apiFetchBuildingSchedule, apiFetchBuildingCalendar, type BuildingInfo, type BuildingSpec, type HouseScheduleItem } from "../api/buildings";
 import { apiFetchDistrictPois } from "../api/district";
 import { apiFetchNotifications, apiMarkNotificationRead, apiMarkAllNotificationsRead } from "../api/notifications";
@@ -34,6 +34,7 @@ import type {
     EnvironmentRatingFeedbackTagId,
     EnvironmentRatingSnapshot,
     EnvironmentRatingSubmitInput,
+    UkTransparencyStats,
     HouseCalendarActivity,
     NeighborAd,
     NeighborAdCategory,
@@ -88,6 +89,7 @@ type AppState = {
     votes: Vote[];
     voteCasts: VoteCast[];
     environmentRating: EnvironmentRatingSnapshot | null;
+    ukStats: Partial<UkTransparencyStats>;
     districtPois: DistrictPoi[];
     districtAnchor: { lat: number; lng: number } | null;
     houseInfo: BuildingInfo | null;
@@ -116,6 +118,7 @@ const initialState: AppState = {
     votes: [],
     voteCasts: [],
     environmentRating: null,
+    ukStats: {},
     districtPois: [],
     districtAnchor: null,
     houseInfo: null,
@@ -170,6 +173,7 @@ type Action =
     | { type: "ADD_VOTE"; payload: Vote }
     | { type: "CAST_VOTE"; payload: VoteCast }
     | { type: "SET_ENVIRONMENT_RATING"; payload: EnvironmentRatingSnapshot }
+    | { type: "SET_UK_STATS"; payload: Partial<UkTransparencyStats> }
     | { type: "SET_NEWS"; payload: NewsItem[] }
     | { type: "SET_VOTES"; payload: { votes: Vote[]; casts: VoteCast[] } }
     | { type: "SET_NEIGHBOR_ADS"; payload: NeighborAd[] }
@@ -422,6 +426,8 @@ function reducer(state: AppState, action: Action): AppState {
                 environmentRating: next,
             };
         }
+        case "SET_UK_STATS":
+            return { ...state, ukStats: action.payload };
         case "SET_NEWS":
             return { ...state, news: action.payload };
         case "SET_VOTES":
@@ -596,6 +602,7 @@ function mergeHydrated(parsed: Partial<AppState>): AppState {
         houseSpecs: parsed.houseSpecs ?? [],
         houseSchedule: parsed.houseSchedule ?? [],
         houseCalendar: parsed.houseCalendar ?? [],
+        ukStats: parsed.ukStats ?? {},
     };
 }
 
@@ -761,6 +768,7 @@ type AppContextValue = {
         input: ResidentVoteCreateInput,
     ) => Promise<{ ok: true } | { ok: false; reason: string }>;
     environmentRating: EnvironmentRatingSnapshot | null;
+    ukStats: Partial<UkTransparencyStats>;
     setEnvironmentRating: (input: EnvironmentRatingSubmitInput) => void;
     districtPois: DistrictPoi[];
     districtAnchor: { lat: number; lng: number } | null;
@@ -835,6 +843,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         apiFetchMyRating()
             .then((r) => { if (r) dispatch({ type: "SET_ENVIRONMENT_RATING", payload: r }); })
             .catch(() => {});
+        apiFetchRatingStats()
+            .then((s) => dispatch({ type: "SET_UK_STATS", payload: s }))
+            .catch(() => {});
         apiFetchNotifications()
             .then((items) => dispatch({ type: "SET_NOTIFICATIONS", payload: items }))
             .catch(() => {});
@@ -878,6 +889,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                         apartment: res.profile.apartment,
                         entrance: res.profile.entrance,
                         apartmentAreaSqm: res.profile.apartmentAreaSqm,
+                        profilePhoto: res.profile.profilePhoto,
                     },
                     password: "",
                     dataConsentAt: undefined,
@@ -1091,6 +1103,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 .catch(() => {}),
             apiFetchVerificationStatus()
                 .then((v) => dispatch({ type: "SET_VERIFICATION_STATUS", payload: v }))
+                .catch(() => {}),
+            apiFetchRatingStats()
+                .then((s) => dispatch({ type: "SET_UK_STATS", payload: s }))
                 .catch(() => {}),
             apiFetchDistrictPois()
                 .then(({ anchor, pois }) => dispatch({ type: "SET_DISTRICT", payload: { pois, anchor } }))
@@ -1445,6 +1460,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             castVote,
             addResidentVote,
             environmentRating: state.environmentRating,
+            ukStats: state.ukStats,
             setEnvironmentRating,
             districtPois: state.districtPois,
             districtAnchor: state.districtAnchor,
@@ -1470,6 +1486,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             state.votes,
             state.voteCasts,
             state.environmentRating,
+            state.ukStats,
             login,
             register,
             logout,

@@ -40,6 +40,7 @@ export type Profile = {
     entrance?: number;
     /** Площадь квартиры, м² — для веса голоса на ОСС */
     apartmentAreaSqm?: number;
+    profilePhoto?: string;
 };
 
 export type VerificationState = {
@@ -69,6 +70,8 @@ export type Appeal = {
     imageUrls: string[];
     resolvedAt?: string;
     manuallyArchived?: boolean;
+    authorName?: string;
+    authorPhoto?: string;
 };
 
 export type NotificationType =
@@ -191,6 +194,8 @@ export type NeighborAd = {
     expiresAt: string;
     archived: boolean;
     pendingModeration?: boolean;
+    authorName?: string;
+    authorPhoto?: string;
 };
 
 export type VoteVisibility = "open" | "secret";
@@ -214,6 +219,8 @@ export type Vote = {
     sponsor: VoteSponsor;
     /** Учебный пример в интерфейсе */
     trial?: boolean;
+    authorName?: string;
+    authorPhoto?: string;
 };
 
 /** Создание голосования жильцом (УК создаёт на стороне сервера) */
@@ -305,6 +312,10 @@ export type UkTransparencyStats = {
     avgAppealStars3m: number;
     closedAppeals90d: number;
     closedOnTimePercent: number;
+    avgCourtyardStars: number | null;
+    avgEntranceStars: number | null;
+    avgUkStars: number | null;
+    ratingsCount: number;
 };
 
 export type EmergencyScenarioId = "fire" | "gas" | "flood" | "power";

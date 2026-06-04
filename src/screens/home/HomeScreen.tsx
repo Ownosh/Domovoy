@@ -13,7 +13,7 @@ import {
     View,
 } from "react-native";
 
-import { AppealStatusBadge, Card, ScreenLayout } from "../../components/ui";
+import { AppealStatusBadge, Card, FeedAuthorRow, ScreenLayout } from "../../components/ui";
 import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type {
     AuthenticatedRootParamList,
@@ -683,6 +683,7 @@ function FeedNewsRow({ item }: { item: NewsItem }) {
             ) : null}
             <Text style={[textStyles.subtitle, styles.feedTitle]}>{item.title}</Text>
             <Text style={[textStyles.body, styles.feedExcerpt]}>{item.excerpt}</Text>
+            <FeedAuthorRow name="УК" sub="Управляющая компания" />
         </Card>
     );
 }
@@ -705,6 +706,13 @@ function FeedAppealRow({ appeal, onOpen }: { appeal: Appeal; onOpen: () => void 
                         <Text style={styles.cardMeta}>подъезд {appeal.entrance}</Text>
                     ) : null}
                 </View>
+                {appeal.authorName && (
+                    <FeedAuthorRow
+                        name={appeal.authorName}
+                        photo={appeal.authorPhoto}
+                        sub={appeal.authorApartment ? `кв. ${appeal.authorApartment}` : undefined}
+                    />
+                )}
             </Card>
         </Pressable>
     );
@@ -725,9 +733,13 @@ function FeedVoteRow({ vote, onOpen }: { vote: Vote; onOpen: () => void }) {
                 <View style={styles.cardBottom}>
                     <View style={[styles.statusDot, { backgroundColor: ended ? colors.textDim : colors.primary }]} />
                     <Text style={styles.cardMeta} numberOfLines={1}>
-                        {ended ? "Завершено" : "Активно"} · {vote.visibility === "open" ? "открытое" : "тайное"} · {vote.createdByLabel}
+                        {ended ? "Завершено" : "Активно"} · {vote.visibility === "open" ? "открытое" : "тайное"}
                     </Text>
                 </View>
+                <FeedAuthorRow
+                    name={vote.authorName || vote.createdByLabel || "Житель"}
+                    photo={vote.authorPhoto}
+                />
             </Card>
         </Pressable>
     );
@@ -778,6 +790,12 @@ function FeedAdRow({ ad, onOpen }: { ad: NeighborAd; onOpen: () => void }) {
                 {ad.pendingModeration ? (
                     <Text style={[styles.cardMeta, { color: colors.warning, marginTop: 4 }]}>на проверке УК</Text>
                 ) : null}
+                {ad.authorName && (
+                    <FeedAuthorRow
+                        name={ad.authorName}
+                        photo={ad.authorPhoto}
+                    />
+                )}
             </Card>
         </Pressable>
     );

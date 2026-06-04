@@ -21,10 +21,13 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
         if (!buildingKey) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
         const [voteRows] = await pool.query<RowDataPacket[]>(
-            `SELECT id, building_key, created_by_label, sponsor, topic, description,
-                    visibility, ends_at, closed, trial, created_at
-             FROM votes WHERE LOWER(building_key) = ?
-             ORDER BY created_at DESC`,
+            `SELECT v.id, v.building_key, v.user_id, v.created_by_label, v.sponsor, v.topic, v.description,
+                    v.visibility, v.ends_at, v.closed, v.trial, v.created_at,
+                    p.full_name AS author_name, p.profile_photo AS author_photo
+             FROM votes v
+             LEFT JOIN user_profiles p ON p.user_id = v.user_id
+             WHERE LOWER(v.building_key) = ?
+             ORDER BY v.created_at DESC`,
             [buildingKey.toLowerCase()],
         );
 
@@ -50,6 +53,8 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
                 trial: Boolean(v.trial),
                 createdAt: (v.created_at as Date).toISOString(),
                 options: opts.map((o) => ({ id: String(o.id), label: String(o.label) })),
+                authorName: (v.author_name as string | null) ?? undefined,
+                authorPhoto: (v.author_photo as string | null) ?? undefined,
             });
         }
 

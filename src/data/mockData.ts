@@ -138,6 +138,7 @@ export const seedAppeals: Appeal[] = [
         buildingKey: demoHouseKey,
         authorApartment: "12",
         participants: [],
+        imageUrls: [],
     },
     {
         id: "a2",
@@ -151,6 +152,7 @@ export const seedAppeals: Appeal[] = [
         buildingKey: demoHouseKey,
         authorApartment: "101",
         participants: [],
+        imageUrls: [],
     },
     {
         id: "a3",
@@ -164,6 +166,7 @@ export const seedAppeals: Appeal[] = [
         buildingKey: demoHouseKey,
         authorApartment: "84",
         participants: [],
+        imageUrls: [],
     },
     {
         id: "a_col_demo",
@@ -177,6 +180,7 @@ export const seedAppeals: Appeal[] = [
         buildingKey: demoHouseKey,
         entrance: "2",
         authorApartment: "40",
+        imageUrls: [],
         participants: [
             {
                 userId: "seed_n1",
@@ -216,6 +220,7 @@ export const seedNeighborAds: NeighborAd[] = [
             new Date("2026-04-20T12:00:00").getTime() + monthMs,
         ).toISOString(),
         archived: false,
+        imageUrls: [],
     },
     {
         id: "ad2",
@@ -230,7 +235,7 @@ export const seedNeighborAds: NeighborAd[] = [
         expiresAt: new Date(
             new Date("2026-05-05T09:00:00").getTime() + monthMs,
         ).toISOString(),
-        archived: false,
+        imageUrls: [],
     },
     {
         id: "ad_lost1",
@@ -246,6 +251,7 @@ export const seedNeighborAds: NeighborAd[] = [
             new Date("2026-05-09T18:00:00").getTime() + monthMs,
         ).toISOString(),
         archived: false,
+        imageUrls: [],
     },
     {
         id: "ad_found1",
@@ -261,6 +267,7 @@ export const seedNeighborAds: NeighborAd[] = [
             new Date("2026-05-10T11:00:00").getTime() + monthMs,
         ).toISOString(),
         archived: false,
+        imageUrls: [],
     },
 ];
 
@@ -393,6 +400,10 @@ export const ukTransparencyStats: UkTransparencyStats = {
     avgAppealStars3m: 4.2,
     closedAppeals90d: 186,
     closedOnTimePercent: 78,
+    avgCourtyardStars: null,
+    avgEntranceStars: null,
+    avgUkStars: null,
+    ratingsCount: 0,
 };
 
 export const seedContractors: ContractorProfile[] = [

@@ -50,12 +50,14 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
         if (!buildingKey) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
         const [rows] = await pool.query<RowDataPacket[]>(
-            `SELECT id, author_user_id, building_key, title, body, category,
-                    show_phone, author_phone, pending_moderation, archived,
-                    created_at, expires_at
-             FROM neighbor_ads
-             WHERE LOWER(building_key) = ?
-             ORDER BY created_at DESC`,
+            `SELECT n.id, n.author_user_id, n.building_key, n.title, n.body, n.category,
+                    n.show_phone, n.author_phone, n.pending_moderation, n.archived,
+                    n.created_at, n.expires_at,
+                    p.full_name AS author_name, p.profile_photo AS author_photo
+             FROM neighbor_ads n
+             LEFT JOIN user_profiles p ON p.user_id = n.author_user_id
+             WHERE LOWER(n.building_key) = ?
+             ORDER BY n.created_at DESC`,
             [buildingKey.toLowerCase()],
         );
 
@@ -76,6 +78,8 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
             archived: Boolean(r.archived),
             createdAt: (r.created_at as Date).toISOString(),
             expiresAt: (r.expires_at as Date).toISOString(),
+            authorName: (r.author_name as string | null) ?? undefined,
+            authorPhoto: (r.author_photo as string | null) ?? undefined,
         }));
 
         return res.json(ads);

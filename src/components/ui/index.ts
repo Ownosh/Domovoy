@@ -1,5 +1,6 @@
 export { AddressAutocomplete } from "./AddressAutocomplete";
 export { NotificationBell } from "./NotificationBell";
+export { VerificationWall } from "./VerificationWall";
 export { Button } from "./Button";
 export { Card } from "./Card";
 export { Input } from "./Input";

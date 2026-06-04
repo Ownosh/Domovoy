@@ -2,8 +2,8 @@ import type { CommunityScreenProps } from "../../navigation/types";
 import React, { useEffect, useState } from "react";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { Button, Card, Input, ScreenLayout } from "../../components/ui";
-import { useApp } from "../../context/AppContext";
+import { Button, Card, Input, ScreenLayout, VerificationWall } from "../../components/ui";
+import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type { NeighborAdCategory } from "../../types";
 import { colors, radius, spacing, textStyles } from "../../theme";
 
@@ -30,7 +30,15 @@ type PhotoItem =
     | { kind: "new"; uri: string; base64: string };
 
 export function NeighborAdNewScreen({ navigation, route }: Props) {
-    const { addNeighborAd, editNeighborAd, neighborAds, profile } = useApp();
+    const { addNeighborAd, editNeighborAd, neighborAds, profile, verification } = useApp();
+
+    if (!isVerifiedResident(verification)) {
+        return (
+            <ScreenLayout title="Объявление" onBack={() => navigation.goBack()}>
+                <VerificationWall message="Публиковать объявления могут только верифицированные жильцы дома." />
+            </ScreenLayout>
+        );
+    }
     const editId = route?.params?.editId;
     const existing = editId ? neighborAds.find((a) => a.id === editId) : undefined;
 

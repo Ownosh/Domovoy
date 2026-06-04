@@ -7,7 +7,7 @@ import {
     Text,
     View,
 } from "react-native";
-import { Button, Card, ScreenLayout } from "../../components/ui";
+import { Button, Card, ScreenLayout, VerificationWall } from "../../components/ui";
 import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type { Vote, VoteCast } from "../../types";
 import { voteSourceLine } from "../../utils/voteSponsor";
@@ -52,7 +52,7 @@ function aggregate(
     }));
 }
 
-export function VoteDetailScreen({ route, navigation }: Props) {
+export function VoteDetailScreen({ route }: Props) {
     const goBack = useModalBack();
     const { votes, voteCasts, castVote, verification, user } = useApp();
     const vote = votes.find((v) => v.id === route.params.id);
@@ -161,13 +161,6 @@ export function VoteDetailScreen({ route, navigation }: Props) {
                 </Text>
             )}
 
-            {!isVerifiedResident(verification) && (
-                <Text style={[textStyles.caption, styles.warn]}>
-                    Участвовать в опросе дома могут жильцы с подтверждённой верификацией.
-                    Официальное ОСС оформляется отдельно (ГИС ЖКХ, УК).
-                </Text>
-            )}
-
             <View style={styles.block}>
                 <Text style={[textStyles.label, styles.label]}>
                     Текущий результат
@@ -254,6 +247,10 @@ export function VoteDetailScreen({ route, navigation }: Props) {
                     onPress={onPdf}
                 />
             )}
+
+            {!isVerifiedResident(verification) && (
+                <VerificationWall message="Участвовать в голосовании могут только верифицированные жильцы дома." />
+            )}
         </ScreenLayout>
     );
 }
@@ -320,7 +317,8 @@ const styles = StyleSheet.create({
     label: { color: colors.textMuted },
     btnWrap: { marginBottom: spacing.sm },
     votedMeta: { color: colors.primary, marginTop: spacing.lg },
-    warn: { color: colors.warning, marginTop: spacing.md, lineHeight: 20 },
+    verifyBlock: { gap: spacing.md, marginTop: spacing.md },
+    warn: { color: colors.warning, lineHeight: 20 },
     table: {
         marginTop: spacing.sm,
         borderWidth: 1,

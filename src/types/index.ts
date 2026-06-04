@@ -67,6 +67,8 @@ export type Appeal = {
     participants: AppealParticipant[];
     escalatedToUk?: boolean;
     imageUrls: string[];
+    resolvedAt?: string;
+    manuallyArchived?: boolean;
 };
 
 export type NotificationType =

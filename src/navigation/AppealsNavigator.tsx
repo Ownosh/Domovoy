@@ -8,6 +8,8 @@ import { NeighborAdNewScreen } from "../screens/community/NeighborAdNewScreen";
 import { VoteCreateInfoScreen } from "../screens/community/VoteCreateInfoScreen";
 import { VoteDetailScreen } from "../screens/community/VoteDetailScreen";
 import { VoteNewScreen } from "../screens/community/VoteNewScreen";
+import { VerificationScreen } from "../screens/profile/VerificationScreen";
+import { PrivacyPolicyScreen } from "../screens/auth/PrivacyPolicyScreen";
 import type { AppealsStackParamList } from "./types";
 
 const Stack = createNativeStackNavigator<AppealsStackParamList>();
@@ -27,6 +29,8 @@ export function AppealsNavigator() {
             <Stack.Screen name="VoteCreateInfo" component={VoteCreateInfoScreen} />
             <Stack.Screen name="VoteNew" component={VoteNewScreen} />
             <Stack.Screen name="VoteDetail" component={VoteDetailScreen} />
+            <Stack.Screen name="Verification" component={VerificationScreen as any} />
+            <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen as any} />
         </Stack.Navigator>
     );
 }

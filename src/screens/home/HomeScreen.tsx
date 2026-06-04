@@ -14,7 +14,7 @@ import {
 } from "react-native";
 
 import { AppealStatusBadge, Card, ScreenLayout } from "../../components/ui";
-import { useApp } from "../../context/AppContext";
+import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type {
     AuthenticatedRootParamList,
     CommunityStackParamList,
@@ -148,7 +148,9 @@ export function HomeScreen() {
         markAllNotificationsRead,
         profile,
         refreshFeed,
+        verification,
     } = useApp();
+    const verified = isVerifiedResident(verification);
 
     const onRefresh = useCallback(() => { void refreshFeed(); }, [refreshFeed]);
 
@@ -222,7 +224,8 @@ export function HomeScreen() {
     }, [houseNews, houseVotes, houseAds, houseCollectiveAppeals]);
 
     const visibleFeed = useMemo(() => {
-        const filtered = feedRows.filter((row) => {
+        return feedRows.filter((row) => {
+            if (!verified && row.kind === "ad") return false;
             if (feedFilter === "all") return true;
             if (feedFilter === "news") return row.kind === "news";
             if (feedFilter === "votes") return row.kind === "vote";
@@ -230,9 +233,7 @@ export function HomeScreen() {
             if (feedFilter === "collective") return row.kind === "appeal";
             return true;
         });
-        // feedRows уже отсортирован по sortAt, сохраняем порядок.
-        return filtered;
-    }, [feedRows, feedFilter]);
+    }, [feedRows, feedFilter, verified]);
 
     const openCommunity = useCallback(
         <S extends keyof CommunityStackParamList>(
@@ -342,7 +343,6 @@ export function HomeScreen() {
                                     <NotifRow
                                         key={n.id}
                                         n={n}
-                                        onRead={() => markNotificationRead(n.id)}
                                         onOpen={() => { markNotificationRead(n.id); setDetailNotif(n); }}
                                     />
                                 ))
@@ -369,7 +369,7 @@ export function HomeScreen() {
                         contentContainerStyle={styles.filterRow}
                         nestedScrollEnabled
                     >
-                        {FILTER_CHIPS.map((c) => (
+                        {FILTER_CHIPS.filter((c) => verified || c.id !== "neighbor").map((c) => (
                             <Pressable
                                 key={c.id}
                                 onPress={() => setFeedFilter(c.id)}
@@ -465,11 +465,9 @@ export function HomeScreen() {
 
 function NotifRow({
     n,
-    onRead,
     onOpen,
 }: {
     n: import("../../types").AppNotification;
-    onRead: () => void;
     onOpen: () => void;
 }) {
     const lastTap = useRef<number>(0);

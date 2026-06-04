@@ -1,8 +1,8 @@
 import type { CommunityScreenProps } from "../../navigation/types";
 import React, { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
-import { Button, Card, Input, ScreenLayout } from "../../components/ui";
-import { useApp } from "../../context/AppContext";
+import { Button, Card, Input, ScreenLayout, VerificationWall } from "../../components/ui";
+import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type { VoteVisibility } from "../../types";
 import { colors, radius, spacing, textStyles } from "../../theme";
 
@@ -15,7 +15,15 @@ const DURATIONS: { days: 3 | 7 | 14; label: string }[] = [
 ];
 
 export function VoteNewScreen({ navigation, route }: Props) {
-    const { addResidentVote, editVote, votes } = useApp();
+    const { addResidentVote, editVote, votes, verification } = useApp();
+
+    if (!isVerifiedResident(verification) && !route?.params?.editId) {
+        return (
+            <ScreenLayout title="Новое голосование" onBack={() => navigation.goBack()}>
+                <VerificationWall message="Создавать голосования могут только верифицированные жильцы дома." />
+            </ScreenLayout>
+        );
+    }
     const editId = route?.params?.editId;
     const existing = editId ? votes.find((v) => v.id === editId) : undefined;
     const [topic, setTopic] = useState(existing?.topic ?? "");

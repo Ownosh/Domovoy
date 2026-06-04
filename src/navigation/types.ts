@@ -65,6 +65,7 @@ export type ProfileStackParamList = {
     PrivacyPolicy: undefined;
     DeleteAccount: undefined;
     AppealHistory: undefined;
+    AppealHistoryDetail: { id: string };
     NotificationSettings: undefined;
     Contacts: undefined;
 };

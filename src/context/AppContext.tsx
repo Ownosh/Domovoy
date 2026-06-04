@@ -3,7 +3,7 @@ import { apiLogin, apiLogout, apiRegister, apiChangePassword } from "../api/auth
 import { apiFetchNews } from "../api/news";
 import { apiFetchVotes, apiCreateVote, apiCastVote, apiEditVote, apiDeleteVote } from "../api/votes";
 import { apiFetchNeighborAds, apiCreateNeighborAd, apiDeleteNeighborAd, apiExtendNeighborAd, apiReportNeighborAd, apiEditNeighborAd } from "../api/neighborAds";
-import { apiFetchAppeals, apiCreateAppeal, apiJoinAppeal, apiDeleteAppeal, apiEditAppeal } from "../api/appeals";
+import { apiFetchAppeals, apiCreateAppeal, apiJoinAppeal, apiDeleteAppeal, apiEditAppeal, apiArchiveAppeal } from "../api/appeals";
 import { clearTokens, ApiError } from "../api/client";
 import { apiSubmitRating, apiFetchMyRating } from "../api/ratings";
 import { apiFetchBuildingInfo, apiFetchBuildingPhotos, apiFetchBuildingSpecs, apiFetchBuildingSchedule, apiFetchBuildingCalendar, type BuildingInfo, type BuildingSpec, type HouseScheduleItem } from "../api/buildings";
@@ -483,6 +483,8 @@ function normalizeAppealRaw(a: Appeal | Record<string, unknown>): Appeal {
         participants,
         escalatedToUk: Boolean(r.escalatedToUk),
         imageUrls: Array.isArray(r.imageUrls) ? r.imageUrls : [],
+        resolvedAt: r.resolvedAt ? String(r.resolvedAt) : undefined,
+        manuallyArchived: Boolean(r.manuallyArchived),
     };
 }
 
@@ -729,6 +731,7 @@ type AppContextValue = {
     }) => Promise<{ ok: true } | { ok: false; reason: string }>;
     joinAppeal: (appealId: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
     deleteAppeal: (id: string) => void;
+    archiveAppeal: (id: string) => void;
     markNotificationRead: (id: string) => void;
     markAllNotificationsRead: () => void;
     toggleNotificationPref: (key: keyof NotificationPrefs) => void;
@@ -1035,6 +1038,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: "DELETE_APPEAL", payload: id });
         apiDeleteAppeal(id).catch(() => {});
     }, []);
+
+    const archiveAppeal = useCallback((id: string) => {
+        dispatch({
+            type: "SET_APPEALS",
+            payload: state.appeals.map((a) =>
+                a.id === id ? { ...a, manuallyArchived: true } : a,
+            ),
+        });
+        apiArchiveAppeal(id).catch(() => {});
+    }, [state.appeals]);
 
     const markNotificationRead = useCallback((id: string) => {
         dispatch({ type: "MARK_NOTIF_READ", payload: id });
@@ -1414,6 +1427,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             addAppeal,
             joinAppeal,
             deleteAppeal,
+            archiveAppeal,
             markNotificationRead,
             markAllNotificationsRead,
             toggleNotificationPref,
@@ -1465,6 +1479,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             addAppeal,
             joinAppeal,
             deleteAppeal,
+            archiveAppeal,
             markNotificationRead,
             markAllNotificationsRead,
             toggleNotificationPref,

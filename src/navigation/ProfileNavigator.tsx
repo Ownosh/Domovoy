@@ -1,6 +1,7 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React from "react";
 import { AppealHistoryScreen } from "../screens/profile/AppealHistoryScreen";
+import { AppealDetailScreen } from "../screens/appeals/AppealDetailScreen";
 import { ChangePasswordScreen } from "../screens/profile/ChangePasswordScreen";
 import { ContactsScreen } from "../screens/profile/ContactsScreen";
 import { DeleteAccountScreen } from "../screens/profile/DeleteAccountScreen";
@@ -38,6 +39,10 @@ export function ProfileNavigator() {
             <Stack.Screen
                 name="AppealHistory"
                 component={AppealHistoryScreen}
+            />
+            <Stack.Screen
+                name="AppealHistoryDetail"
+                component={AppealDetailScreen as any}
             />
             <Stack.Screen
                 name="NotificationSettings"

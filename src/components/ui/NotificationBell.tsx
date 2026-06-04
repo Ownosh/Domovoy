@@ -8,7 +8,7 @@ import {
     Text,
     View,
 } from "react-native";
-import { useApp } from "../../context/AppContext";
+import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type { AppNotification } from "../../types";
 import { colors, spacing, textStyles } from "../../theme";
 import { Card } from "./Card";
@@ -72,7 +72,9 @@ function NotifRow({
 export function NotificationBell() {
     const [open, setOpen] = useState(false);
     const [detail, setDetail] = useState<AppNotification | null>(null);
-    const { visibleNotifications, markNotificationRead, markAllNotificationsRead } = useApp();
+    const { visibleNotifications, markNotificationRead, markAllNotificationsRead, verification } = useApp();
+
+    if (!isVerifiedResident(verification)) return null;
 
     const unreadCount = useMemo(
         () => visibleNotifications.filter((n) => !n.read).length,

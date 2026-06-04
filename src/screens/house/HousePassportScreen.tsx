@@ -12,7 +12,7 @@ import {
     View,
 } from "react-native";
 import { Button, Card, Input, NotificationBell, ScreenLayout } from "../../components/ui";
-import { useApp } from "../../context/AppContext";
+import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type { MainTabNavigationProp } from "../../navigation/types";
 import type {
     EnvironmentRatingFeedbackTagId,
@@ -132,13 +132,15 @@ function AgendaDivider() {
 export function HousePassportScreen() {
     const navigation = useNavigation<MainTabNavigationProp>();
     const {
-        environmentRating, setEnvironmentRating,
+        environmentRating, setEnvironmentRating, verification,
         houseInfo: buildingInfo,
         housePhotos: photos,
         houseSpecs: specs,
         houseSchedule: scheduleItems,
         houseCalendar: calendarActivities,
     } = useApp();
+    const verified = isVerifiedResident(verification);
+    const visibleTabs = HOUSE_TABS.filter((t) => verified || t.id !== "rating");
     const [tab, setTab] = useState<HouseTab>("calendar");
     const [viewMonth, setViewMonth] = useState(() => startOfMonth(new Date()));
     const [ratingOpen, setRatingOpen] = useState(false);
@@ -277,7 +279,7 @@ export function HousePassportScreen() {
                 contentContainerStyle={styles.filterRow}
                 nestedScrollEnabled
             >
-                {HOUSE_TABS.map((t) => (
+                {visibleTabs.map((t) => (
                     <Pressable
                         key={t.id}
                         onPress={() => setTab(t.id)}

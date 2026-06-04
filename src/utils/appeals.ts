@@ -1,23 +1,20 @@
 import type { Appeal } from "../types";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-const ARCHIVE_DELAY_DAYS = 3;
+const HOUR_MS = 60 * 60 * 1000;
+const ARCHIVE_HOURS = 24;
 const archivedStatuses = new Set<Appeal["status"]>(["resolved", "rejected"]);
 
 /** Порог квартир в подъезде для массовой жалобы. */
 export const MASS_APPEAL_THRESHOLD = 5;
 
-function isOlderThanArchiveDelay(createdAt: string): boolean {
-    const createdAtMs = new Date(createdAt).getTime();
-    if (Number.isNaN(createdAtMs)) return false;
-    return Date.now() - createdAtMs >= ARCHIVE_DELAY_DAYS * DAY_MS;
-}
-
 export function isArchivedAppeal(appeal: Appeal): boolean {
-    return (
-        archivedStatuses.has(appeal.status) &&
-        isOlderThanArchiveDelay(appeal.createdAt)
-    );
+    if (appeal.manuallyArchived) return true;
+    if (!archivedStatuses.has(appeal.status)) return false;
+    // отсчёт 24 ч от времени решения, а не создания
+    const baseDate = appeal.resolvedAt ?? appeal.createdAt;
+    const baseMs = new Date(baseDate).getTime();
+    if (Number.isNaN(baseMs)) return false;
+    return Date.now() - baseMs >= ARCHIVE_HOURS * HOUR_MS;
 }
 
 function normApt(s: string): string {

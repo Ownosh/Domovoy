@@ -11,7 +11,7 @@ import {
     View,
 } from "react-native";
 import { AppealStatusBadge, Card, NotificationBell, ScreenLayout } from "../../components/ui";
-import { useApp } from "../../context/AppContext";
+import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type {
     AppealsStackParamList,
     MainTabNavigationProp,
@@ -133,8 +133,11 @@ function AdCard({ item, onPress }: { item: NeighborAd; onPress: () => void }) {
 
 export function AppealsListScreen() {
     const navigation = useNavigation<Nav>();
-    const { appeals, profile, user, votes, neighborAds } = useApp();
+    const { appeals, profile, user, votes, neighborAds, verification } = useApp();
+    const verified = isVerifiedResident(verification);
     const [tab, setTab] = useState<CommunityTab>("appeals");
+
+    const visibleTabs = COMMUNITY_TABS.filter((t) => verified || t.id !== "ads");
     const houseKey = buildBuildingKey(profile.building);
     const uid = user ? String(user.id) : null;
 
@@ -213,7 +216,7 @@ export function AppealsListScreen() {
                     style={styles.tabsScroll}
                     nestedScrollEnabled
                 >
-                    {COMMUNITY_TABS.map((t) => (
+                    {visibleTabs.map((t) => (
                         <Pressable
                             key={t.id}
                             onPress={() => setTab(t.id)}

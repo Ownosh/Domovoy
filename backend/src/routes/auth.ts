@@ -65,6 +65,19 @@ router.post("/register", async (req: Request, res: Response) => {
             return;
         }
 
+        // Проверка уникальности телефона
+        if (phone?.trim()) {
+            const [phoneRows] = await conn.execute(
+                "SELECT user_id FROM user_profiles WHERE phone = ?",
+                [phone.trim()],
+            ) as [RowDataPacket[], unknown];
+            if (phoneRows.length > 0) {
+                await conn.rollback();
+                res.status(409).json({ error: "Этот номер телефона уже используется другим пользователем" });
+                return;
+            }
+        }
+
         const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
         const [userResult] = await conn.execute(
@@ -251,6 +264,18 @@ router.patch("/profile", requireAuth, async (req: AuthRequest, res: Response) =>
     };
 
     try {
+        // Проверка уникальности телефона при редактировании профиля
+        if (phone?.trim()) {
+            const [phoneRows] = await pool.execute(
+                "SELECT user_id FROM user_profiles WHERE phone = ? AND user_id != ?",
+                [phone.trim(), userId],
+            ) as [RowDataPacket[], unknown];
+            if (phoneRows.length > 0) {
+                res.status(409).json({ error: "Этот номер телефона уже используется другим пользователем" });
+                return;
+            }
+        }
+
         let buildingKey: string | undefined;
         if (building != null) {
             const buildingLabel = building.trim();

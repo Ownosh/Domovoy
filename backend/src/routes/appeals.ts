@@ -58,6 +58,8 @@ function mapAppealRow(v: RowDataPacket, parts: RowDataPacket[], photoUrls: strin
         authorApartment: String(v.author_apartment ?? ""),
         escalatedToUk: Boolean(v.escalated_to_uk),
         createdAt: (v.created_at as Date).toISOString(),
+        resolvedAt: v.resolved_at ? (v.resolved_at as Date).toISOString() : undefined,
+        manuallyArchived: Boolean(v.manually_archived),
         imageUrls: photoUrls,
         participants: parts.map((p) => ({
             userId: String(p.user_id),
@@ -76,7 +78,8 @@ async function fetchWithParticipants(appealIds: number[]): Promise<object[]> {
     if (appealIds.length === 0) return [];
     const [rows] = await pool.query<RowDataPacket[]>(
         `SELECT id, user_id, building_key, title, body, category, kind, status,
-                entrance, author_apartment, escalated_to_uk, created_at
+                entrance, author_apartment, escalated_to_uk, created_at,
+                resolved_at, manually_archived
          FROM appeals WHERE id IN (?) ORDER BY created_at DESC`,
         [appealIds],
     );
@@ -267,6 +270,30 @@ router.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
         return res.json({ ok: true });
     } catch (err) {
         console.error("[appeals DELETE]", err);
+        return res.status(500).json({ error: "Ошибка сервера" });
+    }
+});
+
+// POST /api/appeals/:id/archive — вручную отправить в архив
+router.post("/:id/archive", requireAuth, async (req: AuthRequest, res) => {
+    const userId = req.userId!;
+    const appealId = Number(req.params.id);
+    try {
+        const [[appeal]] = await pool.query<RowDataPacket[]>(
+            `SELECT id, user_id, status FROM appeals WHERE id = ?`, [appealId],
+        );
+        if (!appeal) return res.status(404).json({ error: "Обращение не найдено" });
+        if (Number(appeal.user_id) !== userId)
+            return res.status(403).json({ error: "Нет прав" });
+        if (!["resolved", "rejected"].includes(appeal.status as string))
+            return res.status(400).json({ error: "Архивировать можно только решённые или отклонённые обращения" });
+
+        await pool.execute(
+            `UPDATE appeals SET manually_archived = 1 WHERE id = ?`, [appealId],
+        );
+        return res.json({ ok: true });
+    } catch (err) {
+        console.error("[appeals archive]", err);
         return res.status(500).json({ error: "Ошибка сервера" });
     }
 });

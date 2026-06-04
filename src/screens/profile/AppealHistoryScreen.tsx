@@ -1,4 +1,5 @@
-import type { ProfileScreenProps } from "../../navigation/types";
+import type { ProfileScreenProps, ProfileStackParamList } from "../../navigation/types";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import {
@@ -7,14 +8,14 @@ import {
     ScreenLayout,
 } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
-import type { MainTabNavigationProp } from "../../navigation/types";
 import { colors, spacing, textStyles } from "../../theme";
 import { isArchivedAppeal } from "../../utils/appeals";
 
 type Props = ProfileScreenProps<"AppealHistory">;
+type Nav = NativeStackNavigationProp<ProfileStackParamList, "AppealHistory">;
 
 export function AppealHistoryScreen({ navigation }: Props) {
-    const parent = navigation.getParent<MainTabNavigationProp>();
+    const nav = navigation as unknown as Nav;
     const { appeals } = useApp();
     const archivedAppeals = appeals.filter(isArchivedAppeal);
 
@@ -37,12 +38,7 @@ export function AppealHistoryScreen({ navigation }: Props) {
                 }
                 renderItem={({ item }) => (
                     <Pressable
-                        onPress={() =>
-                            parent?.navigate("Appeals", {
-                                screen: "AppealDetail",
-                                params: { id: item.id },
-                            })
-                        }
+                        onPress={() => nav.navigate("AppealHistoryDetail", { id: item.id })}
                     >
                         <Card style={styles.row}>
                             <View style={styles.rowTop}>

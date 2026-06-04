@@ -24,11 +24,13 @@ import {
     Button,
     Card,
     ScreenLayout,
+    VerificationWall,
 } from "../../components/ui";
 import { useApp, isVerifiedResident } from "../../context/AppContext";
 import { buildBuildingKey } from "../../utils/buildingKey";
 import {
     collectiveUniqueApartmentCount,
+    isArchivedAppeal,
     MASS_APPEAL_THRESHOLD,
 } from "../../utils/appeals";
 import { colors, spacing, textStyles } from "../../theme";
@@ -36,7 +38,7 @@ import { colors, spacing, textStyles } from "../../theme";
 type Props = AppealsScreenProps<"AppealDetail">;
 
 export function AppealDetailScreen({ route, navigation }: Props) {
-    const { appeals, deleteAppeal, joinAppeal, verification, user, profile } = useApp();
+    const { appeals, deleteAppeal, archiveAppeal, joinAppeal, verification, user, profile } = useApp();
     const goBack = useModalBack();
     const item = appeals.find((a) => a.id === route.params.id);
 
@@ -149,12 +151,18 @@ export function AppealDetailScreen({ route, navigation }: Props) {
                 </Text>
             )}
             {item.kind === "collective" && !isAuthor && user && !verified && (
-                <Text style={[textStyles.caption, styles.warn]}>
-                    Присоединиться могут только жильцы с подтверждённой верификацией.
-                </Text>
+                <VerificationWall message="Присоединиться к коллективному обращению могут только верифицированные жильцы." />
             )}
 
-            {isAuthor && (
+            {isAuthor && (item.status === "resolved" || item.status === "rejected") && !isArchivedAppeal(item) ? (
+                <View style={styles.authorBtns}>
+                    <Button
+                        title="Добавить в архив"
+                        variant="secondary"
+                        onPress={() => { archiveAppeal(item.id); goBack(); }}
+                    />
+                </View>
+            ) : isAuthor && !isArchivedAppeal(item) ? (
                 <View style={styles.authorBtns}>
                     <Pressable
                         onPress={() => {
@@ -180,7 +188,7 @@ export function AppealDetailScreen({ route, navigation }: Props) {
                         <Ionicons name="trash-outline" size={20} color={colors.bg} />
                     </Pressable>
                 </View>
-            )}
+            ) : null}
         </ScreenLayout>
     );
 }

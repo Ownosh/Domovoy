@@ -2,9 +2,9 @@ import type { AppealsScreenProps } from "../../navigation/types";
 import React, { useState } from "react";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { Button, Card, Input, ScreenLayout } from "../../components/ui";
+import { Button, Card, Input, ScreenLayout, VerificationWall } from "../../components/ui";
 import { appealCategories } from "../../data/mockData";
-import { useApp } from "../../context/AppContext";
+import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type { AppealKind } from "../../types";
 import { colors, radius, spacing, textStyles } from "../../theme";
 
@@ -17,7 +17,15 @@ type PhotoItem =
     | { kind: "new"; uri: string; base64: string };
 
 export function NewAppealScreen({ navigation, route }: Props) {
-    const { addAppeal, editAppeal, appeals, profile } = useApp();
+    const { addAppeal, editAppeal, appeals, profile, verification } = useApp();
+
+    if (!isVerifiedResident(verification) && !route.params?.editId) {
+        return (
+            <ScreenLayout title="Новое обращение" onBack={() => navigation.goBack()}>
+                <VerificationWall message="Подавать обращения могут только верифицированные жильцы дома." />
+            </ScreenLayout>
+        );
+    }
     const editId = route.params?.editId;
     const existing = editId ? appeals.find((a) => a.id === editId) : undefined;
     const [title, setTitle] = useState(existing?.title ?? "");

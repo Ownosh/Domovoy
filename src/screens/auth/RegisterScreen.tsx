@@ -143,7 +143,13 @@ export function RegisterScreen({ navigation }: Props) {
             });
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : "Ошибка регистрации";
-            setConsentErr(msg);
+            if (msg.includes("телефон")) {
+                setFieldErrors((prev) => ({ ...prev, phone: msg }));
+            } else if (msg.toLowerCase().includes("email")) {
+                setFieldErrors((prev) => ({ ...prev, email: msg }));
+            } else {
+                setConsentErr(msg);
+            }
         } finally {
             setLoading(false);
         }

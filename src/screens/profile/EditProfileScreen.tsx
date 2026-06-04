@@ -100,8 +100,12 @@ export function EditProfileScreen({ navigation }: Props) {
         };
         try {
             await apiUpdateProfile(profileData);
-        } catch {
-            // не блокируем сохранение локально если API недоступен
+        } catch (e: any) {
+            if (e?.message?.includes("телефон")) {
+                setFieldErrors((prev) => ({ ...prev, phone: e.message }));
+                return;
+            }
+            // остальные ошибки не блокируют локальное сохранение
         }
         updateProfile({
             ...profileData,

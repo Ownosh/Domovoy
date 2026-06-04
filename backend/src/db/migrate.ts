@@ -316,6 +316,11 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    // Архивирование обращений
+    await pool.query(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS manually_archived TINYINT(1) NOT NULL DEFAULT 0`).catch(() => {});
+    // resolved_at уже должна быть в таблице, но добавим на случай если нет
+    await pool.query(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS resolved_at DATETIME DEFAULT NULL`).catch(() => {});
+
     // Фото хранятся как base64 data URI
     await pool.query(`ALTER TABLE district_pois MODIFY COLUMN photo_url MEDIUMTEXT DEFAULT NULL`).catch(() => {});
     // verification_requests — фото документа

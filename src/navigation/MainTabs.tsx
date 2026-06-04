@@ -9,11 +9,17 @@ import type { MainTabParamList } from "./types";
 import { DistrictScreen } from "../screens/district/DistrictScreen";
 import { HomeScreen } from "../screens/home/HomeScreen";
 import { HousePassportScreen } from "../screens/house/HousePassportScreen";
+import { useApp, isVerifiedResident } from "../context/AppContext";
 import { colors, spacing } from "../theme";
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
+const HIDDEN: object = { display: "none" as const };
+
 export function MainTabs() {
+    const { verification } = useApp();
+    const verified = isVerifiedResident(verification);
+
     return (
         <Tab.Navigator
             id="MainTabs"
@@ -41,6 +47,7 @@ export function MainTabs() {
                 component={AppealsNavigator}
                 options={{
                     title: "Сообщество",
+                    tabBarItemStyle: verified ? styles.item : HIDDEN,
                     tabBarIcon: ({ color, size }) => (
                         <Ionicons name="chatbox-ellipses-outline" size={size} color={color} />
                     ),
@@ -61,6 +68,7 @@ export function MainTabs() {
                 component={DistrictScreen}
                 options={{
                     title: "Район",
+                    tabBarItemStyle: verified ? styles.item : HIDDEN,
                     tabBarIcon: ({ color, size }) => (
                         <Ionicons name="map-outline" size={size} color={color} />
                     ),

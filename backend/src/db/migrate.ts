@@ -316,30 +316,33 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
-    // Фото профиля пользователя
-    await pool.query(`ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS profile_photo MEDIUMTEXT DEFAULT NULL`).catch(() => {});
+    // Фото профиля пользователя (URL на сервере)
+    await pool.query(`ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS profile_photo TEXT DEFAULT NULL`).catch(() => {});
+    await pool.query(`ALTER TABLE user_profiles MODIFY COLUMN profile_photo TEXT DEFAULT NULL`).catch(() => {});
 
     // Архивирование обращений
     await pool.query(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS manually_archived TINYINT(1) NOT NULL DEFAULT 0`).catch(() => {});
     // resolved_at уже должна быть в таблице, но добавим на случай если нет
     await pool.query(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS resolved_at DATETIME DEFAULT NULL`).catch(() => {});
 
-    // Фото хранятся как base64 data URI
-    await pool.query(`ALTER TABLE district_pois MODIFY COLUMN photo_url MEDIUMTEXT DEFAULT NULL`).catch(() => {});
+    // Фото хранятся как URL на сервере (TEXT достаточно)
+    await pool.query(`ALTER TABLE district_pois MODIFY COLUMN photo_url TEXT DEFAULT NULL`).catch(() => {});
+    await pool.query(`ALTER TABLE house_photos MODIFY COLUMN image_url TEXT NOT NULL`).catch(() => {});
+    await pool.query(`ALTER TABLE appeal_photos MODIFY COLUMN image_url TEXT NOT NULL`).catch(() => {});
+    await pool.query(`ALTER TABLE neighbor_ad_photos MODIFY COLUMN image_url TEXT NOT NULL`).catch(() => {});
+    await pool.query(`ALTER TABLE appeal_participants MODIFY COLUMN photo_uri TEXT DEFAULT NULL`).catch(() => {});
     // verification_requests — фото документа
-    await pool.query(`ALTER TABLE verification_requests ADD COLUMN IF NOT EXISTS photo_url MEDIUMTEXT DEFAULT NULL`).catch(() => {});
+    await pool.query(`ALTER TABLE verification_requests ADD COLUMN IF NOT EXISTS photo_url TEXT DEFAULT NULL`).catch(() => {});
+    await pool.query(`ALTER TABLE verification_requests MODIFY COLUMN photo_url TEXT DEFAULT NULL`).catch(() => {});
     await pool.query(`ALTER TABLE verification_requests ADD COLUMN IF NOT EXISTS building_key VARCHAR(120) DEFAULT NULL`).catch(() => {});
     await pool.query(`ALTER TABLE verification_requests ADD COLUMN IF NOT EXISTS comment TEXT DEFAULT NULL`).catch(() => {});
     await pool.query(`ALTER TABLE verification_requests ADD COLUMN IF NOT EXISTS reviewed_at DATETIME DEFAULT NULL`).catch(() => {});
-    await pool.query(`ALTER TABLE house_photos MODIFY COLUMN image_url MEDIUMTEXT NOT NULL`).catch(() => {});
-    await pool.query(`ALTER TABLE appeal_photos MODIFY COLUMN image_url MEDIUMTEXT NOT NULL`).catch(() => {});
-    await pool.query(`ALTER TABLE appeal_participants MODIFY COLUMN photo_uri MEDIUMTEXT DEFAULT NULL`).catch(() => {});
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS neighbor_ad_photos (
             id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             ad_id      BIGINT UNSIGNED NOT NULL,
-            image_url  MEDIUMTEXT      NOT NULL,
+            image_url  TEXT            NOT NULL,
             position   INT             NOT NULL DEFAULT 0,
             is_primary TINYINT(1)      NOT NULL DEFAULT 0,
             created_at DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,

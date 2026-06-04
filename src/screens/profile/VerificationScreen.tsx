@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { Button, Card, ScreenLayout } from "../../components/ui";
+import { uploadFile } from "../../api/files";
 import { VerificationStatusBadge } from "../../components/ui/StatusBadge";
 import { useApp } from "../../context/AppContext";
 import { colors, radius, spacing, textStyles } from "../../theme";
@@ -14,7 +15,6 @@ export function VerificationScreen({ navigation }: Props) {
     const [docType, setDocType] = useState<"lease" | "ownership">("lease");
     const [pdConsent, setPdConsent] = useState(false);
     const [photoUri, setPhotoUri] = useState<string | null>(null);
-    const [photoBase64, setPhotoBase64] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
     const canSubmit =
@@ -30,11 +30,9 @@ export function VerificationScreen({ navigation }: Props) {
             mediaTypes: ["images"],
             allowsEditing: true,
             quality: 0.8,
-            base64: true,
         });
         if (!result.canceled && result.assets[0]) {
             setPhotoUri(result.assets[0].uri);
-            setPhotoBase64(result.assets[0].base64 ?? null);
         }
     };
 
@@ -43,13 +41,20 @@ export function VerificationScreen({ navigation }: Props) {
             Alert.alert("Согласие нужно", "Отметьте согласие на обработку персональных данных.");
             return;
         }
-        if (!photoBase64) {
+        if (!photoUri) {
             Alert.alert("Фото нужно", "Прикрепите фото документа.");
             return;
         }
         setSubmitting(true);
-        const dataUri = `data:image/jpeg;base64,${photoBase64}`;
-        const r = await submitVerification(docType, dataUri);
+        let photoUrl: string;
+        try {
+            photoUrl = await uploadFile(photoUri);
+        } catch {
+            setSubmitting(false);
+            Alert.alert("Ошибка", "Не удалось загрузить фото. Проверьте соединение.");
+            return;
+        }
+        const r = await submitVerification(docType, photoUrl);
         setSubmitting(false);
         if (!r.ok) {
             Alert.alert("Ошибка", "reason" in r ? r.reason : "Не удалось отправить заявку");
@@ -143,7 +148,7 @@ export function VerificationScreen({ navigation }: Props) {
                         {photoUri ? (
                             <View style={styles.photoWrap}>
                                 <Image source={{ uri: photoUri }} style={styles.photoPreview} resizeMode="cover" />
-                                <Pressable onPress={() => { setPhotoUri(null); setPhotoBase64(null); }} style={styles.removePhoto}>
+                                <Pressable onPress={() => { setPhotoUri(null); }} style={styles.removePhoto}>
                                     <Text style={styles.removePhotoText}>Удалить фото</Text>
                                 </Pressable>
                             </View>
@@ -156,7 +161,7 @@ export function VerificationScreen({ navigation }: Props) {
                         <Button
                             title={submitting ? "Отправка..." : "Отправить на верификацию"}
                             onPress={() => { void onSubmit(); }}
-                            disabled={submitting || !pdConsent || !photoBase64}
+                            disabled={submitting || !pdConsent || !photoUri}
                             variant="info"
                         />
                     </Card>

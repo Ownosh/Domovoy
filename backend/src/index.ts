@@ -16,15 +16,19 @@ import districtRoutes from "./routes/district";
 import imagekitRoutes from "./routes/imagekit";
 import notificationsRoutes from "./routes/notifications";
 import verificationRoutes from "./routes/verification";
+import filesRoutes from "./routes/files";
 
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
 
-app.use(helmet());
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(cors({ origin: process.env.FRONTEND_URL ?? "*" }));
 app.use(express.json({ limit: "10mb" }));
+
+// Раздача загруженных файлов
+app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -45,6 +49,7 @@ app.use("/api/district", districtRoutes);
 app.use("/api/imagekit", imagekitRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/verification", verificationRoutes);
+app.use("/api/files", filesRoutes);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 

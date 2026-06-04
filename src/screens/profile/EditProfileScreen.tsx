@@ -2,6 +2,7 @@ import type { ProfileScreenProps } from "../../navigation/types";
 import React, { useState } from "react";
 import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import { uploadFile } from "../../api/files";
 import { AddressAutocomplete, Button, Card, Input, ScreenLayout } from "../../components/ui";
 import type { BuildingSuggestion } from "../../api/buildings";
 import { apiUpdateProfile } from "../../api/auth";
@@ -39,7 +40,7 @@ export function EditProfileScreen({ navigation }: Props) {
             : "",
     );
     const [photoUri, setPhotoUri] = useState<string | null>(profile.profilePhoto ?? null);
-    const [photoBase64, setPhotoBase64] = useState<string | null>(null);
+    const [newPhotoUri, setNewPhotoUri] = useState<string | null>(null);
     const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
     const [ok, setOk] = useState(false);
 
@@ -53,12 +54,11 @@ export function EditProfileScreen({ navigation }: Props) {
             mediaTypes: ["images"],
             allowsEditing: true,
             aspect: [1, 1],
-            quality: 0.7,
-            base64: true,
+            quality: 0.8,
         });
         if (!result.canceled && result.assets[0]) {
             setPhotoUri(result.assets[0].uri);
-            setPhotoBase64(result.assets[0].base64 ?? null);
+            setNewPhotoUri(result.assets[0].uri);
         }
     };
 
@@ -108,9 +108,16 @@ export function EditProfileScreen({ navigation }: Props) {
         if (!validate()) return;
         const areaNum = parseFloat(areaStr.replace(",", "."));
         const entranceNum = parseInt(entranceStr.trim(), 10);
-        const profilePhotoData = photoBase64
-            ? `data:image/jpeg;base64,${photoBase64}`
-            : photoUri === null ? null : undefined;
+        let profilePhotoData: string | null | undefined;
+        if (newPhotoUri) {
+            try {
+                profilePhotoData = await uploadFile(newPhotoUri);
+            } catch {
+                profilePhotoData = undefined; // не блокируем сохранение
+            }
+        } else if (photoUri === null) {
+            profilePhotoData = null; // удалить фото
+        }
 
         const profileData = {
             name: name.trim(),

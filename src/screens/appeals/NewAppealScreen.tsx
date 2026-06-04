@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { Button, Card, Input, ScreenLayout, VerificationWall } from "../../components/ui";
+import { uploadFile } from "../../api/files";
 import { appealCategories } from "../../data/mockData";
 import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type { AppealKind } from "../../types";
@@ -14,7 +15,7 @@ const MAX_PHOTOS = 5;
 
 type PhotoItem =
     | { kind: "existing"; uri: string }
-    | { kind: "new"; uri: string; base64: string };
+    | { kind: "new"; uri: string };
 
 export function NewAppealScreen({ navigation, route }: Props) {
     const { addAppeal, editAppeal, appeals, profile, verification } = useApp();
@@ -56,17 +57,13 @@ export function NewAppealScreen({ navigation, route }: Props) {
             allowsMultipleSelection: true,
             selectionLimit: MAX_PHOTOS - photos.length,
             allowsEditing: false,
-            quality: 0.7,
-            base64: true,
+            quality: 0.8,
         });
         if (!result.canceled) {
-            const newItems: PhotoItem[] = result.assets
-                .filter((a) => a.base64)
-                .map((a) => ({
-                    kind: "new" as const,
-                    uri: a.uri,
-                    base64: `data:image/jpeg;base64,${a.base64!}`,
-                }));
+            const newItems: PhotoItem[] = result.assets.map((a) => ({
+                kind: "new" as const,
+                uri: a.uri,
+            }));
             setPhotos((prev) => [...prev, ...newItems].slice(0, MAX_PHOTOS));
         }
     };
@@ -87,7 +84,16 @@ export function NewAppealScreen({ navigation, route }: Props) {
         setErr("");
         setSubmitting(true);
 
-        const imageUrls = photos.map((p) => (p.kind === "existing" ? p.uri : p.base64));
+        let imageUrls: string[];
+        try {
+            imageUrls = await Promise.all(
+                photos.map((p) => p.kind === "existing" ? Promise.resolve(p.uri) : uploadFile(p.uri)),
+            );
+        } catch {
+            setErr("Не удалось загрузить фото");
+            setSubmitting(false);
+            return;
+        }
 
         const r = editId
             ? await editAppeal(editId, {
@@ -194,7 +200,7 @@ export function NewAppealScreen({ navigation, route }: Props) {
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoRow}>
                     {photos.map((p, i) => (
                         <View key={i} style={styles.thumbWrap}>
-                            <Image source={{ uri: p.kind === "existing" ? p.uri : p.base64 }} style={styles.thumb} />
+                            <Image source={{ uri: p.uri }} style={styles.thumb} />
                             <Pressable onPress={() => removePhoto(i)} style={styles.removeBtn} hitSlop={6}>
                                 <Text style={styles.removeBtnText}>×</Text>
                             </Pressable>

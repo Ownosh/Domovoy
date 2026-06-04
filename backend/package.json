@@ -8,6 +8,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@types/multer": "^2.1.0",
     "bcrypt": "*",
     "cors": "*",
     "dotenv": "*",
@@ -15,6 +16,7 @@
     "express-rate-limit": "*",
     "helmet": "*",
     "jsonwebtoken": "*",
+    "multer": "^2.1.1",
     "mysql2": "^3.22.3",
     "zod": "*"
   },

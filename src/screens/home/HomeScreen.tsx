@@ -137,6 +137,7 @@ export function HomeScreen() {
     const navigation = useNavigation<MainTabNavigationProp>();
     const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
     const [notifOpen, setNotifOpen] = useState(false);
+    const [detailNotif, setDetailNotif] = useState<import("../../types").AppNotification | null>(null);
     const {
         news,
         votes,
@@ -144,6 +145,7 @@ export function HomeScreen() {
         appeals,
         visibleNotifications,
         markNotificationRead,
+        markAllNotificationsRead,
         profile,
         refreshFeed,
     } = useApp();
@@ -308,13 +310,24 @@ export function HomeScreen() {
                             <Text style={[textStyles.subtitle, styles.sheetTitle]}>
                                 Уведомления
                             </Text>
-                            <Pressable
-                                onPress={() => setNotifOpen(false)}
-                                hitSlop={12}
-                                style={styles.sheetClose}
-                            >
-                                <Ionicons name="close" size={26} color={colors.text} />
-                            </Pressable>
+                            <View style={styles.sheetHeaderRight}>
+                                {visibleNotifications.some((n) => !n.read) && (
+                                    <Pressable
+                                        onPress={markAllNotificationsRead}
+                                        hitSlop={10}
+                                        style={styles.readAllBtn}
+                                    >
+                                        <Ionicons name="checkmark-done" size={22} color={colors.primary} />
+                                    </Pressable>
+                                )}
+                                <Pressable
+                                    onPress={() => setNotifOpen(false)}
+                                    hitSlop={12}
+                                    style={styles.sheetClose}
+                                >
+                                    <Ionicons name="close" size={26} color={colors.text} />
+                                </Pressable>
+                            </View>
                         </View>
                         <ScrollView
                             style={styles.sheetScroll}
@@ -325,64 +338,14 @@ export function HomeScreen() {
                                     Пока нет уведомлений.
                                 </Text>
                             ) : (
-                                visibleNotifications.map((n) => {
-                                    const m = typeMeta[n.type] ?? typeMeta.general;
-                                    return (
-                                        <Pressable
-                                            key={n.id}
-                                            onPress={() => markNotificationRead(n.id)}
-                                        >
-                                            <Card
-                                                style={[
-                                                    styles.notifCard,
-                                                    !n.read && styles.notifUnread,
-                                                ]}
-                                                padded
-                                            >
-                                                <View style={styles.notifTop}>
-                                                    <View
-                                                        style={[
-                                                            styles.tag,
-                                                            {
-                                                                backgroundColor: `${m.color}28`,
-                                                            },
-                                                        ]}
-                                                    >
-                                                        <Text
-                                                            style={[
-                                                                textStyles.caption,
-                                                                { color: m.color },
-                                                            ]}
-                                                        >
-                                                            {m.label}
-                                                        </Text>
-                                                    </View>
-                                                    <Text
-                                                        style={[
-                                                            textStyles.caption,
-                                                            styles.date,
-                                                        ]}
-                                                    >
-                                                        {formatDate(n.date)}
-                                                    </Text>
-                                                </View>
-                                                <Text
-                                                    style={[
-                                                        textStyles.subtitle,
-                                                        styles.ntitle,
-                                                    ]}
-                                                >
-                                                    {n.title}
-                                                </Text>
-                                                <Text
-                                                    style={[textStyles.caption, styles.nbody]}
-                                                >
-                                                    {n.body}
-                                                </Text>
-                                            </Card>
-                                        </Pressable>
-                                    );
-                                })
+                                visibleNotifications.map((n) => (
+                                    <NotifRow
+                                        key={n.id}
+                                        n={n}
+                                        onRead={() => markNotificationRead(n.id)}
+                                        onOpen={() => { markNotificationRead(n.id); setDetailNotif(n); }}
+                                    />
+                                ))
                             )}
                         </ScrollView>
                     </Pressable>
@@ -463,7 +426,84 @@ export function HomeScreen() {
                     )}
                 </ScrollView>
             </View>
+
+            {/* Детальное уведомление */}
+            <Modal
+                visible={detailNotif !== null}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setDetailNotif(null)}
+            >
+                <Pressable style={styles.sheetBackdrop} onPress={() => setDetailNotif(null)}>
+                    <Pressable style={styles.detailCard} onPress={(e) => e.stopPropagation()}>
+                        {detailNotif && (() => {
+                            const m = typeMeta[detailNotif.type] ?? typeMeta.general;
+                            return (
+                                <>
+                                    <View style={styles.sheetHeader}>
+                                        <View style={[styles.tag, { backgroundColor: `${m.color}28` }]}>
+                                            <Text style={[textStyles.caption, { color: m.color }]}>{m.label}</Text>
+                                        </View>
+                                        <Pressable onPress={() => setDetailNotif(null)} hitSlop={12}>
+                                            <Ionicons name="close" size={26} color={colors.text} />
+                                        </Pressable>
+                                    </View>
+                                    <Text style={[textStyles.caption, styles.date]}>{formatDate(detailNotif.date)}</Text>
+                                    <Text style={[textStyles.subtitle, styles.ntitle]}>{detailNotif.title}</Text>
+                                    <Text style={[textStyles.body, { color: colors.textMuted, marginTop: spacing.sm, lineHeight: 22 }]}>
+                                        {detailNotif.body}
+                                    </Text>
+                                </>
+                            );
+                        })()}
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </ScreenLayout>
+    );
+}
+
+function NotifRow({
+    n,
+    onRead,
+    onOpen,
+}: {
+    n: import("../../types").AppNotification;
+    onRead: () => void;
+    onOpen: () => void;
+}) {
+    const lastTap = useRef<number>(0);
+    const m = typeMeta[n.type] ?? typeMeta.general;
+
+    const handlePress = () => {
+        const now = Date.now();
+        if (now - lastTap.current < 350) {
+            onOpen(); // двойной тап → открыть детали + пометить прочитанным
+        }
+        // одиночный тап — ничего не делаем
+        lastTap.current = now;
+    };
+
+    return (
+        <Pressable onPress={handlePress}>
+            <Card style={[styles.notifCard, !n.read && styles.notifUnread]} padded>
+                <View style={styles.notifTop}>
+                    <View style={[styles.tag, { backgroundColor: `${m.color}28` }]}>
+                        <Text style={[textStyles.caption, { color: m.color }]}>{m.label}</Text>
+                    </View>
+                    <Text style={[textStyles.caption, styles.date]}>{formatDate(n.date)}</Text>
+                </View>
+                <Text style={[textStyles.subtitle, styles.ntitle]}>{n.title}</Text>
+                <Text style={[textStyles.caption, styles.nbody]}>{n.body}</Text>
+                <View style={styles.notifCheckRow}>
+                    <Ionicons
+                        name={n.read ? "checkmark-done" : "checkmark"}
+                        size={16}
+                        color={n.read ? colors.primary : colors.textDim}
+                    />
+                </View>
+            </Card>
+        </Pressable>
     );
 }
 
@@ -878,9 +918,18 @@ const styles = StyleSheet.create({
     },
     sheetEmpty: { color: colors.textMuted, paddingVertical: spacing.xl },
     notifCard: { gap: spacing.sm, marginBottom: spacing.md },
-    notifUnread: {
-        borderColor: colors.primary,
+    notifUnread: { borderColor: colors.primary, borderWidth: 1 },
+    notifCheckRow: { alignItems: "flex-end", marginTop: spacing.xs },
+    sheetHeaderRight: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+    readAllBtn: { padding: spacing.xs },
+    detailCard: {
+        margin: spacing.lg,
+        backgroundColor: colors.bgElevated,
+        borderRadius: 16,
+        padding: spacing.lg,
+        gap: spacing.sm,
         borderWidth: 1,
+        borderColor: colors.border,
     },
     notifTop: {
         flexDirection: "row",

@@ -14,6 +14,7 @@ import appealsRoutes from "./routes/appeals";
 import ratingsRoutes from "./routes/ratings";
 import districtRoutes from "./routes/district";
 import imagekitRoutes from "./routes/imagekit";
+import notificationsRoutes from "./routes/notifications";
 
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
@@ -41,6 +42,7 @@ app.use("/api/appeals", appealsRoutes);
 app.use("/api/ratings", ratingsRoutes);
 app.use("/api/district", districtRoutes);
 app.use("/api/imagekit", imagekitRoutes);
+app.use("/api/notifications", notificationsRoutes);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 

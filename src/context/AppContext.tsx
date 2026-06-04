@@ -6,6 +6,9 @@ import { apiFetchNeighborAds, apiCreateNeighborAd, apiDeleteNeighborAd, apiExten
 import { apiFetchAppeals, apiCreateAppeal, apiJoinAppeal, apiDeleteAppeal, apiEditAppeal } from "../api/appeals";
 import { clearTokens, ApiError } from "../api/client";
 import { apiSubmitRating, apiFetchMyRating } from "../api/ratings";
+import { apiFetchBuildingInfo, apiFetchBuildingPhotos, apiFetchBuildingSpecs, apiFetchBuildingSchedule, apiFetchBuildingCalendar, type BuildingInfo, type BuildingSpec, type HouseScheduleItem } from "../api/buildings";
+import { apiFetchDistrictPois } from "../api/district";
+import { apiFetchNotifications, apiMarkNotificationRead, apiMarkAllNotificationsRead } from "../api/notifications";
 import React, {
     createContext,
     useCallback,
@@ -16,10 +19,8 @@ import React, {
     useRef,
 } from "react";
 import {
-    seedAppeals,
     seedNeighborAds,
     seedNews,
-    seedNotifications,
     seedVoteCasts,
     seedVotes,
 } from "../data/mockData";
@@ -28,9 +29,11 @@ import type {
     AppealKind,
     AppealParticipant,
     AppNotification,
+    DistrictPoi,
     EnvironmentRatingFeedbackTagId,
     EnvironmentRatingSnapshot,
     EnvironmentRatingSubmitInput,
+    HouseCalendarActivity,
     NeighborAd,
     NeighborAdCategory,
     NewsItem,
@@ -81,9 +84,16 @@ type AppState = {
     news: NewsItem[];
     notificationPrefs: NotificationPrefs;
     neighborAds: NeighborAd[];
-    votes: import("../types").Vote[];
+    votes: Vote[];
     voteCasts: VoteCast[];
     environmentRating: EnvironmentRatingSnapshot | null;
+    districtPois: DistrictPoi[];
+    districtAnchor: { lat: number; lng: number } | null;
+    houseInfo: BuildingInfo | null;
+    housePhotos: string[];
+    houseSpecs: BuildingSpec[];
+    houseSchedule: HouseScheduleItem[];
+    houseCalendar: HouseCalendarActivity[];
 };
 
 const defaultPrefs: NotificationPrefs = {
@@ -97,14 +107,21 @@ const initialState: AppState = {
     account: null,
     sessionActive: false,
     verification: { status: "none" },
-    appeals: seedAppeals,
-    notifications: seedNotifications,
-    news: seedNews,
+    appeals: [],
+    notifications: [],
+    news: [],
     notificationPrefs: defaultPrefs,
-    neighborAds: seedNeighborAds,
-    votes: seedVotes,
-    voteCasts: seedVoteCasts,
+    neighborAds: [],
+    votes: [],
+    voteCasts: [],
     environmentRating: null,
+    districtPois: [],
+    districtAnchor: null,
+    houseInfo: null,
+    housePhotos: [],
+    houseSpecs: [],
+    houseSchedule: [],
+    houseCalendar: [],
 };
 
 type Action =
@@ -156,6 +173,9 @@ type Action =
     | { type: "SET_VOTES"; payload: { votes: Vote[]; casts: VoteCast[] } }
     | { type: "SET_NEIGHBOR_ADS"; payload: NeighborAd[] }
     | { type: "SET_APPEALS"; payload: Appeal[] }
+    | { type: "SET_NOTIFICATIONS"; payload: AppNotification[] }
+    | { type: "SET_DISTRICT"; payload: { pois: DistrictPoi[]; anchor: { lat: number; lng: number } | null } }
+    | { type: "SET_HOUSE_DATA"; payload: { info?: BuildingInfo; photos?: string[]; specs?: BuildingSpec[]; schedule?: HouseScheduleItem[]; calendar?: HouseCalendarActivity[] } }
     | { type: "REPLACE_APPEAL"; payload: Appeal };
 
 function appealRecipientUserIds(appeal: Appeal): string[] {
@@ -318,7 +338,7 @@ function reducer(state: AppState, action: Action): AppState {
         case "DELETE_ACCOUNT":
             return {
                 ...initialState,
-                notifications: seedNotifications,
+                notifications: [],
                 news: seedNews,
                 notificationPrefs: defaultPrefs,
                 neighborAds: seedNeighborAds,
@@ -413,6 +433,19 @@ function reducer(state: AppState, action: Action): AppState {
             return { ...state, neighborAds: action.payload };
         case "SET_APPEALS":
             return { ...state, appeals: action.payload };
+        case "SET_NOTIFICATIONS":
+            return { ...state, notifications: action.payload };
+        case "SET_DISTRICT":
+            return { ...state, districtPois: action.payload.pois, districtAnchor: action.payload.anchor };
+        case "SET_HOUSE_DATA":
+            return {
+                ...state,
+                houseInfo: action.payload.info ?? state.houseInfo,
+                housePhotos: action.payload.photos ?? state.housePhotos,
+                houseSpecs: action.payload.specs ?? state.houseSpecs,
+                houseSchedule: action.payload.schedule ?? state.houseSchedule,
+                houseCalendar: action.payload.calendar ?? state.houseCalendar,
+            };
         case "REPLACE_APPEAL": {
             const idx = state.appeals.findIndex((a) => a.id === action.payload.id);
             if (idx < 0) return state;
@@ -530,17 +563,13 @@ function normalizeVoteRaw(v: Vote | Record<string, unknown>): Vote {
 }
 
 function mergeHydrated(parsed: Partial<AppState>): AppState {
-    const appealsRaw = parsed.appeals ?? seedAppeals;
-    const appeals = appealsRaw.map((a) =>
+    const appeals = (parsed.appeals ?? []).map((a) =>
         normalizeAppealRaw(a as Appeal | Record<string, unknown>),
     );
-    const neighborAdsRaw = parsed.neighborAds ?? seedNeighborAds;
-    const neighborAds = neighborAdsRaw.map((a) =>
+    const neighborAds = (parsed.neighborAds ?? []).map((a) =>
         normalizeNeighborAdRaw(a as NeighborAd | Record<string, unknown>),
     );
-    const votesRaw =
-        parsed.votes && parsed.votes.length > 0 ? parsed.votes : seedVotes;
-    const votes = votesRaw.map((x) =>
+    const votes = (parsed.votes ?? []).map((x) =>
         normalizeVoteRaw(x as Vote | Record<string, unknown>),
     );
     return {
@@ -549,16 +578,21 @@ function mergeHydrated(parsed: Partial<AppState>): AppState {
         appeals,
         neighborAds,
         votes,
-        voteCasts: parsed.voteCasts ?? seedVoteCasts,
-        notifications: parsed.notifications ?? seedNotifications,
-        news: seedNews,
+        voteCasts: parsed.voteCasts ?? [],
+        notifications: parsed.notifications ?? [],
+        news: parsed.news ?? [],
         notificationPrefs: parsed.notificationPrefs ?? defaultPrefs,
         sessionActive: Boolean(parsed.sessionActive),
         verification: parsed.verification ?? { status: "none" },
         account: parsed.account ?? null,
-        environmentRating: normalizeEnvironmentRating(
-            parsed.environmentRating,
-        ),
+        environmentRating: normalizeEnvironmentRating(parsed.environmentRating),
+        districtPois: parsed.districtPois ?? [],
+        districtAnchor: parsed.districtAnchor ?? null,
+        houseInfo: parsed.houseInfo ?? null,
+        housePhotos: parsed.housePhotos ?? [],
+        houseSpecs: parsed.houseSpecs ?? [],
+        houseSchedule: parsed.houseSchedule ?? [],
+        houseCalendar: parsed.houseCalendar ?? [],
     };
 }
 
@@ -695,6 +729,7 @@ type AppContextValue = {
     joinAppeal: (appealId: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
     deleteAppeal: (id: string) => void;
     markNotificationRead: (id: string) => void;
+    markAllNotificationsRead: () => void;
     toggleNotificationPref: (key: keyof NotificationPrefs) => void;
     deleteAccount: () => void;
     setVerificationDemo: (status: "pending" | "approved" | "rejected") => void;
@@ -723,6 +758,13 @@ type AppContextValue = {
     ) => Promise<{ ok: true } | { ok: false; reason: string }>;
     environmentRating: EnvironmentRatingSnapshot | null;
     setEnvironmentRating: (input: EnvironmentRatingSubmitInput) => void;
+    districtPois: DistrictPoi[];
+    districtAnchor: { lat: number; lng: number } | null;
+    houseInfo: BuildingInfo | null;
+    housePhotos: string[];
+    houseSpecs: BuildingSpec[];
+    houseSchedule: HouseScheduleItem[];
+    houseCalendar: HouseCalendarActivity[];
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -789,6 +831,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         apiFetchMyRating()
             .then((r) => { if (r) dispatch({ type: "SET_ENVIRONMENT_RATING", payload: r }); })
             .catch(() => {});
+        apiFetchNotifications()
+            .then((items) => dispatch({ type: "SET_NOTIFICATIONS", payload: items }))
+            .catch(() => {});
+        apiFetchDistrictPois()
+            .then(({ anchor, pois }) => dispatch({ type: "SET_DISTRICT", payload: { pois, anchor } }))
+            .catch(() => {});
+        Promise.all([
+            apiFetchBuildingInfo(),
+            apiFetchBuildingPhotos(),
+            apiFetchBuildingSpecs(),
+            apiFetchBuildingSchedule(),
+            apiFetchBuildingCalendar("2020-01", "2030-12"),
+        ]).then(([info, photos, specs, schedule, calendar]) => {
+            dispatch({ type: "SET_HOUSE_DATA", payload: { info, photos, specs, schedule, calendar } });
+        }).catch(() => {});
     }, [state.sessionActive, state.account?.user.id]);
 
     useEffect(() => {
@@ -966,7 +1023,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const markNotificationRead = useCallback((id: string) => {
         dispatch({ type: "MARK_NOTIF_READ", payload: id });
+        apiMarkNotificationRead(id).catch(() => {});
     }, []);
+
+    const markAllNotificationsRead = useCallback(() => {
+        // оптимистично помечаем все прочитанными локально
+        dispatch({ type: "SET_NOTIFICATIONS", payload: state.notifications.map((n) => ({ ...n, read: true })) });
+        apiMarkAllNotificationsRead().catch(() => {});
+    }, [state.notifications]);
 
     const toggleNotificationPref = useCallback(
         (key: keyof NotificationPrefs) => {
@@ -994,6 +1058,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             apiFetchAppeals()
                 .then((list) => dispatch({ type: "SET_APPEALS", payload: list }))
                 .catch(() => {}),
+            apiFetchNotifications()
+                .then((items) => dispatch({ type: "SET_NOTIFICATIONS", payload: items }))
+                .catch(() => {}),
+            apiFetchDistrictPois()
+                .then(({ anchor, pois }) => dispatch({ type: "SET_DISTRICT", payload: { pois, anchor } }))
+                .catch(() => {}),
+            Promise.all([
+                apiFetchBuildingInfo(),
+                apiFetchBuildingPhotos(),
+                apiFetchBuildingSpecs(),
+                apiFetchBuildingSchedule(),
+                apiFetchBuildingCalendar("2020-01", "2030-12"),
+            ]).then(([info, photos, specs, schedule, calendar]) => {
+                dispatch({ type: "SET_HOUSE_DATA", payload: { info, photos, specs, schedule, calendar } });
+            }).catch(() => {}),
         ]);
     }, []);
 
@@ -1318,6 +1397,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             joinAppeal,
             deleteAppeal,
             markNotificationRead,
+            markAllNotificationsRead,
             toggleNotificationPref,
             deleteAccount,
             setVerificationDemo,
@@ -1334,6 +1414,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             addResidentVote,
             environmentRating: state.environmentRating,
             setEnvironmentRating,
+            districtPois: state.districtPois,
+            districtAnchor: state.districtAnchor,
+            houseInfo: state.houseInfo,
+            housePhotos: state.housePhotos,
+            houseSpecs: state.houseSpecs,
+            houseSchedule: state.houseSchedule,
+            houseCalendar: state.houseCalendar,
         }),
         [
             hydrated,
@@ -1361,6 +1448,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             joinAppeal,
             deleteAppeal,
             markNotificationRead,
+            markAllNotificationsRead,
             toggleNotificationPref,
             deleteAccount,
             setVerificationDemo,
@@ -1376,6 +1464,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             castVote,
             addResidentVote,
             setEnvironmentRating,
+            state.districtPois,
+            state.districtAnchor,
+            state.houseInfo,
+            state.housePhotos,
+            state.houseSpecs,
+            state.houseSchedule,
+            state.houseCalendar,
         ],
     );
 

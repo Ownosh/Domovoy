@@ -288,7 +288,36 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
-    // Фото дома и обращений хранятся как base64 data URI
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS notifications (
+            id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            building_key VARCHAR(120)    NULL COMMENT 'NULL = всем домам',
+            title        VARCHAR(500)    NOT NULL,
+            body         TEXT            NOT NULL,
+            type         ENUM('outage','meeting','announcement','general') NOT NULL DEFAULT 'general',
+            created_at   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            INDEX idx_notif_building (building_key, created_at DESC)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    // таблица могла существовать без building_key — добавляем если нет
+    await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS building_key VARCHAR(120) NULL COMMENT 'NULL = всем домам'`).catch(() => {});
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS user_notification_reads (
+            id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            notification_id BIGINT UNSIGNED NOT NULL,
+            user_id         BIGINT UNSIGNED NOT NULL,
+            read_at         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_unr (notification_id, user_id),
+            CONSTRAINT fk_unr_notif FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE,
+            CONSTRAINT fk_unr_user  FOREIGN KEY (user_id)         REFERENCES users(id)         ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    // Фото хранятся как base64 data URI
+    await pool.query(`ALTER TABLE district_pois MODIFY COLUMN photo_url MEDIUMTEXT DEFAULT NULL`).catch(() => {});
     await pool.query(`ALTER TABLE house_photos MODIFY COLUMN image_url MEDIUMTEXT NOT NULL`).catch(() => {});
     await pool.query(`ALTER TABLE appeal_photos MODIFY COLUMN image_url MEDIUMTEXT NOT NULL`).catch(() => {});
     await pool.query(`ALTER TABLE appeal_participants MODIFY COLUMN photo_uri MEDIUMTEXT DEFAULT NULL`).catch(() => {});

@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { colors, radius, spacing, textStyles } from "../../theme";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger";
+type Variant = "primary" | "secondary" | "ghost" | "danger" | "accent" | "info";
 
 type Props = {
     title: string;
@@ -27,8 +27,7 @@ export function Button({
     loading,
     style,
 }: Props) {
-    const isPrimary = variant === "primary";
-    const isDanger = variant === "danger";
+    const isSolid = variant === "primary" || variant === "danger" || variant === "accent" || variant === "info";
 
     return (
         <Pressable
@@ -40,22 +39,21 @@ export function Button({
                 variant === "secondary" && styles.secondary,
                 variant === "ghost" && styles.ghost,
                 variant === "danger" && styles.danger,
+                variant === "accent" && styles.accent,
+                variant === "info" && styles.info,
                 (disabled || loading) && styles.disabled,
                 pressed && !disabled && !loading && styles.pressed,
                 style,
             ]}
         >
             {loading ? (
-                <ActivityIndicator
-                    color={isPrimary || isDanger ? colors.bg : colors.primary}
-                />
+                <ActivityIndicator color={isSolid ? colors.bg : colors.primary} />
             ) : (
                 <Text
                     style={[
                         textStyles.subtitle,
                         styles.label,
-                        isPrimary && styles.labelOnPrimary,
-                        isDanger && styles.labelOnDanger,
+                        isSolid && styles.labelOnSolid,
                         variant === "secondary" && styles.labelSecondary,
                         variant === "ghost" && styles.labelGhost,
                     ]}
@@ -89,9 +87,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: colors.border,
     },
-    ghost: {
-        backgroundColor: "transparent",
-    },
+    ghost: { backgroundColor: "transparent" },
     danger: {
         backgroundColor: colors.danger,
         borderWidth: 1,
@@ -102,11 +98,26 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 3,
     },
+    accent: {
+        backgroundColor: colors.accent,
+        shadowColor: colors.accent,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.35,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    info: {
+        backgroundColor: colors.info,
+        shadowColor: colors.info,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.35,
+        shadowRadius: 8,
+        elevation: 4,
+    },
     disabled: { opacity: 0.45 },
     pressed: { opacity: 0.88, transform: [{ scale: 0.99 }] },
     label: { fontSize: 15 },
-    labelOnPrimary: { color: colors.bg },
-    labelOnDanger: { color: colors.bg },
+    labelOnSolid: { color: colors.bg },
     labelSecondary: { color: colors.text },
     labelGhost: { color: colors.primary },
 });

@@ -61,7 +61,12 @@ export function VoteNewScreen({ navigation, route }: Props) {
                 могут жильцы с подтверждённой верификацией; вес по площади берётся из
                 профиля. Это не заменяет официальное ОСС.
             </Text>
-            <Card>
+            <Card style={styles.voteCard}>
+                <View style={styles.cardHeader}>
+                    <View style={styles.voteBadge}>
+                        <Text style={styles.voteBadgeText}>Голосование</Text>
+                    </View>
+                </View>
                 <Input label="Тема голосования" value={topic} onChangeText={setTopic} />
                 <View style={styles.gap} />
                 <Input
@@ -173,6 +178,16 @@ export function VoteNewScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
+    voteCard: { borderLeftWidth: 3, borderLeftColor: colors.accent },
+    cardHeader: { marginBottom: spacing.md },
+    voteBadge: {
+        alignSelf: "flex-start",
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 3,
+        borderRadius: 6,
+        backgroundColor: "rgba(212, 168, 83, 0.12)",
+    },
+    voteBadgeText: { fontSize: 11, fontWeight: "600", color: colors.accent },
     intro: {
         color: colors.textMuted,
         lineHeight: 20,

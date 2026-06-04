@@ -149,7 +149,12 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
                     </Pressable>
                 ))}
             </View>
-            <Card>
+            <Card style={styles.adCard}>
+                <View style={styles.adHeader}>
+                    <View style={styles.adBadge}>
+                        <Text style={styles.adBadgeText}>{labels[category]}</Text>
+                    </View>
+                </View>
                 <Input
                     label="Заголовок"
                     value={title}
@@ -218,6 +223,16 @@ const THUMB_SIZE = 90;
 
 const styles = StyleSheet.create({
     label: { color: colors.textMuted },
+    adCard: { borderLeftWidth: 3, borderLeftColor: colors.primary },
+    adHeader: { marginBottom: spacing.md },
+    adBadge: {
+        alignSelf: "flex-start",
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 3,
+        borderRadius: 6,
+        backgroundColor: "rgba(61, 158, 122, 0.12)",
+    },
+    adBadgeText: { fontSize: 11, fontWeight: "600", color: colors.primary },
     chips: {
         flexDirection: "row",
         flexWrap: "wrap",

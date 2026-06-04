@@ -129,18 +129,6 @@ export function NewAppealScreen({ navigation, route }: Props) {
                 Коллективное попадает в общую ленту дома; соседи могут присоединиться
                 после верификации.
             </Text>
-            {kind === "collective" && (
-                <Card style={styles.entCard}>
-                    <Input
-                        label="Подъезд №"
-                        value={entrance}
-                        onChangeText={setEntrance}
-                        keyboardType="number-pad"
-                        placeholder="Например: 2"
-                        hint="Порог «массового обращения» — уникальные квартиры в этом подъезде"
-                    />
-                </Card>
-            )}
             <Text style={[textStyles.label, styles.label]}>Категория</Text>
             <View style={styles.chips}>
                 {appealCategories.map((c) => (
@@ -155,7 +143,14 @@ export function NewAppealScreen({ navigation, route }: Props) {
                     </Pressable>
                 ))}
             </View>
-            <Card>
+            <Card style={kind === "collective" ? styles.cardCollective : styles.cardPersonal}>
+                <View style={styles.formHeader}>
+                    <View style={[styles.formBadge, kind === "collective" ? styles.badgeCollective : styles.badgePersonal]}>
+                        <Text style={[styles.formBadgeText, { color: kind === "collective" ? colors.warning : colors.info }]}>
+                            {kind === "collective" ? "Коллективное обращение" : "Обращение"}
+                        </Text>
+                    </View>
+                </View>
                 <Input
                     label="Тема"
                     value={title}
@@ -171,6 +166,19 @@ export function NewAppealScreen({ navigation, route }: Props) {
                     multiline
                     style={styles.area}
                 />
+                {kind === "collective" && (
+                    <>
+                        <View style={styles.gap} />
+                        <Input
+                            label="Подъезд №"
+                            value={entrance}
+                            onChangeText={setEntrance}
+                            keyboardType="number-pad"
+                            placeholder="Например: 2"
+                            hint="Порог «массового обращения» — уникальные квартиры в этом подъезде"
+                        />
+                    </>
+                )}
                 <View style={styles.gap} />
                 <Text style={[textStyles.label, styles.photoLabel]}>
                     Фото (необязательно, до {MAX_PHOTOS})
@@ -194,7 +202,12 @@ export function NewAppealScreen({ navigation, route }: Props) {
                     <Text style={[textStyles.caption, styles.err]}>{err}</Text>
                 )}
                 <View style={styles.gapLg} />
-                <Button title={submitting ? "Сохранение..." : editId ? "Сохранить" : "Отправить"} onPress={() => { void submit(); }} disabled={submitting} />
+                <Button
+                    title={submitting ? "Сохранение..." : editId ? "Сохранить" : "Отправить"}
+                    variant={editId ? "primary" : kind === "collective" ? "accent" : "info"}
+                    onPress={() => { void submit(); }}
+                    disabled={submitting}
+                />
             </Card>
         </ScreenLayout>
     );
@@ -204,6 +217,13 @@ const THUMB_SIZE = 90;
 
 const styles = StyleSheet.create({
     label: { color: colors.textMuted },
+    cardPersonal: { borderLeftWidth: 3, borderLeftColor: colors.info },
+    cardCollective: { borderLeftWidth: 3, borderLeftColor: colors.warning },
+    formHeader: { marginBottom: spacing.md },
+    formBadge: { alignSelf: "flex-start", paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: 6 },
+    formBadgeText: { fontSize: 11, fontWeight: "600" },
+    badgePersonal: { backgroundColor: "rgba(91, 159, 212, 0.15)" },
+    badgeCollective: { backgroundColor: "rgba(232, 162, 61, 0.12)" },
     kindRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.sm },
     kindChip: {
         paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
@@ -214,7 +234,6 @@ const styles = StyleSheet.create({
     kindChipText: { color: colors.textMuted },
     kindChipTextOn: { color: colors.primary, fontWeight: "600" },
     hint: { color: colors.textDim, marginBottom: spacing.md, lineHeight: 18 },
-    entCard: { marginBottom: spacing.md },
     chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
     chip: {
         paddingHorizontal: spacing.md, paddingVertical: spacing.sm,

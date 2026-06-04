@@ -29,8 +29,6 @@ import {
     type DistrictLayerMeta,
 } from "../../components/map/districtMapConstants";
 import { Card, Input, ScreenLayout } from "../../components/ui";
-import { districtPois, homeMapAnchor } from "../../data/mockData";
-import { apiFetchDistrictPois } from "../../api/district";
 import { useApp } from "../../context/AppContext";
 import type { MainTabNavigationProp } from "../../navigation/types";
 import type {
@@ -72,12 +70,11 @@ const STRIP_FROM_ACTIVE_LAYERS = HIDDEN_CITY_RAIL_IDS;
 
 export function DistrictScreen() {
     const navigation = useNavigation<MainTabNavigationProp>();
-    const { isAuthenticated } = useApp();
+    const { districtPois, districtAnchor } = useApp();
     const mapRef = useRef<DistrictMapHandle>(null);
     const [activeLayers, setActiveLayers] =
         useState<DistrictMapLayerId[]>(DEFAULT_ACTIVE_LAYERS);
-    const [pois, setPois] = useState<DistrictPoi[]>(districtPois);
-    const [home, setHome] = useState(homeMapAnchor);
+    const home = districtAnchor ?? { lat: 58.6035, lng: 49.6680 };
     const [mapInnerWidth, setMapInnerWidth] = useState<number | undefined>(
         undefined,
     );
@@ -110,15 +107,6 @@ export function DistrictScreen() {
         };
     }, []);
 
-    useEffect(() => {
-        if (!isAuthenticated) return;
-        apiFetchDistrictPois()
-            .then(({ anchor, pois: fetched }) => {
-                if (fetched.length > 0) setPois(fetched);
-                if (anchor) setHome(anchor);
-            })
-            .catch(() => {});
-    }, [isAuthenticated]);
 
     useEffect(() => {
         void saveDistrictMapActiveLayers(activeLayers);
@@ -131,8 +119,8 @@ export function DistrictScreen() {
     }, []);
 
     const visiblePois = useMemo(
-        () => pois.filter((p) => activeLayers.includes(p.layerId)),
-        [pois, activeLayers],
+        () => districtPois.filter((p) => activeLayers.includes(p.layerId)),
+        [districtPois, activeLayers],
     );
 
     const baseLayers = useMemo(
@@ -411,23 +399,20 @@ export function DistrictScreen() {
                     ) : (
                         groupedSections.map((section) => (
                             <View key={section.meta.id} style={styles.section}>
-                                <Text
-                                    style={[textStyles.subtitle, styles.sectionTitle]}
-                                >
+                                <Text style={[textStyles.subtitle, styles.sectionTitle]}>
                                     {section.meta.label}
                                 </Text>
-                                {section.items.map((row) => (
-                                    <View key={row.poi.id} style={styles.rowGap}>
-                                        <Pressable
-                                            onPress={() => focusPoiOnMap(row.poi)}
-                                        >
+                                {section.items.map((row, idx) => (
+                                    <React.Fragment key={row.poi.id}>
+                                        {idx > 0 && <PoiDivider />}
+                                        <Pressable onPress={() => focusPoiOnMap(row.poi)}>
                                             <PoiListRow
                                                 poi={row.poi}
                                                 distanceKm={row.distanceKm}
                                                 pickKind={row.pickKind}
                                             />
                                         </Pressable>
-                                    </View>
+                                    </React.Fragment>
                                 ))}
                             </View>
                         ))
@@ -518,6 +503,16 @@ function pickKindTagStyle(kind: DistrictPickKind) {
     }
 }
 
+function PoiDivider() {
+    return (
+        <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <View style={styles.dividerDot} />
+            <View style={styles.dividerLine} />
+        </View>
+    );
+}
+
 function PoiListRow({
     poi,
     distanceKm,
@@ -531,67 +526,42 @@ function PoiListRow({
     const stars = getDistrictPoiRating(poi).toFixed(1);
     const showRating = !isBusStopLayer(poi.layerId);
     return (
-        <Card style={styles.poiCard}>
-            <View style={styles.poiThumbWrap}>
-                {poi.photoUrl ? (
-                    <Image
-                        source={{ uri: poi.photoUrl }}
-                        style={styles.poiThumb}
-                        resizeMode="cover"
-                    />
-                ) : (
-                    <View style={[styles.poiThumb, styles.poiThumbPlaceholder]}>
-                        <Ionicons
-                            name={districtPoiLayerIcon(poi)}
-                            size={28}
-                            color={c}
-                        />
-                    </View>
-                )}
-                <View style={[styles.poiBadge, { backgroundColor: c }]}>
-                    <Ionicons
-                        name={districtPoiLayerIcon(poi)}
-                        size={12}
-                        color={colors.bg}
-                    />
+        <Card style={[styles.poiCard, { borderLeftColor: c }]} padded>
+            <View style={styles.poiTopRow}>
+                <View style={[styles.poiTypeBadge, { backgroundColor: `${c}22` }]}>
+                    <Ionicons name={districtPoiLayerIcon(poi)} size={11} color={c} />
+                    <Text style={[styles.poiTypeBadgeText, { color: c }]}>
+                        {districtPoiLayerLabel(poi)}{poi.scope === "house" ? " · у дома" : ""}
+                    </Text>
                 </View>
+                <Text style={styles.poiDist}>{formatDistanceKm(distanceKm)} от дома</Text>
             </View>
-            <View style={styles.poiText}>
-                <View style={styles.poiTopRow}>
-                    <Text style={[textStyles.caption, styles.poiCat]}>
-                        {districtPoiLayerLabel(poi)}
-                        {poi.scope === "house" ? " · у дома" : " · рядом"}
-                    </Text>
-                    <View style={[styles.pickTag, pickKindTagStyle(pickKind)]}>
-                        <Text
-                            style={[
-                                styles.pickTagText,
-                                pickKind === "nearest" && { color: colors.primary },
-                                pickKind === "rating" && { color: colors.accent },
-                                pickKind === "median" && { color: colors.info },
-                            ]}
-                        >
-                            {PICK_KIND_LABEL[pickKind]}
-                        </Text>
-                    </View>
-                </View>
-                {showRating ? (
-                    <Text style={[textStyles.caption, styles.poiStars]}>★ {stars}</Text>
-                ) : null}
-                <Text style={[textStyles.subtitle, styles.poiName]}>
-                    {poi.name}
+            {poi.photoUrl ? (
+                <Image
+                    source={{ uri: poi.photoUrl }}
+                    style={styles.poiPhoto}
+                    resizeMode="cover"
+                />
+            ) : null}
+            <Text style={[textStyles.subtitle, styles.poiName]}>{poi.name}</Text>
+            {showRating ? (
+                <Text style={[textStyles.caption, styles.poiStars]}>★ {stars}</Text>
+            ) : null}
+            <Text style={[textStyles.caption, styles.poiAddr]}>{poi.address}</Text>
+            {poi.schedule ? (
+                <Text style={[textStyles.caption, styles.poiSchedule]}>{poi.schedule}</Text>
+            ) : null}
+            <View style={[styles.pickTag, pickKindTagStyle(pickKind)]}>
+                <Text
+                    style={[
+                        styles.pickTagText,
+                        pickKind === "nearest" && { color: colors.primary },
+                        pickKind === "rating" && { color: colors.accent },
+                        pickKind === "median" && { color: colors.info },
+                    ]}
+                >
+                    {PICK_KIND_LABEL[pickKind]}
                 </Text>
-                <Text style={[textStyles.caption, styles.poiDist]}>
-                    {formatDistanceKm(distanceKm)} от дома
-                </Text>
-                <Text style={[textStyles.caption, styles.poiAddr]}>
-                    {poi.address}
-                </Text>
-                {poi.schedule ? (
-                    <Text style={[textStyles.caption, styles.poiSchedule]}>
-                        {poi.schedule}
-                    </Text>
-                ) : null}
             </View>
         </Card>
     );
@@ -672,71 +642,70 @@ const styles = StyleSheet.create({
     empty: { color: colors.textMuted, paddingVertical: spacing.md },
     section: { gap: spacing.sm },
     sectionTitle: { color: colors.text },
-    rowGap: { marginBottom: spacing.sm },
-    poiCard: {
+    rowGap: {},
+    divider: {
         flexDirection: "row",
-        alignItems: "flex-start",
-        gap: spacing.md,
-    },
-    poiThumbWrap: {
-        position: "relative",
-    },
-    poiThumb: {
-        width: 76,
-        height: 76,
-        borderRadius: radius.md,
-        backgroundColor: colors.surface,
-    },
-    poiThumbPlaceholder: {
         alignItems: "center",
-        justifyContent: "center",
-        borderWidth: 1,
-        borderColor: colors.borderSubtle,
+        marginVertical: spacing.sm,
     },
-    poiBadge: {
-        position: "absolute",
-        right: -4,
-        bottom: -4,
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        alignItems: "center",
-        justifyContent: "center",
-        borderWidth: 2,
-        borderColor: colors.bgElevated,
+    dividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: colors.border,
+        opacity: 0.5,
     },
-    poiText: { flex: 1 },
+    dividerDot: {
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: colors.border,
+        marginHorizontal: spacing.md,
+    },
+    poiCard: {
+        borderLeftWidth: 3,
+        gap: spacing.xs,
+    },
     poiTopRow: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        gap: spacing.sm,
+        marginBottom: spacing.xs,
     },
-    poiCat: { color: colors.textDim, flex: 1, minWidth: 0 },
+    poiTypeBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 3,
+        borderRadius: 6,
+    },
+    poiTypeBadgeText: {
+        fontSize: 11,
+        fontWeight: "600",
+    },
+    poiPhoto: {
+        width: "100%",
+        height: 160,
+        borderRadius: radius.md,
+        backgroundColor: colors.border,
+        marginBottom: spacing.xs,
+    },
     pickTag: {
+        alignSelf: "flex-start",
         paddingHorizontal: spacing.sm,
         paddingVertical: 2,
         borderRadius: radius.full,
-        flexShrink: 0,
+        marginTop: spacing.xs,
     },
     pickTagNearest: { backgroundColor: colors.primarySoft },
     pickTagRating: { backgroundColor: colors.accentSoft },
-    pickTagMedian: {
-        backgroundColor: "rgba(91, 159, 212, 0.12)",
-    },
-    pickTagText: {
-        fontSize: 11,
-        fontWeight: "700",
-    },
-    poiStars: { color: colors.textDim, marginTop: 2 },
-    poiName: { color: colors.text, marginTop: spacing.xs },
-    poiDist: { color: colors.info, marginTop: spacing.xs },
-    poiAddr: { color: colors.textMuted, marginTop: spacing.xs },
-    poiSchedule: {
-        color: colors.textDim,
-        marginTop: spacing.sm,
-        lineHeight: 20,
-    },
+    pickTagMedian: { backgroundColor: "rgba(91, 159, 212, 0.12)" },
+    pickTagText: { fontSize: 11, fontWeight: "700" },
+    poiStars: { color: colors.textDim },
+    poiName: { color: colors.text },
+    poiDist: { color: colors.info, fontSize: 12 },
+    poiAddr: { color: colors.textMuted },
+    poiSchedule: { color: colors.textDim, lineHeight: 20 },
     searchCard: { gap: spacing.sm },
     searchRow: {
         flexDirection: "row",

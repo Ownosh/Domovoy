@@ -114,32 +114,31 @@ export function VoteDetailScreen({ route, navigation }: Props) {
             scroll
             onBack={goBack}
         >
-            <Card>
+            <Card style={styles.voteCard} padded>
+                <View style={styles.cardTop}>
+                    <View style={styles.typeBadge}>
+                        <Text style={styles.typeBadgeText}>Голосование</Text>
+                    </View>
+                    <Text style={styles.cardDate}>
+                        {vote.visibility === "open" ? "открытое" : "тайное"}
+                        {ended ? " · завершено" : ""}
+                    </Text>
+                </View>
                 <Text style={[textStyles.caption, styles.sourceTag]}>
                     {voteSourceLine(vote)}
-                </Text>
-                <Text style={[textStyles.caption, styles.meta]}>
-                    {vote.visibility === "open" ? "Открытое" : "Тайное"} ·{" "}
-                    {vote.createdByLabel}
                 </Text>
                 <Text style={[textStyles.title, styles.topic]}>{vote.topic}</Text>
                 {vote.trial ? (
                     <Text style={[textStyles.caption, styles.trialNote]}>
-                        Это пробный пример: результат не является официальным протоколом ОСС.
+                        Пробный пример: результат не является официальным протоколом ОСС.
                     </Text>
                 ) : null}
-                <Text style={[textStyles.body, styles.desc]}>
-                    {vote.description}
-                </Text>
+                <Text style={[textStyles.body, styles.desc]}>{vote.description}</Text>
                 {countdown != null && (
-                    <Text style={[textStyles.subtitle, styles.timer]}>
-                        Осталось: {countdown}
-                    </Text>
+                    <Text style={[textStyles.subtitle, styles.timer]}>Осталось: {countdown}</Text>
                 )}
                 {ended && (
-                    <Text style={[textStyles.caption, styles.ended]}>
-                        Срок голосования завершён
-                    </Text>
+                    <Text style={[textStyles.caption, styles.ended]}>Срок голосования завершён</Text>
                 )}
             </Card>
 
@@ -291,6 +290,21 @@ function formatVotedAt(iso: string): string {
 
 const styles = StyleSheet.create({
     miss: { color: colors.textMuted },
+    voteCard: { borderLeftWidth: 3, borderLeftColor: colors.accent, gap: spacing.xs },
+    cardTop: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: spacing.xs,
+    },
+    typeBadge: {
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 3,
+        borderRadius: 6,
+        backgroundColor: "rgba(212, 168, 83, 0.12)",
+    },
+    typeBadgeText: { fontSize: 11, fontWeight: "600", color: colors.accent },
+    cardDate: { color: colors.textDim, fontSize: 12 },
     sourceTag: { color: colors.primary },
     meta: { color: colors.textDim, marginTop: spacing.xs },
     trialNote: {

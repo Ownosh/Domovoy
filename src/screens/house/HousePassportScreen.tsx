@@ -12,16 +12,6 @@ import {
     View,
 } from "react-native";
 import { Button, Card, Input, ScreenLayout } from "../../components/ui";
-import {
-    apiFetchBuildingInfo,
-    apiFetchBuildingPhotos,
-    apiFetchBuildingSpecs,
-    apiFetchBuildingCalendar,
-    apiFetchBuildingSchedule,
-    type BuildingInfo,
-    type BuildingSpec,
-    type HouseScheduleItem,
-} from "../../api/buildings";
 import { useApp } from "../../context/AppContext";
 import type { MainTabNavigationProp } from "../../navigation/types";
 import type {
@@ -109,7 +99,27 @@ function monthLabelRu(d: Date): string {
     return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
+function PassportDivider() {
+    return (
+        <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <View style={styles.dividerDot} />
+            <View style={styles.dividerLine} />
+        </View>
+    );
+}
+
 function ScheduleDivider() {
+    return (
+        <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <View style={styles.dividerDot} />
+            <View style={styles.dividerLine} />
+        </View>
+    );
+}
+
+function AgendaDivider() {
     return (
         <View style={styles.divider}>
             <View style={styles.dividerLine} />
@@ -121,24 +131,15 @@ function ScheduleDivider() {
 
 export function HousePassportScreen() {
     const navigation = useNavigation<MainTabNavigationProp>();
-    const { environmentRating, setEnvironmentRating, isAuthenticated } = useApp();
-    const [buildingInfo, setBuildingInfo] = React.useState<BuildingInfo | null>(null);
-    const [calendarActivities, setCalendarActivities] = useState<HouseCalendarActivity[]>([]);
-    const [photos, setPhotos] = useState<string[]>([]);
-    const [specs, setSpecs] = useState<BuildingSpec[]>([]);
-    const [scheduleItems, setScheduleItems] = useState<HouseScheduleItem[]>([]);
+    const {
+        environmentRating, setEnvironmentRating,
+        houseInfo: buildingInfo,
+        housePhotos: photos,
+        houseSpecs: specs,
+        houseSchedule: scheduleItems,
+        houseCalendar: calendarActivities,
+    } = useApp();
     const [tab, setTab] = useState<HouseTab>("calendar");
-
-    useEffect(() => {
-        if (!isAuthenticated) return;
-        apiFetchBuildingInfo().then(setBuildingInfo).catch(() => {});
-        apiFetchBuildingPhotos().then(setPhotos).catch(() => {});
-        apiFetchBuildingSpecs().then(setSpecs).catch(() => {});
-        apiFetchBuildingSchedule().then(setScheduleItems).catch(() => {});
-        apiFetchBuildingCalendar("2020-01", "2030-12")
-            .then(setCalendarActivities)
-            .catch(() => {});
-    }, [isAuthenticated]);
     const [viewMonth, setViewMonth] = useState(() => startOfMonth(new Date()));
     const [ratingOpen, setRatingOpen] = useState(false);
     const [courtyard, setCourtyard] = useState<1 | 2 | 3 | 4 | 5>(4);
@@ -380,33 +381,26 @@ export function HousePassportScreen() {
                                 </Pressable>
                                 {agendaOpen ? (
                                     <View style={styles.agendaList}>
-                                        {activitiesThisMonth.map((a) => (
-                                            <View key={a.id} style={styles.agendaRow}>
-                                                <View
-                                                    style={[
-                                                        styles.agendaDot,
-                                                        { backgroundColor: ACTIVITY_DOT[a.kind as HouseCalendarActivityKind] },
-                                                    ]}
-                                                />
-                                                <View style={styles.agendaText}>
-                                                    <Text
-                                                        style={[textStyles.caption, styles.agendaDate]}
-                                                    >
-                                                        {formatAgendaDate(a.date)}
-                                                    </Text>
-                                                    <Text
-                                                        style={[textStyles.body, styles.agendaTitle2]}
-                                                    >
-                                                        {a.title}
-                                                    </Text>
-                                                    <Text
-                                                        style={[textStyles.caption, styles.agendaKind]}
-                                                    >
-                                                        {ACTIVITY_LABEL[a.kind as HouseCalendarActivityKind]}
-                                                    </Text>
-                                                </View>
-                                            </View>
-                                        ))}
+                                        {activitiesThisMonth.map((a, idx) => {
+                                            const kind = a.kind as HouseCalendarActivityKind;
+                                            const dot = ACTIVITY_DOT[kind];
+                                            return (
+                                                <React.Fragment key={a.id}>
+                                                    {idx > 0 && <AgendaDivider />}
+                                                    <View style={[styles.agendaCard, { borderLeftColor: dot }]}>
+                                                        <View style={styles.agendaCardTop}>
+                                                            <View style={[styles.agendaKindBadge, { backgroundColor: `${dot}22` }]}>
+                                                                <Text style={[styles.agendaKindText, { color: dot }]}>
+                                                                    {ACTIVITY_LABEL[kind]}
+                                                                </Text>
+                                                            </View>
+                                                            <Text style={styles.agendaDate}>{formatAgendaDate(a.date)}</Text>
+                                                        </View>
+                                                        <Text style={[textStyles.subtitle, styles.agendaTitle2]}>{a.title}</Text>
+                                                    </View>
+                                                </React.Fragment>
+                                            );
+                                        })}
                                     </View>
                                 ) : null}
                             </View>
@@ -438,7 +432,12 @@ export function HousePassportScreen() {
                         <Text style={[textStyles.caption, styles.addr]}>Загрузка данных дома…</Text>
                     ) : (
                         <>
-                            <Card>
+                            <Card style={styles.passportCard} padded>
+                                <View style={styles.passportCardTop}>
+                                    <View style={styles.passportBadge}>
+                                        <Text style={styles.passportBadgeText}>О доме</Text>
+                                    </View>
+                                </View>
                                 <Text style={[textStyles.subtitle, styles.addr]}>
                                     {buildingInfo.address || buildingInfo.shortName}
                                 </Text>
@@ -471,6 +470,7 @@ export function HousePassportScreen() {
 
                             {photos.length > 0 && (
                                 <>
+                                    <PassportDivider />
                                     <Text style={[textStyles.label, styles.sectionFirst]}>Фотографии</Text>
                                     <ScrollView
                                         horizontal
@@ -486,7 +486,8 @@ export function HousePassportScreen() {
 
                             {specs.length > 0 && (
                                 <>
-                                    <Text style={[textStyles.label, styles.section]}>Характеристики</Text>
+                                    <PassportDivider />
+                                    <Text style={[textStyles.label, styles.sectionFirst]}>Характеристики</Text>
                                     <Card padded={false}>
                                         {specs.map((row, idx) => (
                                             <View
@@ -517,7 +518,12 @@ export function HousePassportScreen() {
                         {scheduleItems.map((row, index) => (
                             <React.Fragment key={row.id}>
                                 {index > 0 && <ScheduleDivider />}
-                                <Card style={styles.trashCard}>
+                                <Card style={styles.trashCard} padded>
+                                    <View style={styles.trashHeader}>
+                                        <View style={styles.trashBadge}>
+                                            <Text style={styles.trashBadgeText}>Расписание</Text>
+                                        </View>
+                                    </View>
                                     <Text style={[textStyles.subtitle, styles.trashTitle]}>
                                         {row.title}
                                     </Text>
@@ -1016,6 +1022,25 @@ const styles = StyleSheet.create({
     agendaTogglePressed: { opacity: 0.85 },
     agendaToggleText: { color: colors.text, flex: 1 },
     agendaList: { marginTop: spacing.sm },
+    agendaCard: {
+        borderLeftWidth: 3,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+        backgroundColor: colors.surface,
+        borderRadius: 8,
+        gap: spacing.xs,
+    },
+    agendaCardTop: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+    },
+    agendaKindBadge: {
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 3,
+        borderRadius: 6,
+    },
+    agendaKindText: { fontSize: 11, fontWeight: "600" },
     agendaRow: {
         flexDirection: "row",
         alignItems: "flex-start",
@@ -1079,7 +1104,26 @@ const styles = StyleSheet.create({
     modalEventTitle: { color: colors.text },
     modalEventKind: { color: colors.textDim, marginTop: spacing.xs },
     scheduleList: { gap: 0 },
-    trashCard: { gap: spacing.xs },
+    passportCard: { borderLeftWidth: 3, borderLeftColor: colors.primary, gap: spacing.xs },
+    passportCardTop: { marginBottom: spacing.sm },
+    passportBadge: {
+        alignSelf: "flex-start",
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 3,
+        borderRadius: 6,
+        backgroundColor: "rgba(61, 158, 122, 0.12)",
+    },
+    passportBadgeText: { fontSize: 11, fontWeight: "600", color: colors.primary },
+    trashCard: { borderLeftWidth: 3, borderLeftColor: colors.info, gap: spacing.xs },
+    trashHeader: { marginBottom: spacing.xs },
+    trashBadge: {
+        alignSelf: "flex-start",
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 3,
+        borderRadius: 6,
+        backgroundColor: "rgba(91, 159, 212, 0.15)",
+    },
+    trashBadgeText: { fontSize: 11, fontWeight: "600", color: colors.info },
     divider: {
         flexDirection: "row" as const,
         alignItems: "center" as const,

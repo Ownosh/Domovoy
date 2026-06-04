@@ -28,6 +28,11 @@ type Props = CommunityScreenProps<"NeighborAdDetail">;
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
+const adCatRu: Record<string, string> = {
+    sell: "Продаю", buy: "Ищу", lost: "Потеряно",
+    found: "Найдено", service: "Услуга", invite: "Приглашаю", other: "Другое",
+};
+
 function formatTimeLeft(ms: number): string {
     if (ms <= 0) return "Истёк";
     const totalMin = Math.floor(ms / 60_000);
@@ -88,23 +93,28 @@ export function NeighborAdDetailScreen({ route, navigation }: Props) {
 
     return (
         <ScreenLayout title="Объявление" scroll onBack={goBack}>
-            <Card>
+            <Card style={styles.adCard} padded>
+                <View style={styles.cardTop}>
+                    <View style={styles.typeBadge}>
+                        <Text style={styles.typeBadgeText}>{adCatRu[ad.category] ?? "Объявление"}</Text>
+                    </View>
+                    {ad.archived ? (
+                        <Text style={[textStyles.caption, styles.arch]}>В архиве</Text>
+                    ) : (
+                        <View style={styles.timerRow}>
+                            <Ionicons
+                                name="time-outline"
+                                size={13}
+                                color={expired ? colors.danger : msLeft <= WEEK_MS ? colors.warning : colors.textDim}
+                            />
+                            <Text style={[textStyles.caption, expired ? styles.timerExpired : msLeft <= WEEK_MS ? styles.timerWarn : styles.timerOk]}>
+                                {expired ? "Истёк" : formatTimeLeft(msLeft)}
+                            </Text>
+                        </View>
+                    )}
+                </View>
                 {ad.pendingModeration && (
                     <Text style={[textStyles.caption, styles.mod]}>На проверке УК после жалобы</Text>
-                )}
-                {ad.archived ? (
-                    <Text style={[textStyles.caption, styles.arch]}>В архиве (истёк срок 30 дней)</Text>
-                ) : (
-                    <View style={styles.timerRow}>
-                        <Ionicons
-                            name="time-outline"
-                            size={14}
-                            color={expired ? colors.danger : msLeft <= WEEK_MS ? colors.warning : colors.textDim}
-                        />
-                        <Text style={[textStyles.caption, expired ? styles.timerExpired : msLeft <= WEEK_MS ? styles.timerWarn : styles.timerOk]}>
-                            {expired ? "Истёк" : `Осталось: ${formatTimeLeft(msLeft)}`}
-                        </Text>
-                    </View>
                 )}
                 <Text style={[textStyles.title, styles.title]}>{ad.title}</Text>
                 <Text style={[textStyles.body, styles.body]}>{ad.body}</Text>
@@ -184,13 +194,26 @@ export function NeighborAdDetailScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
     miss: { color: colors.textMuted },
-    mod: { color: colors.warning, marginBottom: spacing.sm },
-    arch: { color: colors.textDim, marginBottom: spacing.sm },
+    adCard: { borderLeftWidth: 3, borderLeftColor: colors.primary, gap: spacing.xs },
+    cardTop: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: spacing.xs,
+    },
+    typeBadge: {
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 3,
+        borderRadius: 6,
+        backgroundColor: "rgba(61, 158, 122, 0.12)",
+    },
+    typeBadgeText: { fontSize: 11, fontWeight: "600", color: colors.primary },
+    mod: { color: colors.warning },
+    arch: { color: colors.textDim, fontSize: 12 },
     timerRow: {
         flexDirection: "row",
         alignItems: "center",
         gap: spacing.xs,
-        marginBottom: spacing.sm,
     },
     timerOk: { color: colors.textDim },
     timerWarn: { color: colors.warning },

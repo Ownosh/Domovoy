@@ -28,7 +28,7 @@ import {
     districtPoiLayerLabel,
     type DistrictLayerMeta,
 } from "../../components/map/districtMapConstants";
-import { Card, Input, ScreenLayout } from "../../components/ui";
+import { Card, Input, NotificationBell, ScreenLayout } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
 import type { MainTabNavigationProp } from "../../navigation/types";
 import type {
@@ -254,20 +254,16 @@ export function DistrictScreen() {
             scroll={false}
             contentStyle={styles.screenBody}
             rightAccessory={
-                <Pressable
-                    onPress={() => navigation.navigate("Profile")}
-                    hitSlop={10}
-                    style={({ pressed }) => [
-                        styles.profileButton,
-                        pressed && styles.profileButtonPressed,
-                    ]}
-                >
-                    <Ionicons
-                        name="person-circle-outline"
-                        size={30}
-                        color={colors.text}
-                    />
-                </Pressable>
+                <View style={styles.headerActions}>
+                    <NotificationBell />
+                    <Pressable
+                        onPress={() => navigation.navigate("Profile")}
+                        hitSlop={10}
+                        style={({ pressed }) => [styles.profileButton, pressed && styles.profileButtonPressed]}
+                    >
+                        <Ionicons name="person-circle-outline" size={30} color={colors.text} />
+                    </Pressable>
+                </View>
             }
         >
             <View style={styles.screenColumn}>
@@ -577,6 +573,7 @@ const styles = StyleSheet.create({
         gap: spacing.lg,
         paddingBottom: spacing.xxxl * 2,
     },
+    headerActions: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.xs },
     profileButton: { marginTop: spacing.xs },
     profileButtonPressed: { opacity: 0.6 },
     mapCard: {

@@ -11,7 +11,7 @@ import {
     Text,
     View,
 } from "react-native";
-import { Button, Card, Input, ScreenLayout } from "../../components/ui";
+import { Button, Card, Input, NotificationBell, ScreenLayout } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
 import type { MainTabNavigationProp } from "../../navigation/types";
 import type {
@@ -259,20 +259,16 @@ export function HousePassportScreen() {
         <ScreenLayout
             title="О доме"
             rightAccessory={
-                <Pressable
-                    onPress={() => navigation.navigate("Profile")}
-                    hitSlop={10}
-                    style={({ pressed }) => [
-                        styles.profileButton,
-                        pressed && styles.profileButtonPressed,
-                    ]}
-                >
-                    <Ionicons
-                        name="person-circle-outline"
-                        size={30}
-                        color={colors.text}
-                    />
-                </Pressable>
+                <View style={styles.headerActions}>
+                    <NotificationBell />
+                    <Pressable
+                        onPress={() => navigation.navigate("Profile")}
+                        hitSlop={10}
+                        style={({ pressed }) => [styles.profileButton, pressed && styles.profileButtonPressed]}
+                    >
+                        <Ionicons name="person-circle-outline" size={30} color={colors.text} />
+                    </Pressable>
+                </View>
             }
         >
             <ScrollView
@@ -864,6 +860,7 @@ function StarBlock({
 }
 
 const styles = StyleSheet.create({
+    headerActions: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.xs },
     profileButton: { marginTop: spacing.xs },
     profileButtonPressed: { opacity: 0.6 },
     sectionFirst: { color: colors.textMuted, marginTop: 0 },

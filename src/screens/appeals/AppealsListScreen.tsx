@@ -10,7 +10,7 @@ import {
     Text,
     View,
 } from "react-native";
-import { AppealStatusBadge, Card, ScreenLayout } from "../../components/ui";
+import { AppealStatusBadge, Card, NotificationBell, ScreenLayout } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
 import type {
     AppealsStackParamList,
@@ -193,13 +193,16 @@ export function AppealsListScreen() {
             scroll={false}
             contentStyle={styles.flex}
             rightAccessory={
-                <Pressable
-                    onPress={() => navigation.getParent<MainTabNavigationProp>()?.navigate("Profile")}
-                    hitSlop={10}
-                    style={({ pressed }) => [styles.profileButton, pressed && styles.profileButtonPressed]}
-                >
-                    <Ionicons name="person-circle-outline" size={30} color={colors.text} />
-                </Pressable>
+                <View style={styles.headerActions}>
+                    <NotificationBell />
+                    <Pressable
+                        onPress={() => navigation.getParent<MainTabNavigationProp>()?.navigate("Profile")}
+                        hitSlop={10}
+                        style={({ pressed }) => [styles.profileButton, pressed && styles.profileButtonPressed]}
+                    >
+                        <Ionicons name="person-circle-outline" size={30} color={colors.text} />
+                    </Pressable>
+                </View>
             }
         >
             <View style={styles.tabsBar}>
@@ -276,6 +279,7 @@ export function AppealsListScreen() {
 }
 
 const styles = StyleSheet.create({
+    headerActions: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.xs },
     flex: { flex: 1, gap: 0 },
     tabsBar: { marginBottom: spacing.md },
     tabsScroll: { flexGrow: 0, flexShrink: 0 },

@@ -3,7 +3,7 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React, { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Card, ScreenLayout } from "../../components/ui";
+import { Card, NotificationBell, ScreenLayout } from "../../components/ui";
 import type { MainTabNavigationProp, SafetyStackParamList } from "../../navigation/types";
 import { colors, radius, spacing, textStyles } from "../../theme";
 
@@ -35,20 +35,16 @@ export function SafetyHubScreen() {
         <ScreenLayout
             title="Памятка"
             rightAccessory={
-                <Pressable
-                    onPress={() => tabNav.navigate("Profile")}
-                    hitSlop={10}
-                    style={({ pressed }) => [
-                        styles.profileButton,
-                        pressed && styles.profileButtonPressed,
-                    ]}
-                >
-                    <Ionicons
-                        name="person-circle-outline"
-                        size={30}
-                        color={colors.text}
-                    />
-                </Pressable>
+                <View style={styles.headerActions}>
+                    <NotificationBell />
+                    <Pressable
+                        onPress={() => tabNav.navigate("Profile")}
+                        hitSlop={10}
+                        style={({ pressed }) => [styles.profileButton, pressed && styles.profileButtonPressed]}
+                    >
+                        <Ionicons name="person-circle-outline" size={30} color={colors.text} />
+                    </Pressable>
+                </View>
             }
         >
             <ScrollView
@@ -187,6 +183,7 @@ export function SafetyHubScreen() {
 }
 
 const styles = StyleSheet.create({
+    headerActions: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.xs },
     profileButton: { marginTop: spacing.xs },
     profileButtonPressed: { opacity: 0.6 },
     filterRow: {

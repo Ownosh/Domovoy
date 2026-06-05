@@ -316,6 +316,9 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    // Expo Push Token для push-уведомлений
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS expo_push_token VARCHAR(500) DEFAULT NULL`).catch(() => {});
+
     // Фото профиля пользователя (URL на сервере)
     await pool.query(`ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS profile_photo TEXT DEFAULT NULL`).catch(() => {});
     await pool.query(`ALTER TABLE user_profiles MODIFY COLUMN profile_photo TEXT DEFAULT NULL`).catch(() => {});

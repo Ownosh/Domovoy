@@ -89,4 +89,20 @@ router.post("/read-all", requireAuth, async (req: AuthRequest, res) => {
     }
 });
 
+// POST /api/notifications/push-token
+router.post("/push-token", requireAuth, async (req: AuthRequest, res) => {
+    const { token } = req.body as { token?: string };
+    if (!token) return res.status(400).json({ error: "token обязателен" });
+    try {
+        await pool.execute(
+            `UPDATE users SET expo_push_token = ? WHERE id = ?`,
+            [token, req.userId!],
+        );
+        return res.json({ ok: true });
+    } catch (err) {
+        console.error("[push-token save]", err);
+        return res.status(500).json({ error: "Ошибка сервера" });
+    }
+});
+
 export default router;

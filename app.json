@@ -9,6 +9,14 @@
     "plugins": [
       "expo-font",
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#2D6A4F",
+          "sounds": []
+        }
+      ],
+      [
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Приложению нужен доступ к геолокации, чтобы построить маршрут до выбранного места от вашего текущего положения.",
@@ -21,6 +29,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.domovoy.app",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true

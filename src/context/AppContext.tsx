@@ -55,6 +55,7 @@ import {
     collectiveUniqueApartmentCount,
     shouldEscalateToMassAppeal,
 } from "../utils/appeals";
+import { registerPushToken } from "../utils/pushNotifications";
 
 const STORAGE_KEY = "@domovoy/app_state_v2";
 const STORAGE_KEY_LEGACY = "@domovoy/app_state_v1";
@@ -827,6 +828,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 dispatch({ type: "SESSION_END" });
             }
         };
+
+        registerPushToken().catch(() => {});
 
         apiFetchNews()
             .then((items) => { if (items.length > 0) dispatch({ type: "SET_NEWS", payload: items }); })

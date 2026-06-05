@@ -139,10 +139,6 @@ export function NewAppealScreen({ navigation, route }: Props) {
                     </Text>
                 </Pressable>
             </View>
-            <Text style={[textStyles.caption, styles.hint]}>
-                Коллективное попадает в общую ленту дома; соседи могут присоединиться
-                после верификации.
-            </Text>
             <Text style={[textStyles.label, styles.label]}>Категория</Text>
             <View style={styles.chips}>
                 {appealCategories.map((c) => (
@@ -180,6 +176,11 @@ export function NewAppealScreen({ navigation, route }: Props) {
                     multiline
                     style={styles.area}
                 />
+                {kind === "collective" && (
+                    <Text style={[textStyles.caption, styles.hint]}>
+                        Коллективное попадает в общую ленту дома — соседи смогут присоединиться после верификации.
+                    </Text>
+                )}
                 {kind === "collective" && (
                     <>
                         <View style={styles.gap} />

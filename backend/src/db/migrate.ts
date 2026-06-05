@@ -316,6 +316,20 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS building_contacts (
+            id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            building_key VARCHAR(120)    NOT NULL,
+            company_name VARCHAR(255)    NOT NULL DEFAULT '',
+            phone        VARCHAR(100)    NOT NULL DEFAULT '',
+            email        VARCHAR(255)    NOT NULL DEFAULT '',
+            site         VARCHAR(255)    NOT NULL DEFAULT '',
+            hours        VARCHAR(255)    NOT NULL DEFAULT '',
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_bc_building (building_key)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
     // Expo Push Token для push-уведомлений
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS expo_push_token VARCHAR(500) DEFAULT NULL`).catch(() => {});
 

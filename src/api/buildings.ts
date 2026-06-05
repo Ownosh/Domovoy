@@ -33,6 +33,10 @@ export async function apiFetchBuildingSchedule(): Promise<HouseScheduleItem[]> {
     return apiRequest<HouseScheduleItem[]>("/buildings/schedule");
 }
 
+export async function apiFetchBuildingContacts(): Promise<import("../types").UkContacts | null> {
+    return apiRequest<import("../types").UkContacts | null>("/buildings/contacts");
+}
+
 export type BuildingSuggestion = {
     building_key: string;
     short_name: string;

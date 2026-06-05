@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import type { CommunityScreenProps } from "../../navigation/types";
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigation } from "@react-navigation/native";
@@ -7,6 +8,16 @@ import {
     Text,
     View,
 } from "react-native";
+
+function SectionDivider() {
+    return (
+        <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <View style={styles.dividerDot} />
+            <View style={styles.dividerLine} />
+        </View>
+    );
+}
 import { Button, Card, ScreenLayout, VerificationWall } from "../../components/ui";
 import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type { Vote, VoteCast } from "../../types";
@@ -142,6 +153,8 @@ export function VoteDetailScreen({ route }: Props) {
                 )}
             </Card>
 
+            <SectionDivider />
+
             {!myCast && canVote && (
                 <View style={styles.block}>
                     <Text style={[textStyles.label, styles.label]}>
@@ -155,11 +168,8 @@ export function VoteDetailScreen({ route }: Props) {
                 </View>
             )}
 
-            {myCast && (
-                <Text style={[textStyles.caption, styles.votedMeta]}>
-                    Ваш голос зафиксирован: {formatVotedAt(myCast.votedAt)}
-                </Text>
-            )}
+
+            <SectionDivider />
 
             <View style={styles.block}>
                 <Text style={[textStyles.label, styles.label]}>
@@ -209,27 +219,34 @@ export function VoteDetailScreen({ route }: Props) {
                 </View>
             </View>
 
-            {vote.visibility === "open" && (
+            <SectionDivider />
+
+            {vote.visibility === "open" && voteCasts.filter((c) => c.voteId === vote.id).length > 0 && (
                 <View style={styles.block}>
-                    <Text style={[textStyles.label, styles.label]}>
-                        Кто как проголосовал
-                    </Text>
-                    {voteCasts
-                        .filter((c) => c.voteId === vote.id)
-                        .map((c) => {
-                            const label = vote.options.find(
-                                (o) => o.id === c.optionId,
-                            )?.label;
-                            return (
-                                <Text
-                                    key={`${c.userId}_${c.votedAt}`}
-                                    style={[textStyles.caption, styles.openRow]}
-                                >
-                                    Участник …{String(c.userId ?? "").slice(-4)} → {label} ·{" "}
-                                    {formatVotedAt(c.votedAt)}
-                                </Text>
-                            );
-                        })}
+                    <Text style={[textStyles.label, styles.label]}>Кто как проголосовал</Text>
+                    <View style={styles.table}>
+                        <View style={[styles.tr, styles.trHead]}>
+                            <Text style={[textStyles.caption, styles.th, { flex: 1 }]}>Участник</Text>
+                            <Text style={[textStyles.caption, styles.th, { flex: 1 }]}>Вариант</Text>
+                            <Text style={[textStyles.caption, styles.th, styles.thNum]}>Время</Text>
+                        </View>
+                        {voteCasts
+                            .filter((c) => c.voteId === vote.id)
+                            .map((c, idx) => {
+                                const label = vote.options.find((o) => o.id === c.optionId)?.label ?? "—";
+                                const isLast = idx === voteCasts.filter((x) => x.voteId === vote.id).length - 1;
+                                const isMe = String(c.userId) === String(user?.id);
+                                return (
+                                    <View key={`${c.userId}_${c.votedAt}`} style={[styles.tr, isLast && styles.trLast, isMe && styles.trMe]}>
+                                        <Text style={[textStyles.caption, styles.td, { flex: 1 }]}>
+                                            {isMe ? "Вы" : `…${String(c.userId ?? "").slice(-4)}`}
+                                        </Text>
+                                        <Text style={[textStyles.caption, styles.td, { flex: 1 }]}>{label}</Text>
+                                        <Text style={[textStyles.caption, styles.td, styles.thNum]}>{formatVotedAt(c.votedAt)}</Text>
+                                    </View>
+                                );
+                            })}
+                    </View>
                 </View>
             )}
 
@@ -250,6 +267,15 @@ export function VoteDetailScreen({ route }: Props) {
 
             {!isVerifiedResident(verification) && (
                 <VerificationWall message="Участвовать в голосовании могут только верифицированные жильцы дома." />
+            )}
+
+            {myCast && (
+                <View style={styles.votedBanner}>
+                    <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+                    <Text style={[textStyles.caption, styles.votedMeta]}>
+                        Ваш голос зафиксирован · {formatVotedAt(myCast.votedAt)}
+                    </Text>
+                </View>
             )}
         </ScreenLayout>
     );
@@ -316,7 +342,6 @@ const styles = StyleSheet.create({
     block: { marginTop: spacing.lg, gap: spacing.sm },
     label: { color: colors.textMuted },
     btnWrap: { marginBottom: spacing.sm },
-    votedMeta: { color: colors.primary, marginTop: spacing.lg },
     verifyBlock: { gap: spacing.md, marginTop: spacing.md },
     warn: { color: colors.warning, lineHeight: 20 },
     table: {
@@ -346,6 +371,27 @@ const styles = StyleSheet.create({
     td: { color: colors.text },
     tdOption: { flex: 1, paddingRight: spacing.sm },
     tdNum: { width: 56, textAlign: "right", color: colors.text },
+    divider: {
+        flexDirection: "row" as const,
+        alignItems: "center" as const,
+        paddingHorizontal: spacing.lg,
+        marginVertical: spacing.sm,
+    },
+    dividerLine: { flex: 1, height: 1, backgroundColor: colors.border, opacity: 0.5 },
+    dividerDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.border, marginHorizontal: spacing.md },
     openRow: { color: colors.textMuted, marginTop: spacing.xs },
     secretNote: { color: colors.textDim, marginTop: spacing.md, lineHeight: 20 },
+    trMe: { backgroundColor: `${colors.primary}14` },
+    votedBanner: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.sm,
+        marginTop: spacing.lg,
+        padding: spacing.md,
+        borderRadius: radius.md,
+        backgroundColor: `${colors.primary}14`,
+        borderWidth: 1,
+        borderColor: `${colors.primary}33`,
+    },
+    votedMeta: { color: colors.primary, flex: 1 },
 });

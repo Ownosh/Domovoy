@@ -6,7 +6,7 @@ import { apiFetchNeighborAds, apiCreateNeighborAd, apiDeleteNeighborAd, apiExten
 import { apiFetchAppeals, apiCreateAppeal, apiJoinAppeal, apiDeleteAppeal, apiEditAppeal, apiArchiveAppeal } from "../api/appeals";
 import { clearTokens, ApiError } from "../api/client";
 import { apiSubmitRating, apiFetchMyRating, apiFetchRatingStats } from "../api/ratings";
-import { apiFetchBuildingInfo, apiFetchBuildingPhotos, apiFetchBuildingSpecs, apiFetchBuildingSchedule, apiFetchBuildingCalendar, type BuildingInfo, type BuildingSpec, type HouseScheduleItem } from "../api/buildings";
+import { apiFetchBuildingInfo, apiFetchBuildingPhotos, apiFetchBuildingSpecs, apiFetchBuildingSchedule, apiFetchBuildingCalendar, apiFetchBuildingContacts, type BuildingInfo, type BuildingSpec, type HouseScheduleItem } from "../api/buildings";
 import { apiFetchDistrictPois } from "../api/district";
 import { apiFetchNotifications, apiMarkNotificationRead, apiMarkAllNotificationsRead } from "../api/notifications";
 import { apiFetchVerificationStatus, apiSubmitVerification } from "../api/verification";
@@ -35,6 +35,7 @@ import type {
     EnvironmentRatingSnapshot,
     EnvironmentRatingSubmitInput,
     UkTransparencyStats,
+    UkContacts,
     HouseCalendarActivity,
     NeighborAd,
     NeighborAdCategory,
@@ -98,6 +99,7 @@ type AppState = {
     houseSpecs: BuildingSpec[];
     houseSchedule: HouseScheduleItem[];
     houseCalendar: HouseCalendarActivity[];
+    ukContacts: UkContacts | null;
 };
 
 const defaultPrefs: NotificationPrefs = {
@@ -127,6 +129,7 @@ const initialState: AppState = {
     houseSpecs: [],
     houseSchedule: [],
     houseCalendar: [],
+    ukContacts: null,
 };
 
 type Action =
@@ -181,7 +184,7 @@ type Action =
     | { type: "SET_APPEALS"; payload: Appeal[] }
     | { type: "SET_NOTIFICATIONS"; payload: AppNotification[] }
     | { type: "SET_DISTRICT"; payload: { pois: DistrictPoi[]; anchor: { lat: number; lng: number } | null } }
-    | { type: "SET_HOUSE_DATA"; payload: { info?: BuildingInfo; photos?: string[]; specs?: BuildingSpec[]; schedule?: HouseScheduleItem[]; calendar?: HouseCalendarActivity[] } }
+    | { type: "SET_HOUSE_DATA"; payload: { info?: BuildingInfo; photos?: string[]; specs?: BuildingSpec[]; schedule?: HouseScheduleItem[]; calendar?: HouseCalendarActivity[]; contacts?: UkContacts | null } }
     | { type: "REPLACE_APPEAL"; payload: Appeal };
 
 function appealRecipientUserIds(appeal: Appeal): string[] {
@@ -453,6 +456,7 @@ function reducer(state: AppState, action: Action): AppState {
                 houseSpecs: action.payload.specs ?? state.houseSpecs,
                 houseSchedule: action.payload.schedule ?? state.houseSchedule,
                 houseCalendar: action.payload.calendar ?? state.houseCalendar,
+                ukContacts: action.payload.contacts !== undefined ? action.payload.contacts : state.ukContacts,
             };
         case "REPLACE_APPEAL": {
             const idx = state.appeals.findIndex((a) => a.id === action.payload.id);
@@ -603,6 +607,7 @@ function mergeHydrated(parsed: Partial<AppState>): AppState {
         houseSpecs: parsed.houseSpecs ?? [],
         houseSchedule: parsed.houseSchedule ?? [],
         houseCalendar: parsed.houseCalendar ?? [],
+        ukContacts: parsed.ukContacts ?? null,
         ukStats: parsed.ukStats ?? {},
     };
 }
@@ -778,6 +783,7 @@ type AppContextValue = {
     houseSpecs: BuildingSpec[];
     houseSchedule: HouseScheduleItem[];
     houseCalendar: HouseCalendarActivity[];
+    ukContacts: UkContacts | null;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -864,8 +870,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             apiFetchBuildingSpecs(),
             apiFetchBuildingSchedule(),
             apiFetchBuildingCalendar("2020-01", "2030-12"),
-        ]).then(([info, photos, specs, schedule, calendar]) => {
-            dispatch({ type: "SET_HOUSE_DATA", payload: { info, photos, specs, schedule, calendar } });
+            apiFetchBuildingContacts(),
+        ]).then(([info, photos, specs, schedule, calendar, contacts]) => {
+            dispatch({ type: "SET_HOUSE_DATA", payload: { info, photos, specs, schedule, calendar, contacts } });
         }).catch(() => {});
     }, [state.sessionActive, state.account?.user.id]);
 
@@ -1119,8 +1126,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 apiFetchBuildingSpecs(),
                 apiFetchBuildingSchedule(),
                 apiFetchBuildingCalendar("2020-01", "2030-12"),
-            ]).then(([info, photos, specs, schedule, calendar]) => {
-                dispatch({ type: "SET_HOUSE_DATA", payload: { info, photos, specs, schedule, calendar } });
+                apiFetchBuildingContacts(),
+            ]).then(([info, photos, specs, schedule, calendar, contacts]) => {
+                dispatch({ type: "SET_HOUSE_DATA", payload: { info, photos, specs, schedule, calendar, contacts } });
             }).catch(() => {}),
         ]);
     }, []);
@@ -1472,6 +1480,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             houseSpecs: state.houseSpecs,
             houseSchedule: state.houseSchedule,
             houseCalendar: state.houseCalendar,
+            ukContacts: state.ukContacts,
         }),
         [
             hydrated,

@@ -19,6 +19,22 @@ import {
     Text,
     View,
 } from "react-native";
+
+function SectionDivider() {
+    return (
+        <View style={divStyles.divider}>
+            <View style={divStyles.dividerLine} />
+            <View style={divStyles.dividerDot} />
+            <View style={divStyles.dividerLine} />
+        </View>
+    );
+}
+
+const divStyles = StyleSheet.create({
+    divider: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginVertical: 8 },
+    dividerLine: { flex: 1, height: 1, backgroundColor: "#2a3544", opacity: 0.7 },
+    dividerDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: "#2a3544", marginHorizontal: 12 },
+});
 import {
     AppealStatusBadge,
     Button,
@@ -86,7 +102,9 @@ export function AppealDetailScreen({ route, navigation }: Props) {
                 <View style={styles.top}>
                     <AppealStatusBadge status={item.status} />
                     {item.kind === "collective" && (
-                        <Text style={[textStyles.caption, styles.kindTag]}>Коллективное</Text>
+                        <View style={styles.kindBadge}>
+                            <Text style={styles.kindBadgeText}>Коллективное</Text>
+                        </View>
                     )}
                 </View>
                 {item.kind === "collective" && (
@@ -118,16 +136,37 @@ export function AppealDetailScreen({ route, navigation }: Props) {
                 )}
             </Card>
 
+            <SectionDivider />
+
             {item.kind === "collective" && item.participants.length > 0 && (
                 <View style={styles.block}>
-                    <Text style={[textStyles.label, styles.blockTitle]}>Присоединились</Text>
-                    {item.participants.map((p) => (
-                        <View key={`${p.userId}_${p.joinedAt}`} style={styles.partRow}>
-                            <Text style={[textStyles.subtitle, styles.partName]}>
-                                {p.displayName} · кв. {p.apartment}
-                            </Text>
+                    <Text style={[textStyles.label, styles.blockTitle]}>
+                        Присоединились ({item.participants.length})
+                    </Text>
+                    <View style={styles.partTable}>
+                        <View style={[styles.partTr, styles.partTrHead]}>
+                            <Text style={[textStyles.caption, styles.partTh, { flex: 1 }]}>Житель</Text>
+                            <Text style={[textStyles.caption, styles.partTh, styles.partTdApt]}>Квартира</Text>
+                            <Text style={[textStyles.caption, styles.partTh, styles.partTdDate]}>Дата</Text>
                         </View>
-                    ))}
+                        {item.participants.map((p, idx) => {
+                            const isLast = idx === item.participants.length - 1;
+                            const isMe = String(p.userId) === String(user?.id);
+                            return (
+                                <View key={`${p.userId}_${p.joinedAt}`} style={[styles.partTr, isLast && styles.partTrLast, isMe && styles.partTrMe]}>
+                                    <Text style={[textStyles.body, styles.partTd, { flex: 1 }]}>
+                                        {isMe ? "Вы" : (p.displayName || `Житель …${String(p.userId).slice(-4)}`)}
+                                    </Text>
+                                    <Text style={[textStyles.body, styles.partTd, styles.partTdApt]}>
+                                        {p.apartment}
+                                    </Text>
+                                    <Text style={[textStyles.caption, styles.partTd, styles.partTdDate]}>
+                                        {formatDate(p.joinedAt)}
+                                    </Text>
+                                </View>
+                            );
+                        })}
+                    </View>
                 </View>
             )}
 
@@ -219,6 +258,35 @@ const styles = StyleSheet.create({
         alignItems: "center",
     },
     kindTag: { color: colors.info, fontWeight: "600" },
+    kindBadge: {
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 3,
+        borderRadius: 6,
+        backgroundColor: "rgba(251, 191, 36, 0.15)",
+    },
+    kindBadgeText: { fontSize: 11, fontWeight: "600", color: "#fbbf24" },
+    partTable: {
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 8,
+        overflow: "hidden",
+        backgroundColor: colors.surface,
+    },
+    partTr: {
+        flexDirection: "row",
+        alignItems: "center",
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.borderSubtle,
+    },
+    partTrHead: { backgroundColor: colors.bgElevated, borderBottomColor: colors.border },
+    partTrLast: { borderBottomWidth: 0 },
+    partTrMe: { backgroundColor: "rgba(61, 158, 122, 0.08)" },
+    partTh: { color: colors.textDim, fontWeight: "600" },
+    partTd: { color: colors.text },
+    partTdApt: { width: 72, textAlign: "center" },
+    partTdDate: { width: 80, textAlign: "right", color: colors.textDim, fontSize: 11 },
     joinBlock: { gap: spacing.sm, marginTop: spacing.md },
     joinExplainer: { color: colors.textDim, lineHeight: 20 },
     joinedNote: { color: colors.primary, marginTop: spacing.md, lineHeight: 20 },

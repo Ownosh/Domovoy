@@ -152,4 +152,28 @@ router.get("/schedule", requireAuth, async (req: AuthRequest, res) => {
     }
 });
 
+// GET /api/buildings/contacts
+router.get("/contacts", requireAuth, async (req: AuthRequest, res) => {
+    const key = await getUserBuildingKey(req.userId!);
+    if (!key) return res.status(404).json({ error: "Дом не найден" });
+    try {
+        const [[row]] = await pool.query<RowDataPacket[]>(
+            `SELECT company_name, phone, email, site, hours
+             FROM building_contacts WHERE LOWER(building_key) = LOWER(?)`,
+            [key],
+        );
+        if (!row) return res.json(null);
+        return res.json({
+            companyName: row.company_name as string,
+            phone: row.phone as string,
+            email: row.email as string,
+            site: row.site as string,
+            hours: row.hours as string,
+        });
+    } catch (err) {
+        console.error("buildings/contacts error:", err);
+        return res.status(500).json({ error: "Ошибка сервера" });
+    }
+});
+
 export default router;

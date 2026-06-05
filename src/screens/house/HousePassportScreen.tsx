@@ -1,14 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
 import React, { useEffect, useMemo, useState } from "react";
 import {
     Alert,
     Image as RNImage,
+    Linking,
     Modal,
     Pressable,
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     View,
 } from "react-native";
 import { Button, Card, Input, NotificationBell, ScreenLayout, UkPublicStatsCard } from "../../components/ui";
@@ -22,6 +25,7 @@ import type {
 import { colors, radius, spacing, textStyles } from "../../theme";
 
 const STAR_SET = [1, 2, 3, 4, 5] as const;
+const NOTES_KEY = "@domovoy/calendar_notes_v1";
 
 type HouseTab = "calendar" | "passport" | "schedule" | "rating";
 
@@ -37,7 +41,7 @@ const ACTIVITY_DOT: Record<HouseCalendarActivityKind, string> = {
     pipes: colors.info,
     meeting: "#a78bfa",
     heating: colors.warning,
-    garbage: colors.textDim,
+    garbage: "#ef4444",
     other: colors.accent,
 };
 
@@ -138,6 +142,7 @@ export function HousePassportScreen() {
         houseSpecs: specs,
         houseSchedule: scheduleItems,
         houseCalendar: calendarActivities,
+        ukContacts,
     } = useApp();
     const verified = isVerifiedResident(verification);
     const visibleTabs = HOUSE_TABS.filter((t) => verified || t.id !== "rating");
@@ -153,6 +158,23 @@ export function HousePassportScreen() {
     const [feedbackOther, setFeedbackOther] = useState("");
     const [agendaOpen, setAgendaOpen] = useState(false);
     const [dayDetailIso, setDayDetailIso] = useState<string | null>(null);
+    const [calendarNotes, setCalendarNotes] = useState<Record<string, string>>({});
+
+    useEffect(() => {
+        AsyncStorage.getItem(NOTES_KEY)
+            .then((raw) => { if (raw) setCalendarNotes(JSON.parse(raw)); })
+            .catch(() => {});
+    }, []);
+
+    const saveNote = (iso: string, text: string) => {
+        setCalendarNotes((prev) => {
+            const next = { ...prev };
+            if (text.trim()) next[iso] = text.trim();
+            else delete next[iso];
+            AsyncStorage.setItem(NOTES_KEY, JSON.stringify(next)).catch(() => {});
+            return next;
+        });
+    };
 
     const currentMonthKey = getCurrentMonthKey();
     const ratedThisMonth =
@@ -340,6 +362,7 @@ export function HousePassportScreen() {
                             y={y}
                             m0={m0}
                             byDate={byDate}
+                            notes={calendarNotes}
                             onDayPress={(iso) => setDayDetailIso(iso)}
                         />
                         <View style={styles.legend}>
@@ -419,6 +442,8 @@ export function HousePassportScreen() {
                                       .sort((a, b) => a.title.localeCompare(b.title))
                                 : []
                         }
+                        note={dayDetailIso ? (calendarNotes[dayDetailIso] ?? "") : ""}
+                        onSaveNote={(text) => { if (dayDetailIso) saveNote(dayDetailIso, text); }}
                         onClose={() => setDayDetailIso(null)}
                     />
                 </>
@@ -499,6 +524,54 @@ export function HousePassportScreen() {
                                                 <Text style={[textStyles.body, styles.specVal]}>{row.value}</Text>
                                             </View>
                                         ))}
+                                    </Card>
+                                </>
+                            )}
+
+                            {ukContacts && (
+                                <>
+                                    <PassportDivider />
+                                    <Text style={[textStyles.label, styles.sectionFirst]}>Управляющая компания</Text>
+                                    <Card padded={false}>
+                                        {ukContacts.companyName ? (
+                                            <View style={[styles.contactRow, styles.specBorder]}>
+                                                <Ionicons name="business-outline" size={16} color={colors.textDim} />
+                                                <Text style={[textStyles.body, styles.contactText]}>{ukContacts.companyName}</Text>
+                                            </View>
+                                        ) : null}
+                                        {ukContacts.phone ? (
+                                            <Pressable
+                                                style={[styles.contactRow, styles.specBorder]}
+                                                onPress={() => Linking.openURL(`tel:${ukContacts.phone}`)}
+                                            >
+                                                <Ionicons name="call-outline" size={16} color={colors.primary} />
+                                                <Text style={[textStyles.body, styles.contactLink]}>{ukContacts.phone}</Text>
+                                            </Pressable>
+                                        ) : null}
+                                        {ukContacts.email ? (
+                                            <Pressable
+                                                style={[styles.contactRow, styles.specBorder]}
+                                                onPress={() => Linking.openURL(`mailto:${ukContacts.email}`)}
+                                            >
+                                                <Ionicons name="mail-outline" size={16} color={colors.primary} />
+                                                <Text style={[textStyles.body, styles.contactLink]}>{ukContacts.email}</Text>
+                                            </Pressable>
+                                        ) : null}
+                                        {ukContacts.site ? (
+                                            <Pressable
+                                                style={[styles.contactRow, styles.specBorder]}
+                                                onPress={() => Linking.openURL(ukContacts.site.startsWith("http") ? ukContacts.site : `https://${ukContacts.site}`)}
+                                            >
+                                                <Ionicons name="globe-outline" size={16} color={colors.primary} />
+                                                <Text style={[textStyles.body, styles.contactLink]}>{ukContacts.site}</Text>
+                                            </Pressable>
+                                        ) : null}
+                                        {ukContacts.hours ? (
+                                            <View style={styles.contactRow}>
+                                                <Ionicons name="time-outline" size={16} color={colors.textDim} />
+                                                <Text style={[textStyles.body, styles.contactText]}>{ukContacts.hours}</Text>
+                                            </View>
+                                        ) : null}
                                     </Card>
                                 </>
                             )}
@@ -686,15 +759,27 @@ function DayEventsModal({
     visible,
     isoDate,
     activities,
+    note,
+    onSaveNote,
     onClose,
 }: {
     visible: boolean;
     isoDate: string | null;
     activities: HouseCalendarActivity[];
+    note: string;
+    onSaveNote: (text: string) => void;
     onClose: () => void;
 }) {
-    const title =
-        isoDate != null ? formatDayHeading(isoDate) : "";
+    const [draft, setDraft] = useState(note);
+    useEffect(() => { setDraft(note); }, [note, visible]);
+
+    const title = isoDate != null ? formatDayHeading(isoDate) : "";
+
+    const handleSave = () => {
+        onSaveNote(draft);
+        onClose();
+    };
+
     return (
         <Modal
             visible={visible}
@@ -710,10 +795,7 @@ function DayEventsModal({
                             <Ionicons name="close" size={26} color={colors.text} />
                         </Pressable>
                     </View>
-                    <ScrollView
-                        style={styles.modalScroll}
-                        showsVerticalScrollIndicator={false}
-                    >
+                    <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
                         {activities.length === 0 ? (
                             <Text style={[textStyles.body, styles.modalEmpty]}>
                                 На эту дату событий не запланировано.
@@ -721,25 +803,33 @@ function DayEventsModal({
                         ) : (
                             activities.map((a) => (
                                 <View key={a.id} style={styles.modalEvent}>
-                                    <View
-                                        style={[
-                                            styles.modalEventDot,
-                                            { backgroundColor: ACTIVITY_DOT[a.kind as HouseCalendarActivityKind] },
-                                        ]}
-                                    />
+                                    <View style={[styles.modalEventDot, { backgroundColor: ACTIVITY_DOT[a.kind as HouseCalendarActivityKind] }]} />
                                     <View style={styles.modalEventText}>
-                                        <Text style={[textStyles.body, styles.modalEventTitle]}>
-                                            {a.title}
-                                        </Text>
-                                        <Text
-                                            style={[textStyles.caption, styles.modalEventKind]}
-                                        >
+                                        <Text style={[textStyles.body, styles.modalEventTitle]}>{a.title}</Text>
+                                        <Text style={[textStyles.caption, styles.modalEventKind]}>
                                             {ACTIVITY_LABEL[a.kind as HouseCalendarActivityKind]}
                                         </Text>
                                     </View>
                                 </View>
                             ))
                         )}
+                        <View style={styles.noteSection}>
+                            <Text style={[textStyles.caption, styles.noteLabel]}>Моя пометка</Text>
+                            <TextInput
+                                style={styles.noteInput}
+                                value={draft}
+                                onChangeText={setDraft}
+                                placeholder="Добавить заметку на этот день…"
+                                placeholderTextColor={colors.textDim}
+                                multiline
+                            />
+                            <Pressable
+                                onPress={handleSave}
+                                style={({ pressed }) => [styles.noteSave, pressed && { opacity: 0.7 }]}
+                            >
+                                <Text style={styles.noteSaveText}>Сохранить</Text>
+                            </Pressable>
+                        </View>
                     </ScrollView>
                 </Pressable>
             </Pressable>
@@ -762,11 +852,13 @@ function MonthGrid({
     y,
     m0,
     byDate,
+    notes,
     onDayPress,
 }: {
     y: number;
     m0: number;
     byDate: Map<string, HouseCalendarActivity[]>;
+    notes: Record<string, string>;
     onDayPress: (iso: string) => void;
 }) {
     const first = new Date(y, m0, 1);
@@ -776,44 +868,46 @@ function MonthGrid({
         ...Array(mondayPad).fill(null),
         ...Array.from({ length: lastDay }, (_, i) => i + 1),
     ];
-    while (cells.length % 7 !== 0) {
-        cells.push(null);
-    }
+    while (cells.length % 7 !== 0) cells.push(null);
+
+    const rows: (null | number)[][] = [];
+    for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+
     return (
-        <View style={styles.grid}>
-            {cells.map((day, idx) => {
-                if (day === null) {
-                    return <View key={`e-${idx}`} style={styles.dayCell} />;
-                }
-                const iso = toIsoDate(y, m0, day);
-                const acts = byDate.get(iso) ?? [];
-                return (
-                    <Pressable
-                        key={iso}
-                        onPress={() => onDayPress(iso)}
-                        style={({ pressed }) => [
-                            styles.dayCell,
-                            pressed && styles.dayCellPressed,
-                        ]}
-                    >
-                        <Text style={[textStyles.caption, styles.dayNum]}>{day}</Text>
-                        <View style={styles.dots}>
-                            {acts.slice(0, 3).map((a) => (
-                                <View
-                                    key={a.id}
-                                    style={[
-                                        styles.miniDot,
-                                        { backgroundColor: ACTIVITY_DOT[a.kind as HouseCalendarActivityKind] },
-                                    ]}
-                                />
-                            ))}
-                            {acts.length > 3 ? (
-                                <Text style={styles.moreDots}>+</Text>
-                            ) : null}
-                        </View>
-                    </Pressable>
-                );
-            })}
+        <View>
+            {rows.map((row, rowIdx) => (
+                <View key={rowIdx} style={styles.gridRow}>
+                    {row.map((day, colIdx) => {
+                        if (day === null) {
+                            return <View key={`e-${rowIdx}-${colIdx}`} style={styles.dayCell} />;
+                        }
+                        const iso = toIsoDate(y, m0, day);
+                        const acts = byDate.get(iso) ?? [];
+                        const hasNote = Boolean(notes[iso]);
+                        return (
+                            <Pressable
+                                key={iso}
+                                onPress={() => onDayPress(iso)}
+                                style={({ pressed }) => [styles.dayCell, pressed && styles.dayCellPressed]}
+                            >
+                                <Text style={[textStyles.caption, styles.dayNum]}>{day}</Text>
+                                <View style={styles.dots}>
+                                    {acts.slice(0, 2).map((a) => (
+                                        <View
+                                            key={a.id}
+                                            style={[styles.miniDot, { backgroundColor: ACTIVITY_DOT[a.kind as HouseCalendarActivityKind] }]}
+                                        />
+                                    ))}
+                                    {hasNote && (
+                                        <View style={[styles.miniDot, styles.noteDot]} />
+                                    )}
+                                    {acts.length > 2 && <Text style={styles.moreDots}>+</Text>}
+                                </View>
+                            </Pressable>
+                        );
+                    })}
+                </View>
+            ))}
         </View>
     );
 }
@@ -1147,6 +1241,44 @@ const styles = StyleSheet.create({
     trashTitle: { color: colors.text },
     trashSchedule: { color: colors.primary },
     trashNote: { color: colors.textMuted, lineHeight: 18 },
+    gridRow: { flexDirection: "row" },
+    noteDot: { backgroundColor: colors.textDim },
+    noteSection: {
+        marginTop: spacing.lg,
+        paddingTop: spacing.md,
+        borderTopWidth: 1,
+        borderTopColor: colors.borderSubtle,
+    },
+    noteLabel: { color: colors.textMuted, marginBottom: spacing.sm },
+    noteInput: {
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: radius.md,
+        padding: spacing.md,
+        color: colors.text,
+        backgroundColor: colors.bgElevated,
+        minHeight: 72,
+        textAlignVertical: "top",
+        fontSize: 14,
+    },
+    noteSave: {
+        marginTop: spacing.sm,
+        alignSelf: "flex-end",
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.sm,
+        borderRadius: radius.md,
+        backgroundColor: colors.primary,
+    },
+    noteSaveText: { color: "#fff", fontWeight: "600", fontSize: 14 },
+    contactRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.sm,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.md,
+    },
+    contactText: { color: colors.text, flex: 1 },
+    contactLink: { color: colors.primary, flex: 1 },
     ukGap: { height: spacing.md },
     ukCard: { borderLeftWidth: 3, borderLeftColor: colors.info, gap: spacing.sm },
     ukCardTop: { marginBottom: spacing.xs },

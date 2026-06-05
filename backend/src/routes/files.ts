@@ -1,45 +1,55 @@
 import { Router } from "express";
 import multer from "multer";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { randomBytes } from "crypto";
 import path from "path";
-import fs from "fs";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 
 const router = Router();
 
-// Папка для хранения загруженных файлов
-const UPLOADS_DIR = path.resolve(process.cwd(), "uploads");
-if (!fs.existsSync(UPLOADS_DIR)) {
-    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
-    filename: (_req, file, cb) => {
-        const ext = path.extname(file.originalname) || ".jpg";
-        cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+const s3 = new S3Client({
+    endpoint: process.env.S3_ENDPOINT,
+    region: process.env.S3_REGION ?? "ru-1",
+    credentials: {
+        accessKeyId: process.env.S3_ACCESS_KEY!,
+        secretAccessKey: process.env.S3_SECRET_KEY!,
     },
+    forcePathStyle: true,
 });
+
+const BUCKET = process.env.S3_BUCKET!;
 
 const upload = multer({
-    storage,
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10 МБ
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
-        if (file.mimetype.startsWith("image/")) {
-            cb(null, true);
-        } else {
-            cb(new Error("Только изображения"));
-        }
+        if (file.mimetype.startsWith("image/")) cb(null, true);
+        else cb(new Error("Только изображения"));
     },
 });
 
-// POST /api/files/upload
-router.post("/upload", requireAuth, upload.single("file"), (req: AuthRequest, res) => {
+router.post("/upload", requireAuth, upload.single("file"), async (req: AuthRequest, res) => {
     if (!req.file) {
         return res.status(400).json({ error: "Файл не получен" });
     }
-    const serverUrl = process.env.SERVER_URL ?? `http://localhost:${process.env.PORT ?? 3001}`;
-    const url = `${serverUrl}/uploads/${req.file.filename}`;
-    return res.json({ url });
+
+    try {
+        const ext = path.extname(req.file.originalname) || ".jpg";
+        const key = `uploads/${randomBytes(8).toString("hex")}${ext}`;
+
+        await s3.send(new PutObjectCommand({
+            Bucket: BUCKET,
+            Key: key,
+            Body: req.file.buffer,
+            ContentType: req.file.mimetype,
+        }));
+
+        const url = `${process.env.S3_ENDPOINT}/${BUCKET}/${key}`;
+        return res.json({ url });
+    } catch (err: any) {
+        console.error("[s3 files upload]", err?.message);
+        return res.status(500).json({ error: err?.message ?? "Ошибка загрузки в S3" });
+    }
 });
 
 export default router;

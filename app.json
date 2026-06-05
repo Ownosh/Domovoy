@@ -20,7 +20,12 @@
       "package": "com.domovoy.app"
     },
     "ios": {
-      "bundleIdentifier": "com.domovoy.app"
+      "bundleIdentifier": "com.domovoy.app",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
     }
   }
 }

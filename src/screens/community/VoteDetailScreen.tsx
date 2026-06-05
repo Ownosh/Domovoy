@@ -153,8 +153,6 @@ export function VoteDetailScreen({ route }: Props) {
                 )}
             </Card>
 
-            <SectionDivider />
-
             {!myCast && canVote && (
                 <View style={styles.block}>
                     <Text style={[textStyles.label, styles.label]}>

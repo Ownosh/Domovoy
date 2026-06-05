@@ -317,6 +317,19 @@ export async function migrate(): Promise<void> {
     `);
 
     await pool.query(`
+        CREATE TABLE IF NOT EXISTS house_status (
+            id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            building_key VARCHAR(120)    NOT NULL,
+            text         VARCHAR(500)    NOT NULL,
+            status       ENUM('ok','warning','danger') NOT NULL DEFAULT 'ok',
+            position     INT             NOT NULL DEFAULT 0,
+            is_active    TINYINT(1)      NOT NULL DEFAULT 1,
+            PRIMARY KEY (id),
+            INDEX idx_hs_building (building_key, position)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await pool.query(`
         CREATE TABLE IF NOT EXISTS building_contacts (
             id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             building_key VARCHAR(120)    NOT NULL,

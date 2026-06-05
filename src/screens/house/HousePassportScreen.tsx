@@ -143,6 +143,7 @@ export function HousePassportScreen() {
         houseSchedule: scheduleItems,
         houseCalendar: calendarActivities,
         ukContacts,
+        houseStatus,
     } = useApp();
     const verified = isVerifiedResident(verification);
     const visibleTabs = HOUSE_TABS.filter((t) => verified || t.id !== "rating");
@@ -1270,6 +1271,22 @@ const styles = StyleSheet.create({
         backgroundColor: colors.primary,
     },
     noteSaveText: { color: "#fff", fontWeight: "600", fontSize: 14 },
+    statusRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: spacing.lg,
+        paddingVertical: 12,
+        borderLeftWidth: 3,
+        gap: spacing.sm,
+    },
+    statusText: { color: colors.text, flex: 1 },
+    statusBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 4,
+        borderWidth: 1,
+    },
+    statusBadgeText: { fontSize: 11, fontWeight: "600" },
     contactRow: {
         flexDirection: "row",
         alignItems: "center",

@@ -33,6 +33,11 @@ export async function apiFetchBuildingSchedule(): Promise<HouseScheduleItem[]> {
     return apiRequest<HouseScheduleItem[]>("/buildings/schedule");
 }
 
+export type HouseStatusItem = { id: string; text: string; status: "ok" | "warning" | "danger" };
+export async function apiFetchBuildingStatus(): Promise<HouseStatusItem[]> {
+    return apiRequest<HouseStatusItem[]>("/buildings/status");
+}
+
 export async function apiFetchBuildingContacts(): Promise<import("../types").UkContacts | null> {
     return apiRequest<import("../types").UkContacts | null>("/buildings/contacts");
 }

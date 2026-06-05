@@ -149,6 +149,8 @@ export function HomeScreen() {
         profile,
         refreshFeed,
         verification,
+        houseStatus,
+        houseInfo,
     } = useApp();
     const verified = isVerifiedResident(verification);
 
@@ -363,6 +365,29 @@ export function HomeScreen() {
                         <RefreshControl refreshing={false} onRefresh={onRefresh} />
                     }
                 >
+                    {houseStatus.length > 0 && (
+                        <View style={styles.statusCard}>
+                            <View style={styles.statusHeader}>
+                                <Ionicons name="home-outline" size={14} color={colors.textDim} />
+                                <Text style={styles.statusTitle}>
+                                    {houseInfo?.shortName ?? "Статус дома"}
+                                </Text>
+                            </View>
+                            {houseStatus.map((item) => {
+                                const clr = item.status === "ok" ? colors.primary : item.status === "warning" ? colors.accent : colors.danger;
+                                const lbl = item.status === "ok" ? "ОК" : item.status === "warning" ? "Внимание" : "Важно";
+                                return (
+                                    <View key={item.id} style={[styles.statusRow, { borderLeftColor: clr }]}>
+                                        <Text style={[styles.statusText, { color: clr === colors.primary ? colors.text : clr }]} numberOfLines={2}>{item.text}</Text>
+                                        <View style={[styles.statusBadge, { backgroundColor: `${clr}22`, borderColor: `${clr}44` }]}>
+                                            <Text style={[styles.statusBadgeText, { color: clr }]}>{lbl}</Text>
+                                        </View>
+                                    </View>
+                                );
+                            })}
+                        </View>
+                    )}
+
                     <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
@@ -960,6 +985,43 @@ const styles = StyleSheet.create({
     date: { color: colors.textDim },
     ntitle: { color: colors.text },
     nbody: { color: colors.textMuted },
+    statusCard: {
+        marginBottom: spacing.md,
+        borderRadius: radius.md,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.border,
+        overflow: "hidden",
+    },
+    statusHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.xs,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.borderSubtle,
+        backgroundColor: colors.bgElevated,
+    },
+    statusTitle: { fontSize: 12, fontWeight: "700", color: colors.textDim, letterSpacing: 0.5 },
+    statusRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: spacing.md,
+        paddingVertical: 10,
+        borderLeftWidth: 3,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.borderSubtle,
+        gap: spacing.sm,
+    },
+    statusText: { fontSize: 14, flex: 1, color: colors.text },
+    statusBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 4,
+        borderWidth: 1,
+    },
+    statusBadgeText: { fontSize: 11, fontWeight: "600" },
     filterRow: {
     flexDirection: "row",
     gap: spacing.sm,

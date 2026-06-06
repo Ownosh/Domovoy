@@ -5,6 +5,7 @@ import React, { useMemo, useState } from "react";
 import {
     FlatList,
     Pressable,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
@@ -133,9 +134,16 @@ function AdCard({ item, onPress }: { item: NeighborAd; onPress: () => void }) {
 
 export function AppealsListScreen() {
     const navigation = useNavigation<Nav>();
-    const { appeals, profile, user, votes, neighborAds, verification } = useApp();
+    const { appeals, profile, user, votes, neighborAds, verification, refreshFeed } = useApp();
     const verified = isVerifiedResident(verification);
     const [tab, setTab] = useState<CommunityTab>("appeals");
+    const [refreshing, setRefreshing] = useState(false);
+
+    const onRefresh = async () => {
+        setRefreshing(true);
+        await refreshFeed().catch(() => {});
+        setRefreshing(false);
+    };
 
     const visibleTabs = COMMUNITY_TABS.filter((t) => verified || t.id !== "ads");
     const houseKey = buildBuildingKey(profile.building);
@@ -235,6 +243,7 @@ export function AppealsListScreen() {
                     data={currentData as any[]}
                     keyExtractor={(i) => String(i.id)}
                     contentContainerStyle={styles.list}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                     ItemSeparatorComponent={() => <Divider />}
                     ListEmptyComponent={
                         <Text style={[textStyles.body, styles.empty]}>{emptyText}</Text>

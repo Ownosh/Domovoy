@@ -25,7 +25,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
                     GROUP_CONCAT(np.image_url ORDER BY np.position SEPARATOR '||') AS image_urls
              FROM news n
              LEFT JOIN news_photos np ON np.news_id = n.id
-             WHERE n.building_key = ?
+             WHERE n.building_key = ? AND n.is_published = 1
              GROUP BY n.id
              ORDER BY n.published_at DESC
              LIMIT 50`,

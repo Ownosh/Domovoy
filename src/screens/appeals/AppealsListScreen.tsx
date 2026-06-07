@@ -139,10 +139,10 @@ export function AppealsListScreen() {
     const [tab, setTab] = useState<CommunityTab>("appeals");
     const [refreshing, setRefreshing] = useState(false);
 
-    const onRefresh = async () => {
+    const onRefresh = () => {
         setRefreshing(true);
-        await refreshFeed().catch(() => {});
-        setRefreshing(false);
+        refreshFeed().catch(() => {});
+        setTimeout(() => setRefreshing(false), 600);
     };
 
     const visibleTabs = COMMUNITY_TABS.filter((t) => verified || t.id !== "ads");

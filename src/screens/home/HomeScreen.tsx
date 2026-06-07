@@ -139,6 +139,13 @@ export function HomeScreen() {
     const [notifOpen, setNotifOpen] = useState(false);
     const [statusOpen, setStatusOpen] = useState(false);
     const [detailNotif, setDetailNotif] = useState<import("../../types").AppNotification | null>(null);
+    const [photoViewerUrls, setPhotoViewerUrls] = useState<string[]>([]);
+    const [photoViewerIndex, setPhotoViewerIndex] = useState(0);
+    const openPhotoViewer = (urls: string[], index: number) => {
+        setPhotoViewerUrls(urls);
+        setPhotoViewerIndex(index);
+    };
+    const closePhotoViewer = () => setPhotoViewerUrls([]);
     const {
         news,
         votes,
@@ -454,7 +461,7 @@ export function HomeScreen() {
                             <React.Fragment key={row.key}>
                                 {index > 0 && <FeedDivider />}
                                 {row.kind === "news" && (
-                                    <FeedNewsRow item={row.item} />
+                                    <FeedNewsRow item={row.item} onOpenViewer={openPhotoViewer} />
                                 )}
                                 {row.kind === "vote" && (
                                     <FeedVoteRow
@@ -479,6 +486,13 @@ export function HomeScreen() {
                     )}
                 </ScrollView>
             </View>
+
+            <PhotoViewer
+                urls={photoViewerUrls}
+                initialIndex={photoViewerIndex}
+                visible={photoViewerUrls.length > 0}
+                onClose={closePhotoViewer}
+            />
 
             {/* Детальное уведомление */}
             <Modal
@@ -697,20 +711,11 @@ function NewsImage({
     return img;
 }
 
-function FeedNewsRow({ item }: { item: NewsItem }) {
+function FeedNewsRow({ item, onOpenViewer }: { item: NewsItem; onOpenViewer: (urls: string[], index: number) => void }) {
     const multi = item.imageUrls.length > 1;
-    const [viewerVisible, setViewerVisible] = useState(false);
-    const [viewerIndex, setViewerIndex] = useState(0);
-    const openViewer = (i: number) => { setViewerIndex(i); setViewerVisible(true); };
 
     return (
         <Card style={[styles.feedCard, styles.feedCardNews]} padded>
-            <PhotoViewer
-                urls={item.imageUrls}
-                initialIndex={viewerIndex}
-                visible={viewerVisible}
-                onClose={() => setViewerVisible(false)}
-            />
             <View style={styles.cardTop}>
                 <View style={[styles.typeBadge, styles.typeBadgeNews]}>
                     <Text style={[styles.typeBadgeText, { color: colors.info }]}>Новости УК</Text>
@@ -727,11 +732,11 @@ function FeedNewsRow({ item }: { item: NewsItem }) {
                         nestedScrollEnabled
                     >
                         {item.imageUrls.map((url, i) => (
-                            <NewsImage key={i} uri={url} style={styles.newsImgThumb} onPress={() => openViewer(i)} />
+                            <NewsImage key={i} uri={url} style={styles.newsImgThumb} onPress={() => onOpenViewer(item.imageUrls, i)} />
                         ))}
                     </ScrollView>
                 ) : (
-                    <NewsImage uri={item.imageUrls[0]} style={styles.newsImg} onPress={() => openViewer(0)} />
+                    <NewsImage uri={item.imageUrls[0]} style={styles.newsImg} onPress={() => onOpenViewer(item.imageUrls, 0)} />
                 )
             ) : null}
             <Text style={[textStyles.subtitle, styles.feedTitle]}>{item.title}</Text>

@@ -143,8 +143,14 @@ export function HousePassportScreen() {
         houseSchedule: scheduleItems,
         houseCalendar: calendarActivities,
         ukContacts,
-        houseStatus,
+        refreshFeed,
     } = useApp();
+    const [refreshing, setRefreshing] = useState(false);
+    const onRefresh = () => {
+        setRefreshing(true);
+        refreshFeed().catch(() => {});
+        setTimeout(() => setRefreshing(false), 600);
+    };
     const verified = isVerifiedResident(verification);
     const visibleTabs = HOUSE_TABS.filter((t) => verified || t.id !== "rating");
     const [tab, setTab] = useState<HouseTab>("calendar");
@@ -283,6 +289,8 @@ export function HousePassportScreen() {
     return (
         <ScreenLayout
             title="О доме"
+            onRefresh={onRefresh}
+            refreshing={refreshing}
             rightAccessory={
                 <View style={styles.headerActions}>
                     <NotificationBell />

@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { AppState } from "react-native";
 import { apiLogin, apiLogout, apiRegister, apiChangePassword } from "../api/auth";
 import { apiFetchNews } from "../api/news";
 import { apiFetchVotes, apiCreateVote, apiCastVote, apiEditVote, apiDeleteVote } from "../api/votes";
@@ -830,9 +831,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: "ARCHIVE_EXPIRED_NEIGHBOR_ADS" });
     }, [hydrated]);
 
-    useEffect(() => {
-        if (!state.sessionActive || !state.account) return;
-
+    const fetchAllData = useCallback(() => {
         const onUnauthorized = (err: unknown) => {
             if (err instanceof ApiError && err.status === 401) {
                 clearTokens().catch(() => {});
@@ -840,20 +839,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
         };
 
-        registerPushToken().catch(() => {});
-
         apiFetchNews()
-            .then((items) => { if (items.length > 0) dispatch({ type: "SET_NEWS", payload: items }); })
-            .catch((err) => { console.warn("[news] fetch failed:", err); onUnauthorized(err); });
+            .then((items) => { dispatch({ type: "SET_NEWS", payload: items }); })
+            .catch((err) => { onUnauthorized(err); });
         apiFetchVotes()
             .then((data) => { dispatch({ type: "SET_VOTES", payload: data }); })
-            .catch((err) => { console.warn("[votes] fetch failed:", err); onUnauthorized(err); });
+            .catch((err) => { onUnauthorized(err); });
         apiFetchNeighborAds()
-            .then((ads) => { if (ads.length > 0) dispatch({ type: "SET_NEIGHBOR_ADS", payload: ads }); })
-            .catch((err) => { console.warn("[neighbor-ads] fetch failed:", err); onUnauthorized(err); });
+            .then((ads) => { dispatch({ type: "SET_NEIGHBOR_ADS", payload: ads }); })
+            .catch((err) => { onUnauthorized(err); });
         apiFetchAppeals()
             .then((list) => { dispatch({ type: "SET_APPEALS", payload: list }); })
-            .catch((err) => { console.warn("[appeals] fetch failed:", err); onUnauthorized(err); });
+            .catch((err) => { onUnauthorized(err); });
         apiFetchMyRating()
             .then((r) => { if (r) dispatch({ type: "SET_ENVIRONMENT_RATING", payload: r }); })
             .catch(() => {});
@@ -880,7 +877,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ]).then(([info, photos, specs, schedule, calendar, contacts, status]) => {
             dispatch({ type: "SET_HOUSE_DATA", payload: { info, photos, specs, schedule, calendar, contacts, status } });
         }).catch(() => {});
-    }, [state.sessionActive, state.account?.user.id]);
+    }, []);
+
+    useEffect(() => {
+        if (!state.sessionActive || !state.account) return;
+
+        registerPushToken().catch(() => {});
+        fetchAllData();
+
+        const sub = AppState.addEventListener("change", (next) => {
+            if (next === "active") fetchAllData();
+        });
+
+        return () => sub.remove();
+    }, [state.sessionActive, state.account?.user.id, fetchAllData]);
 
     useEffect(() => {
         if (!hydrated) return;
@@ -1101,44 +1111,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const refreshFeed = useCallback(async () => {
-        await Promise.all([
-            apiFetchNews()
-                .then((items) => dispatch({ type: "SET_NEWS", payload: items }))
-                .catch(() => {}),
-            apiFetchVotes()
-                .then((data) => dispatch({ type: "SET_VOTES", payload: data }))
-                .catch(() => {}),
-            apiFetchNeighborAds()
-                .then((ads) => dispatch({ type: "SET_NEIGHBOR_ADS", payload: ads }))
-                .catch(() => {}),
-            apiFetchAppeals()
-                .then((list) => dispatch({ type: "SET_APPEALS", payload: list }))
-                .catch(() => {}),
-            apiFetchNotifications()
-                .then((items) => dispatch({ type: "SET_NOTIFICATIONS", payload: items }))
-                .catch(() => {}),
-            apiFetchVerificationStatus()
-                .then((v) => dispatch({ type: "SET_VERIFICATION_STATUS", payload: v }))
-                .catch(() => {}),
-            apiFetchRatingStats()
-                .then((s) => dispatch({ type: "SET_UK_STATS", payload: s }))
-                .catch(() => {}),
-            apiFetchDistrictPois()
-                .then(({ anchor, pois }) => dispatch({ type: "SET_DISTRICT", payload: { pois, anchor } }))
-                .catch(() => {}),
-            Promise.all([
-                apiFetchBuildingInfo(),
-                apiFetchBuildingPhotos(),
-                apiFetchBuildingSpecs(),
-                apiFetchBuildingSchedule(),
-                apiFetchBuildingCalendar("2020-01", "2030-12"),
-                apiFetchBuildingContacts(),
-                apiFetchBuildingStatus(),
-            ]).then(([info, photos, specs, schedule, calendar, contacts, status]) => {
-                dispatch({ type: "SET_HOUSE_DATA", payload: { info, photos, specs, schedule, calendar, contacts, status } });
-            }).catch(() => {}),
-        ]);
-    }, []);
+        fetchAllData();
+    }, [fetchAllData]);
 
     const setVerificationDemo = useCallback(
         (status: "pending" | "approved" | "rejected") => {

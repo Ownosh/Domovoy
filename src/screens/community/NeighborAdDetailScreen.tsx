@@ -129,7 +129,7 @@ export function NeighborAdDetailScreen({ route, navigation }: Props) {
 
             {!isAuthor && (
                 <View style={styles.actions}>
-                    <Button title="Позвонить" onPress={onCall} />
+                    <Button title="Позвонить" onPress={onCall} style={styles.callBtn} />
                     <View style={styles.gap} />
                     <View style={styles.reportWrap}>
                         <Pressable onPress={onReport}>
@@ -231,6 +231,7 @@ const styles = StyleSheet.create({
         marginRight: spacing.sm,
     },
     actions: { marginTop: spacing.lg },
+    callBtn: { alignSelf: "flex-end", borderRadius: 999, paddingHorizontal: spacing.xxl },
     gap: { height: spacing.md },
     extendHint: { color: colors.textDim, marginBottom: spacing.md },
     iconRow: {

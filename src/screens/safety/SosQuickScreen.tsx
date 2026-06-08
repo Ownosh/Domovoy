@@ -2,7 +2,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ScreenLayout } from "../../components/ui";
-import { ukContacts } from "../../data/mockData";
+import { useApp } from "../../context/AppContext";
 import type { AuthenticatedRootParamList } from "../../navigation/types";
 import { confirmThenDial } from "../../utils/dialPhone";
 import { colors, radius, spacing, textStyles } from "../../theme";
@@ -10,8 +10,9 @@ import { colors, radius, spacing, textStyles } from "../../theme";
 type Props = NativeStackScreenProps<AuthenticatedRootParamList, "Sos">;
 
 export function SosQuickScreen({ navigation }: Props) {
+    const { ukContacts } = useApp();
     const rows = useMemo(() => {
-        const pl = ukContacts.phone.replace(/\D/g, "") || "84951234567";
+        const pl = ukContacts?.phone.replace(/\D/g, "") || "84951234567";
         return [
             { key: "112", title: "112 — спасатели", phone: "112" as string },
             { key: "gas", title: "Газ", phone: "104", hint: "Аварийная газовая (регион)" },
@@ -19,10 +20,10 @@ export function SosQuickScreen({ navigation }: Props) {
                 key: "plumb",
                 title: "Аварийная сантехника",
                 phone: pl,
-                hint: "Линия УК (демо)",
+                hint: ukContacts ? "Линия УК" : "Линия УК (демо)",
             },
         ] as const;
-    }, []);
+    }, [ukContacts]);
 
     return (
         <ScreenLayout title="SOS" scroll={false}>

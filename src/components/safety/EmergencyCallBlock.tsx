@@ -1,5 +1,6 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import type { EmergencyContactLine } from "../../types";
 import { openTel } from "../../utils/dialPhone";
 import { colors, radius, spacing, textStyles } from "../../theme";
@@ -32,15 +33,19 @@ export function EmergencyCallBlock({
             {line.subtitle ? (
                 <Text style={[textStyles.caption, styles.s]}>{line.subtitle}</Text>
             ) : null}
-            <Text style={[textStyles.caption, styles.num]}>{line.phone}</Text>
+            <View style={styles.numWrap}>
+                <Ionicons name="call-outline" size={13} color={callAccentColor} />
+                <Text style={[styles.num, { color: callAccentColor }]}>{line.phone}</Text>
+            </View>
             <Pressable
                 onPress={() => openTel(line.phone)}
                 style={({ pressed }) => [
                     styles.callBtn,
-                    { backgroundColor: callAccentColor },
+                    { backgroundColor: callAccentColor, shadowColor: callAccentColor },
                     pressed && styles.callBtnPressed,
                 ]}
             >
+                <Ionicons name="call-outline" size={16} color={callAccentTextColor} style={styles.callIcon} />
                 <Text style={[textStyles.subtitle, styles.callTxtBold, { color: callAccentTextColor }]}>
                     Позвонить
                 </Text>
@@ -68,13 +73,36 @@ const styles = StyleSheet.create({
     badgeText: { fontSize: 11, fontWeight: "700" },
     t: { color: colors.text },
     s: { color: colors.textDim, lineHeight: 18 },
-    num: { color: colors.textMuted, marginTop: spacing.xs },
+    numWrap: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.xs,
+        marginTop: spacing.sm,
+        alignSelf: "flex-start",
+        backgroundColor: colors.bgElevated,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 4,
+        borderRadius: radius.sm,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    num: { fontSize: 15, fontWeight: "700", letterSpacing: 0.5 },
     callBtn: {
         marginTop: spacing.md,
-        paddingVertical: spacing.md,
-        borderRadius: radius.md,
+        paddingVertical: spacing.sm + 2,
+        paddingHorizontal: spacing.xxl,
+        borderRadius: radius.full,
+        flexDirection: "row",
         alignItems: "center",
+        justifyContent: "center",
+        alignSelf: "flex-end",
+        gap: spacing.sm,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.22,
+        shadowRadius: 5,
+        elevation: 3,
     },
-    callBtnPressed: { opacity: 0.9 },
-    callTxtBold: { fontWeight: "700" },
+    callIcon: { marginTop: 1 },
+    callBtnPressed: { opacity: 0.84, transform: [{ scale: 0.97 }] },
+    callTxtBold: { fontWeight: "700", letterSpacing: 0.3 },
 });

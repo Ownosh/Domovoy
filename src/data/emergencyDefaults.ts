@@ -10,7 +10,6 @@ export const BASE_EMERGENCY_CONTACTS: EmergencyContactLine[] = [
     {
         id: "gas",
         title: "Аварийная газовая служба",
-        subtitle: "Номер может отличаться по региону",
         phone: "104",
     },
     {

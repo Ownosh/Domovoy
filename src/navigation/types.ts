@@ -29,6 +29,7 @@ export type AuthenticatedRootParamList = {
     Main: undefined;
     Community: NavigatorScreenParams<CommunityStackParamList> | undefined;
     Sos: undefined;
+    NewsDetail: { newsId: string };
 };
 
 export type SafetyStackParamList = {

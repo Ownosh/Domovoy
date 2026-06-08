@@ -228,6 +228,7 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
                     title={submitting ? "Сохранение..." : editId ? "Сохранить" : "Опубликовать"}
                     onPress={() => { void submit(); }}
                     disabled={submitting}
+                    style={styles.submitBtn}
                 />
             </Card>
         </ScreenLayout>
@@ -237,6 +238,7 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
 const THUMB_SIZE = 90;
 
 const styles = StyleSheet.create({
+    submitBtn: { alignSelf: "flex-end", borderRadius: 999, paddingHorizontal: 28 },
     label: { color: colors.textMuted },
     adCard: { borderLeftWidth: 3, borderLeftColor: colors.primary },
     adHeader: { marginBottom: spacing.md },

@@ -9,6 +9,7 @@ import { CommunityNavigator } from "./CommunityNavigator";
 import type { AuthenticatedRootParamList } from "./types";
 import { MainTabs } from "./MainTabs";
 import { SosQuickScreen } from "../screens/safety/SosQuickScreen";
+import { NewsDetailScreen } from "../screens/home/NewsDetailScreen";
 
 const navTheme = {
     ...DefaultTheme,
@@ -52,6 +53,11 @@ export function RootNavigator() {
                         name="Sos"
                         component={SosQuickScreen}
                         options={{ presentation: "modal" }}
+                    />
+                    <Stack.Screen
+                        name="NewsDetail"
+                        component={NewsDetailScreen}
+                        options={{ presentation: "card" }}
                     />
                 </Stack.Navigator>
             ) : (

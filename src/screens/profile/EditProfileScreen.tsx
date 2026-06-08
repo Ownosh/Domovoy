@@ -232,13 +232,14 @@ export function EditProfileScreen({ navigation }: Props) {
                     </Text>
                 )}
                 <View style={styles.gapLg} />
-                <Button title="Сохранить" onPress={save} />
+                <Button title="Сохранить" onPress={save} style={styles.submitBtn} />
             </Card>
         </ScreenLayout>
     );
 }
 
 const styles = StyleSheet.create({
+    submitBtn: { alignSelf: "flex-end", borderRadius: 999, paddingHorizontal: 28 },
     avatarWrap: { alignItems: "center", marginBottom: spacing.lg },
     avatar: { width: 90, height: 90, borderRadius: 45 },
     avatarPlaceholder: {

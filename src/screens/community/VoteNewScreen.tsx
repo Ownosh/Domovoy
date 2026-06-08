@@ -179,6 +179,7 @@ export function VoteNewScreen({ navigation, route }: Props) {
                     title={submitting ? "Сохранение..." : editId ? "Сохранить" : "Создать голосование"}
                     onPress={() => { void submit(); }}
                     disabled={submitting}
+                    style={styles.submitBtn}
                 />
             </Card>
         </ScreenLayout>
@@ -186,6 +187,7 @@ export function VoteNewScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
+    submitBtn: { alignSelf: "flex-end", borderRadius: 999, paddingHorizontal: 28 },
     voteCard: { borderLeftWidth: 3, borderLeftColor: colors.accent },
     cardHeader: { marginBottom: spacing.md },
     voteBadge: {

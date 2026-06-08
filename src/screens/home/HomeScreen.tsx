@@ -461,7 +461,14 @@ export function HomeScreen() {
                             <React.Fragment key={row.key}>
                                 {index > 0 && <FeedDivider />}
                                 {row.kind === "news" && (
-                                    <FeedNewsRow item={row.item} onOpenViewer={openPhotoViewer} />
+                                    <FeedNewsRow
+                                        item={row.item}
+                                        onOpenViewer={openPhotoViewer}
+                                        onOpen={() => {
+                                            const root = getCommunityRoot(navigation);
+                                            root?.navigate("NewsDetail" as never, { newsId: String(row.item.id) } as never);
+                                        }}
+                                    />
                                 )}
                                 {row.kind === "vote" && (
                                     <FeedVoteRow
@@ -711,38 +718,40 @@ function NewsImage({
     return img;
 }
 
-function FeedNewsRow({ item, onOpenViewer }: { item: NewsItem; onOpenViewer: (urls: string[], index: number) => void }) {
+function FeedNewsRow({ item, onOpenViewer, onOpen }: { item: NewsItem; onOpenViewer: (urls: string[], index: number) => void; onOpen: () => void }) {
     const multi = item.imageUrls.length > 1;
 
     return (
-        <Card style={[styles.feedCard, styles.feedCardNews]} padded>
-            <View style={styles.cardTop}>
-                <View style={[styles.typeBadge, styles.typeBadgeNews]}>
-                    <Text style={[styles.typeBadgeText, { color: colors.info }]}>Новости УК</Text>
+        <Pressable onPress={onOpen} style={({ pressed }) => [{ opacity: pressed ? 0.88 : 1 }]}>
+            <Card style={[styles.feedCard, styles.feedCardNews]} padded>
+                <View style={styles.cardTop}>
+                    <View style={[styles.typeBadge, styles.typeBadgeNews]}>
+                        <Text style={[styles.typeBadgeText, { color: colors.info }]}>Новости УК</Text>
+                    </View>
+                    <Text style={styles.cardDate}>{formatNewsDate(item.date)}</Text>
                 </View>
-                <Text style={styles.cardDate}>{formatNewsDate(item.date)}</Text>
-            </View>
-            {item.imageUrls.length > 0 ? (
-                multi ? (
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        style={styles.newsImgScroll}
-                        contentContainerStyle={styles.newsImgScrollContent}
-                        nestedScrollEnabled
-                    >
-                        {item.imageUrls.map((url, i) => (
-                            <NewsImage key={i} uri={url} style={styles.newsImgThumb} onPress={() => onOpenViewer(item.imageUrls, i)} />
-                        ))}
-                    </ScrollView>
-                ) : (
-                    <NewsImage uri={item.imageUrls[0]} style={styles.newsImg} onPress={() => onOpenViewer(item.imageUrls, 0)} />
-                )
-            ) : null}
-            <Text style={[textStyles.subtitle, styles.feedTitle]}>{item.title}</Text>
-            <Text style={[textStyles.body, styles.feedExcerpt]}>{item.excerpt}</Text>
-            <FeedAuthorRow name="УК" sub="Управляющая компания" />
-        </Card>
+                {item.imageUrls.length > 0 ? (
+                    multi ? (
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={styles.newsImgScroll}
+                            contentContainerStyle={styles.newsImgScrollContent}
+                            nestedScrollEnabled
+                        >
+                            {item.imageUrls.map((url, i) => (
+                                <NewsImage key={i} uri={url} style={styles.newsImgThumb} onPress={() => onOpenViewer(item.imageUrls, i)} />
+                            ))}
+                        </ScrollView>
+                    ) : (
+                        <NewsImage uri={item.imageUrls[0]} style={styles.newsImg} onPress={() => onOpenViewer(item.imageUrls, 0)} />
+                    )
+                ) : null}
+                <Text style={[textStyles.subtitle, styles.feedTitle]}>{item.title}</Text>
+                <Text style={[textStyles.body, styles.feedExcerpt]} numberOfLines={3}>{item.excerpt}</Text>
+                <FeedAuthorRow name="УК" sub="Управляющая компания" />
+            </Card>
+        </Pressable>
     );
 }
 

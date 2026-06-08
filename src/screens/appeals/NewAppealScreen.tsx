@@ -222,6 +222,7 @@ export function NewAppealScreen({ navigation, route }: Props) {
                     variant={editId ? "primary" : kind === "collective" ? "accent" : "info"}
                     onPress={() => { void submit(); }}
                     disabled={submitting}
+                    style={styles.submitBtn}
                 />
             </Card>
         </ScreenLayout>
@@ -231,6 +232,7 @@ export function NewAppealScreen({ navigation, route }: Props) {
 const THUMB_SIZE = 90;
 
 const styles = StyleSheet.create({
+    submitBtn: { alignSelf: "flex-end", borderRadius: 999, paddingHorizontal: 28 },
     label: { color: colors.textMuted },
     cardPersonal: { borderLeftWidth: 3, borderLeftColor: colors.info },
     cardCollective: { borderLeftWidth: 3, borderLeftColor: colors.warning },

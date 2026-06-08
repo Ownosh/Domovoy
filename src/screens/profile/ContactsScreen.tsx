@@ -3,17 +3,29 @@ import React from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Card, ScreenLayout } from "../../components/ui";
-import { ukContacts } from "../../data/mockData";
+import { useApp } from "../../context/AppContext";
 import { colors, spacing, textStyles } from "../../theme";
 
 type Props = ProfileScreenProps<"Contacts">;
 
 export function ContactsScreen({ navigation }: Props) {
-    const c = ukContacts;
+    const { ukContacts } = useApp();
 
     const openUrl = (url: string) => {
         Linking.openURL(url).catch(() => {});
     };
+
+    if (!ukContacts) {
+        return (
+            <ScreenLayout title="Контакты УК" onBack={() => navigation.goBack()}>
+                <Text style={[textStyles.body, { textAlign: "center", marginTop: 40 }]}>
+                    Контакты не заданы
+                </Text>
+            </ScreenLayout>
+        );
+    }
+
+    const c = ukContacts;
 
     return (
         <ScreenLayout

@@ -221,6 +221,7 @@ export function AppealsListScreen() {
                     data={currentData as any[]}
                     keyExtractor={(i) => String(i.id)}
                     contentContainerStyle={styles.list}
+                    showsVerticalScrollIndicator={false}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                     ListHeaderComponent={
                         <View style={styles.tabsBar}>

@@ -12,6 +12,7 @@ import {
     Image,
     Keyboard,
     Pressable,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
@@ -70,7 +71,13 @@ const STRIP_FROM_ACTIVE_LAYERS = HIDDEN_CITY_RAIL_IDS;
 
 export function DistrictScreen() {
     const navigation = useNavigation<MainTabNavigationProp>();
-    const { districtPois, districtAnchor } = useApp();
+    const { districtPois, districtAnchor, refreshFeed } = useApp();
+    const [refreshing, setRefreshing] = useState(false);
+    const onRefresh = () => {
+        setRefreshing(true);
+        refreshFeed().catch(() => {});
+        setTimeout(() => setRefreshing(false), 600);
+    };
     const mapRef = useRef<DistrictMapHandle>(null);
     const [activeLayers, setActiveLayers] =
         useState<DistrictMapLayerId[]>(DEFAULT_ACTIVE_LAYERS);
@@ -274,6 +281,7 @@ export function DistrictScreen() {
                     keyboardDismissMode="on-drag"
                     nestedScrollEnabled
                     showsVerticalScrollIndicator={false}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 >
                     <Card padded={false} style={styles.mapCard}>
                         <View style={styles.mapRow}>

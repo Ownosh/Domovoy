@@ -866,7 +866,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         apiFetchDistrictPois()
             .then(({ anchor, pois }) => dispatch({ type: "SET_DISTRICT", payload: { pois, anchor } }))
             .catch(() => {});
-        Promise.all([
+        Promise.allSettled([
             apiFetchBuildingInfo(),
             apiFetchBuildingPhotos(),
             apiFetchBuildingSpecs(),
@@ -875,8 +875,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             apiFetchBuildingContacts(),
             apiFetchBuildingStatus(),
         ]).then(([info, photos, specs, schedule, calendar, contacts, status]) => {
-            dispatch({ type: "SET_HOUSE_DATA", payload: { info, photos, specs, schedule, calendar, contacts, status } });
-        }).catch(() => {});
+            dispatch({ type: "SET_HOUSE_DATA", payload: {
+                info:     info.status     === "fulfilled" ? info.value     : undefined,
+                photos:   photos.status   === "fulfilled" ? photos.value   : undefined,
+                specs:    specs.status    === "fulfilled" ? specs.value    : undefined,
+                schedule: schedule.status === "fulfilled" ? schedule.value : undefined,
+                calendar: calendar.status === "fulfilled" ? calendar.value : undefined,
+                contacts: contacts.status === "fulfilled" ? contacts.value : undefined,
+                status:   status.status   === "fulfilled" ? status.value   : undefined,
+            }});
+        });
     }, []);
 
     useEffect(() => {

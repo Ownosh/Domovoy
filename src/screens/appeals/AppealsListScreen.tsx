@@ -216,34 +216,35 @@ export function AppealsListScreen() {
                 </View>
             }
         >
-            <View style={styles.tabsBar}>
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.filterRow}
-                    style={styles.tabsScroll}
-                    nestedScrollEnabled
-                >
-                    {visibleTabs.map((t) => (
-                        <Pressable
-                            key={t.id}
-                            onPress={() => setTab(t.id)}
-                            style={[styles.tab, tab === t.id && styles.tabOn]}
-                        >
-                            <Text style={[textStyles.caption, tab === t.id ? styles.tabTextOn : styles.tabText]}>
-                                {t.label}
-                            </Text>
-                        </Pressable>
-                    ))}
-                </ScrollView>
-            </View>
-
             <View style={styles.content}>
                 <FlatList
                     data={currentData as any[]}
                     keyExtractor={(i) => String(i.id)}
                     contentContainerStyle={styles.list}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                    ListHeaderComponent={
+                        <View style={styles.tabsBar}>
+                            <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={styles.filterRow}
+                                style={styles.tabsScroll}
+                                nestedScrollEnabled
+                            >
+                                {visibleTabs.map((t) => (
+                                    <Pressable
+                                        key={t.id}
+                                        onPress={() => setTab(t.id)}
+                                        style={[styles.tab, tab === t.id && styles.tabOn]}
+                                    >
+                                        <Text style={[textStyles.caption, tab === t.id ? styles.tabTextOn : styles.tabText]}>
+                                            {t.label}
+                                        </Text>
+                                    </Pressable>
+                                ))}
+                            </ScrollView>
+                        </View>
+                    }
                     ItemSeparatorComponent={() => <Divider />}
                     ListEmptyComponent={
                         <Text style={[textStyles.body, styles.empty]}>{emptyText}</Text>

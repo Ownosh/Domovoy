@@ -7,6 +7,7 @@ export { CollapsibleHint } from "./CollapsibleHint";
 export { Card } from "./Card";
 export { Input } from "./Input";
 export { ScreenLayout } from "./ScreenLayout";
-export { AppealStatusBadge, VerificationStatusBadge } from "./StatusBadge";
+export { AppealStatusBadge, VoteStatusBadge, AdStatusBadge, VerificationStatusBadge } from "./StatusBadge";
+export { appealStatusColor, voteStatusColor, adStatusColor } from "./StatusBadge";
 export { ToggleRow } from "./ToggleRow";
 export { UkPublicStatsCard } from "./UkPublicStatsCard";

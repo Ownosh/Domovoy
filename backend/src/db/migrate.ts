@@ -405,5 +405,28 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    // Новые статусы обращений
+    await pool.query(`
+        ALTER TABLE appeals
+        MODIFY COLUMN status
+        ENUM('new','collecting_signatures','in_progress','resolved','closed','rejected',
+             'accepted','mass_appeal')
+        NOT NULL DEFAULT 'new'
+    `).catch(() => {});
+
+    // Статус голосований
+    await pool.query(`
+        ALTER TABLE votes ADD COLUMN IF NOT EXISTS status
+        ENUM('new','under_review','active','completed','cancelled')
+        NOT NULL DEFAULT 'new'
+    `).catch(() => {});
+
+    // Статус объявлений
+    await pool.query(`
+        ALTER TABLE neighbor_ads ADD COLUMN IF NOT EXISTS status
+        ENUM('new','under_review','published','archived','rejected','under_review_appeal')
+        NOT NULL DEFAULT 'new'
+    `).catch(() => {});
+
     console.log("Migration complete");
 }

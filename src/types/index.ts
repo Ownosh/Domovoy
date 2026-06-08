@@ -2,11 +2,26 @@ export type VerificationStatus = "none" | "pending" | "approved" | "rejected";
 
 export type AppealStatus =
     | "new"
-    | "accepted"
+    | "collecting_signatures"
     | "in_progress"
-    | "mass_appeal"
     | "resolved"
+    | "closed"
     | "rejected";
+
+export type VoteStatus =
+    | "new"
+    | "under_review"
+    | "active"
+    | "completed"
+    | "cancelled";
+
+export type NeighborAdStatus =
+    | "new"
+    | "under_review"
+    | "published"
+    | "archived"
+    | "rejected"
+    | "under_review_appeal";
 
 export type AppealKind = "personal" | "collective";
 
@@ -194,6 +209,7 @@ export type NeighborAd = {
     expiresAt: string;
     archived: boolean;
     pendingModeration?: boolean;
+    status?: NeighborAdStatus;
     authorName?: string;
     authorPhoto?: string;
 };
@@ -216,6 +232,7 @@ export type Vote = {
     visibility: VoteVisibility;
     createdAt: string;
     closed?: boolean;
+    status?: VoteStatus;
     sponsor: VoteSponsor;
     /** Учебный пример в интерфейсе */
     trial?: boolean;

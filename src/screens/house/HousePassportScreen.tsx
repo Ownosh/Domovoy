@@ -293,6 +293,7 @@ export function HousePassportScreen() {
     const ratingToggleLabel = ratingOpen ? "Свернуть" : "Добавить оценку";
 
     return (
+        <>
         <ScreenLayout
             title="О доме"
             onRefresh={onRefresh}
@@ -785,6 +786,7 @@ export function HousePassportScreen() {
                 </Pressable>
             </View>
         </Modal>
+        </>
     );
 }
 

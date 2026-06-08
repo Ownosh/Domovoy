@@ -11,7 +11,8 @@ import {
     Text,
     View,
 } from "react-native";
-import { AppealStatusBadge, Card, NotificationBell, ScreenLayout } from "../../components/ui";
+import { AppealStatusBadge, VoteStatusBadge, AdStatusBadge, appealStatusColor, voteStatusColor, adStatusColor, Card, NotificationBell, ScreenLayout } from "../../components/ui";
+import { voteEffectiveStatus, adEffectiveStatus } from "../../utils/appeals";
 import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type {
     AppealsStackParamList,
@@ -57,12 +58,13 @@ function Divider() {
 
 function AppealCard({ item, onPress }: { item: Appeal; onPress: () => void }) {
     const isCollective = item.kind === "collective";
+    const statusColor = appealStatusColor[item.status] ?? colors.textMuted;
     return (
         <Pressable onPress={onPress}>
-            <Card style={[styles.feedCard, isCollective ? styles.cardAppeal : styles.cardPersonal]} padded>
+            <Card style={[styles.feedCard, { borderLeftWidth: 3, borderLeftColor: statusColor }]} padded>
                 <View style={styles.cardTop}>
-                    <View style={[styles.typeBadge, isCollective ? styles.badgeAppeal : styles.badgePersonal]}>
-                        <Text style={[styles.typeBadgeText, { color: isCollective ? colors.warning : colors.info }]}>
+                    <View style={[styles.typeBadge, { backgroundColor: `${statusColor}18` }]}>
+                        <Text style={[styles.typeBadgeText, { color: statusColor }]}>
                             {isCollective ? "Коллективное обращение" : "Обращение"}
                         </Text>
                     </View>
@@ -82,21 +84,22 @@ function AppealCard({ item, onPress }: { item: Appeal; onPress: () => void }) {
 }
 
 function VoteCard({ item, onPress }: { item: Vote; onPress: () => void }) {
-    const ended = item.closed || new Date(item.endsAt).getTime() <= Date.now();
+    const status = voteEffectiveStatus(item);
+    const statusColor = voteStatusColor[status] ?? colors.textMuted;
     return (
         <Pressable onPress={onPress}>
-            <Card style={[styles.feedCard, styles.cardVote]} padded>
+            <Card style={[styles.feedCard, { borderLeftWidth: 3, borderLeftColor: statusColor }]} padded>
                 <View style={styles.cardTop}>
-                    <View style={[styles.typeBadge, styles.badgeVote]}>
-                        <Text style={[styles.typeBadgeText, { color: colors.accent }]}>Голосование</Text>
+                    <View style={[styles.typeBadge, { backgroundColor: `${statusColor}18` }]}>
+                        <Text style={[styles.typeBadgeText, { color: statusColor }]}>Голосование</Text>
                     </View>
                     <Text style={styles.cardDate}>{formatDate(item.createdAt)}</Text>
                 </View>
                 <Text style={[textStyles.subtitle, styles.feedTitle]}>{item.topic}</Text>
                 <View style={styles.cardBottom}>
-                    <View style={[styles.statusDot, { backgroundColor: ended ? colors.textDim : colors.primary }]} />
+                    <VoteStatusBadge status={status} />
                     <Text style={styles.cardMeta} numberOfLines={1}>
-                        {ended ? "Завершено" : "Активно"} · {item.visibility === "open" ? "открытое" : "тайное"}
+                        {item.visibility === "open" ? "открытое" : "тайное"}
                     </Text>
                 </View>
             </Card>
@@ -105,27 +108,21 @@ function VoteCard({ item, onPress }: { item: Vote; onPress: () => void }) {
 }
 
 function AdCard({ item, onPress }: { item: NeighborAd; onPress: () => void }) {
-    const msLeft = new Date(item.expiresAt).getTime() - Date.now();
-    const expired = msLeft <= 0;
+    const status = adEffectiveStatus(item);
+    const statusColor = adStatusColor[status] ?? colors.textMuted;
     return (
         <Pressable onPress={onPress}>
-            <Card style={[styles.feedCard, styles.cardAd]} padded>
+            <Card style={[styles.feedCard, { borderLeftWidth: 3, borderLeftColor: statusColor }]} padded>
                 <View style={styles.cardTop}>
-                    <View style={[styles.typeBadge, styles.badgeAd]}>
-                        <Text style={[styles.typeBadgeText, { color: colors.primary }]}>{adCatRu[item.category]}</Text>
+                    <View style={[styles.typeBadge, { backgroundColor: `${statusColor}18` }]}>
+                        <Text style={[styles.typeBadgeText, { color: statusColor }]}>{adCatRu[item.category]}</Text>
                     </View>
                     <Text style={styles.cardDate}>{formatDate(item.createdAt)}</Text>
                 </View>
                 <Text style={[textStyles.subtitle, styles.feedTitle]}>{item.title}</Text>
                 <Text style={styles.cardMeta} numberOfLines={2}>{item.body}</Text>
                 <View style={styles.cardBottom}>
-                    <View style={[styles.statusDot, { backgroundColor: expired ? colors.danger : msLeft <= 7 * 24 * 60 * 60 * 1000 ? colors.warning : colors.textDim }]} />
-                    <Text style={[styles.cardMeta, { color: expired ? colors.danger : msLeft <= 7 * 24 * 60 * 60 * 1000 ? colors.warning : colors.textDim }]}>
-                        {expired ? "Истёк" : `до ${new Date(item.expiresAt).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}`}
-                    </Text>
-                    {item.pendingModeration ? (
-                        <Text style={[styles.cardMeta, { color: colors.warning }]}>· на проверке</Text>
-                    ) : null}
+                    <AdStatusBadge status={status} />
                 </View>
             </Card>
         </Pressable>
@@ -336,10 +333,6 @@ const styles = StyleSheet.create({
     empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.xl },
     // Feed-style cards
     feedCard: { gap: spacing.xs },
-    cardPersonal: { borderLeftWidth: 3, borderLeftColor: colors.info },
-    cardAppeal: { borderLeftWidth: 3, borderLeftColor: colors.warning },
-    cardVote: { borderLeftWidth: 3, borderLeftColor: colors.accent },
-    cardAd: { borderLeftWidth: 3, borderLeftColor: colors.primary },
     cardTop: {
         flexDirection: "row",
         justifyContent: "space-between",

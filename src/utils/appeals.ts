@@ -1,8 +1,21 @@
-import type { Appeal } from "../types";
+import type { Appeal, Vote, NeighborAd, VoteStatus, NeighborAdStatus } from "../types";
 
 const HOUR_MS = 60 * 60 * 1000;
 const ARCHIVE_HOURS = 24;
-const archivedStatuses = new Set<Appeal["status"]>(["resolved", "rejected"]);
+const archivedStatuses = new Set<Appeal["status"]>(["resolved", "closed", "rejected"]);
+
+export function voteEffectiveStatus(vote: Vote): VoteStatus {
+    if (vote.status) return vote.status;
+    if (vote.closed || new Date(vote.endsAt).getTime() <= Date.now()) return "completed";
+    return "active";
+}
+
+export function adEffectiveStatus(ad: NeighborAd): NeighborAdStatus {
+    if (ad.status) return ad.status;
+    if (ad.archived) return "archived";
+    if (ad.pendingModeration) return "under_review_appeal";
+    return "published";
+}
 
 /** Порог квартир в подъезде для массовой жалобы. */
 export const MASS_APPEAL_THRESHOLD = 5;
@@ -42,6 +55,7 @@ export function shouldEscalateToMassAppeal(appeal: Appeal): boolean {
         appeal.kind === "collective" &&
         !appeal.escalatedToUk &&
         appeal.status !== "resolved" &&
+        appeal.status !== "closed" &&
         appeal.status !== "rejected" &&
         collectiveUniqueApartmentCount(appeal) >= MASS_APPEAL_THRESHOLD
     );

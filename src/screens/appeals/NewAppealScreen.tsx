@@ -2,7 +2,7 @@ import type { AppealsScreenProps } from "../../navigation/types";
 import React, { useState } from "react";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { Button, Card, Input, ScreenLayout, VerificationWall } from "../../components/ui";
+import { Button, Card, CollapsibleHint, Input, ScreenLayout, VerificationWall } from "../../components/ui";
 import { uploadFile } from "../../api/files";
 import { appealCategories } from "../../data/mockData";
 import { useApp, isVerifiedResident } from "../../context/AppContext";
@@ -120,111 +120,106 @@ export function NewAppealScreen({ navigation, route }: Props) {
             subtitle="Опишите проблему"
             onBack={() => navigation.goBack()}
         >
-            <Text style={[textStyles.label, styles.label]}>Тип обращения</Text>
-            <View style={styles.kindRow}>
-                <Pressable
-                    onPress={() => setKind("personal")}
-                    style={[styles.kindChip, kind === "personal" && styles.kindChipOn]}
-                >
-                    <Text style={[textStyles.caption, kind === "personal" ? styles.kindChipTextOn : styles.kindChipText]}>
-                        Личное
-                    </Text>
-                </Pressable>
-                <Pressable
-                    onPress={() => setKind("collective")}
-                    style={[styles.kindChip, kind === "collective" && styles.kindChipOn]}
-                >
-                    <Text style={[textStyles.caption, kind === "collective" ? styles.kindChipTextOn : styles.kindChipText]}>
-                        Коллективное
-                    </Text>
-                </Pressable>
-            </View>
-            <Text style={[textStyles.label, styles.label]}>Категория</Text>
-            <View style={styles.chips}>
-                {appealCategories.map((c) => (
-                    <Pressable
-                        key={c}
-                        onPress={() => setCategory(c)}
-                        style={[styles.chip, category === c && styles.chipActive]}
-                    >
-                        <Text style={[textStyles.caption, category === c ? styles.chipTextActive : styles.chipText]} numberOfLines={1}>
-                            {c}
-                        </Text>
-                    </Pressable>
-                ))}
-            </View>
-            <Card style={kind === "collective" ? styles.cardCollective : styles.cardPersonal}>
-                <View style={styles.formHeader}>
-                    <View style={[styles.formBadge, kind === "collective" ? styles.badgeCollective : styles.badgePersonal]}>
-                        <Text style={[styles.formBadgeText, { color: kind === "collective" ? colors.warning : colors.info }]}>
-                            {kind === "collective" ? "Коллективное обращение" : "Обращение"}
-                        </Text>
-                    </View>
-                </View>
-                <Input
-                    label="Тема"
-                    value={title}
-                    onChangeText={setTitle}
-                    placeholder="Кратко, по сути"
-                />
-                <View style={styles.gap} />
-                <Input
-                    label="Описание"
-                    value={body}
-                    onChangeText={setBody}
-                    placeholder="Подробности, адрес, удобное время"
-                    multiline
-                    style={styles.area}
-                />
-                {kind === "collective" && (
-                    <Text style={[textStyles.caption, styles.hint]}>
-                        Коллективное попадает в общую ленту дома — соседи смогут присоединиться после верификации.
-                    </Text>
-                )}
-                {kind === "collective" && (
-                    <>
-                        <View style={styles.gap} />
-                        <Input
-                            label="Подъезд №"
-                            value={entrance}
-                            onChangeText={setEntrance}
-                            keyboardType="number-pad"
-                            placeholder="Например: 2"
-                            hint="Порог «массового обращения» — уникальные квартиры в этом подъезде"
-                        />
-                    </>
-                )}
-                <View style={styles.gap} />
-                <Text style={[textStyles.label, styles.photoLabel]}>
-                    Фото (необязательно, до {MAX_PHOTOS})
-                </Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoRow}>
-                    {photos.map((p, i) => (
-                        <View key={i} style={styles.thumbWrap}>
-                            <Image source={{ uri: p.uri }} style={styles.thumb} />
-                            <Pressable onPress={() => removePhoto(i)} style={styles.removeBtn} hitSlop={6}>
-                                <Text style={styles.removeBtnText}>×</Text>
-                            </Pressable>
-                        </View>
-                    ))}
-                    {photos.length < MAX_PHOTOS && (
-                        <Pressable onPress={() => { void pickPhoto(); }} style={styles.addBtn}>
-                            <Text style={styles.addBtnText}>+</Text>
+                <Card style={kind === "collective" ? styles.cardCollective : styles.cardPersonal}>
+                    <CollapsibleHint text="Опишите проблему подробно. Личное обращение — только для вас. Коллективное попадает в ленту дома, соседи могут присоединиться после верификации." />
+                    <Text style={[textStyles.label, styles.sectionLabel]}>Тип обращения</Text>
+                    <View style={[styles.kindRow, styles.rowGap]}>
+                        <Pressable
+                            onPress={() => setKind("personal")}
+                            style={[styles.kindChip, kind === "personal" && styles.kindChipOn]}
+                        >
+                            <Text style={[textStyles.caption, kind === "personal" ? styles.kindChipTextOn : styles.kindChipText]}>
+                                Личное
+                            </Text>
                         </Pressable>
+                        <Pressable
+                            onPress={() => setKind("collective")}
+                            style={[styles.kindChip, kind === "collective" && styles.kindChipOn]}
+                        >
+                            <Text style={[textStyles.caption, kind === "collective" ? styles.kindChipTextOn : styles.kindChipText]}>
+                                Коллективное
+                            </Text>
+                        </Pressable>
+                    </View>
+                    <Text style={[textStyles.label, styles.sectionLabel]}>Категория</Text>
+                    <View style={[styles.chips, styles.rowGap]}>
+                        {appealCategories.map((c) => (
+                            <Pressable
+                                key={c}
+                                onPress={() => setCategory(c)}
+                                style={[styles.chip, category === c && styles.chipActive]}
+                            >
+                                <Text style={[textStyles.caption, category === c ? styles.chipTextActive : styles.chipText]} numberOfLines={1}>
+                                    {c}
+                                </Text>
+                            </Pressable>
+                        ))}
+                    </View>
+                    <View style={styles.divider} />
+                    <Input
+                        label="Тема"
+                        value={title}
+                        onChangeText={setTitle}
+                        placeholder="Кратко, по сути"
+                    />
+                    <View style={styles.gap} />
+                    <Input
+                        label="Описание"
+                        value={body}
+                        onChangeText={setBody}
+                        placeholder="Подробности, адрес, удобное время"
+                        multiline
+                        style={styles.area}
+                    />
+                    {kind === "collective" && (
+                        <>
+                            <View style={styles.gap} />
+                            <CollapsibleHint text="Коллективное попадает в общую ленту дома — соседи смогут присоединиться после верификации." />
+                        </>
                     )}
-                </ScrollView>
-                {!!err && (
-                    <Text style={[textStyles.caption, styles.err]}>{err}</Text>
-                )}
-                <View style={styles.gapLg} />
-                <Button
-                    title={submitting ? "Сохранение..." : editId ? "Сохранить" : "Отправить"}
-                    variant={editId ? "primary" : kind === "collective" ? "accent" : "info"}
-                    onPress={() => { void submit(); }}
-                    disabled={submitting}
-                    style={styles.submitBtn}
-                />
-            </Card>
+                    {kind === "collective" && (
+                        <>
+                            <View style={styles.gap} />
+                            <Input
+                                label="Подъезд №"
+                                value={entrance}
+                                onChangeText={setEntrance}
+                                keyboardType="number-pad"
+                                placeholder="Например: 2"
+                                hint="Порог «массового обращения» — уникальные квартиры в этом подъезде"
+                            />
+                        </>
+                    )}
+                    <View style={styles.gap} />
+                    <Text style={[textStyles.label, styles.photoLabel]}>Фото</Text>
+                    <Text style={[textStyles.caption, styles.photoSub]}>необязательно, до {MAX_PHOTOS} фотографий</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoRow}>
+                        {photos.map((p, i) => (
+                            <View key={i} style={styles.thumbWrap}>
+                                <Image source={{ uri: p.uri }} style={styles.thumb} />
+                                <Pressable onPress={() => removePhoto(i)} style={styles.removeBtn} hitSlop={6}>
+                                    <Text style={styles.removeBtnText}>×</Text>
+                                </Pressable>
+                            </View>
+                        ))}
+                        {photos.length < MAX_PHOTOS && (
+                            <Pressable onPress={() => { void pickPhoto(); }} style={styles.addBtn}>
+                                <Text style={styles.addBtnText}>+</Text>
+                            </Pressable>
+                        )}
+                    </ScrollView>
+                    {!!err && (
+                        <Text style={[textStyles.caption, styles.err]}>{err}</Text>
+                    )}
+                    <View style={styles.gapLg} />
+                    <Button
+                        title={submitting ? "Сохранение..." : editId ? "Сохранить" : "Отправить"}
+                        variant={editId ? "primary" : kind === "collective" ? "accent" : "info"}
+                        onPress={() => { void submit(); }}
+                        disabled={submitting}
+                        style={styles.submitBtn}
+                    />
+                </Card>
         </ScreenLayout>
     );
 }
@@ -233,28 +228,24 @@ const THUMB_SIZE = 90;
 
 const styles = StyleSheet.create({
     submitBtn: { alignSelf: "flex-end", borderRadius: 999, paddingHorizontal: 28 },
-    label: { color: colors.textMuted },
+    sectionLabel: { color: colors.text, marginBottom: spacing.sm },
+    rowGap: { marginBottom: spacing.md },
+    divider: { height: 1, backgroundColor: colors.borderSubtle, marginVertical: spacing.md },
     cardPersonal: { borderLeftWidth: 3, borderLeftColor: colors.info },
     cardCollective: { borderLeftWidth: 3, borderLeftColor: colors.warning },
-    formHeader: { marginBottom: spacing.md },
-    formBadge: { alignSelf: "flex-start", paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: 6 },
-    formBadgeText: { fontSize: 11, fontWeight: "600" },
-    badgePersonal: { backgroundColor: "rgba(91, 159, 212, 0.15)" },
-    badgeCollective: { backgroundColor: "rgba(232, 162, 61, 0.12)" },
-    kindRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.sm },
+    kindRow: { flexDirection: "row", gap: spacing.sm },
     kindChip: {
         paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
         borderRadius: radius.full, borderWidth: 1,
-        borderColor: colors.border, backgroundColor: colors.surface,
+        borderColor: colors.border, backgroundColor: colors.bgElevated,
     },
     kindChipOn: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
     kindChipText: { color: colors.textMuted },
     kindChipTextOn: { color: colors.primary, fontWeight: "600" },
-    hint: { color: colors.textDim, marginBottom: spacing.md, lineHeight: 18 },
     chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
     chip: {
         paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-        borderRadius: radius.full, backgroundColor: colors.surface,
+        borderRadius: radius.full, backgroundColor: colors.bgElevated,
         borderWidth: 1, borderColor: colors.border, maxWidth: "100%",
     },
     chipActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
@@ -264,7 +255,8 @@ const styles = StyleSheet.create({
     gapLg: { height: spacing.lg },
     area: { minHeight: 120, textAlignVertical: "top" },
     err: { color: colors.danger, marginTop: spacing.sm },
-    photoLabel: { color: colors.textMuted, marginBottom: spacing.sm },
+    photoLabel: { color: colors.text },
+    photoSub: { color: colors.textDim, marginTop: 2, marginBottom: spacing.sm },
     photoRow: { flexDirection: "row", marginBottom: spacing.xs },
     thumbWrap: { width: THUMB_SIZE, height: THUMB_SIZE, marginRight: spacing.sm, position: "relative" },
     thumb: { width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: radius.md, backgroundColor: colors.border },
@@ -273,11 +265,11 @@ const styles = StyleSheet.create({
         width: 22, height: 22, borderRadius: 11,
         backgroundColor: colors.danger, alignItems: "center", justifyContent: "center",
     },
-    removeBtnText: { color: colors.bg, fontSize: 16, lineHeight: 20, fontWeight: "700" },
+    removeBtnText: { color: "#fff", fontSize: 16, lineHeight: 20, fontWeight: "700" },
     addBtn: {
         width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: radius.md,
         borderWidth: 1, borderColor: colors.border, borderStyle: "dashed",
         alignItems: "center", justifyContent: "center", backgroundColor: colors.surface,
     },
-    addBtnText: { color: colors.primary, fontSize: 32, lineHeight: 36 },
+    addBtnText: { color: colors.text, fontSize: 32, lineHeight: 36 },
 });

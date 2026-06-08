@@ -4,6 +4,7 @@ import { useNavigation } from "@react-navigation/native";
 import React, { useEffect, useMemo, useState } from "react";
 import {
     Alert,
+    Dimensions,
     Image as RNImage,
     Linking,
     Modal,
@@ -14,7 +15,10 @@ import {
     TextInput,
     View,
 } from "react-native";
-import { Button, Card, Input, NotificationBell, ScreenLayout, UkPublicStatsCard } from "../../components/ui";
+
+const SCREEN_W = Dimensions.get("window").width;
+const SCREEN_H = Dimensions.get("window").height;
+import { Button, Card, CollapsibleHint, Input, NotificationBell, ScreenLayout, UkPublicStatsCard } from "../../components/ui";
 import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type { MainTabNavigationProp } from "../../navigation/types";
 import type {
@@ -166,6 +170,8 @@ export function HousePassportScreen() {
     const [agendaOpen, setAgendaOpen] = useState(false);
     const [dayDetailIso, setDayDetailIso] = useState<string | null>(null);
     const [calendarNotes, setCalendarNotes] = useState<Record<string, string>>({});
+    const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
+    const [photoViewerIdx, setPhotoViewerIdx] = useState(0);
 
     useEffect(() => {
         AsyncStorage.getItem(NOTES_KEY)
@@ -510,7 +516,13 @@ export function HousePassportScreen() {
                                         contentContainerStyle={styles.photos}
                                     >
                                         {photos.map((uri, i) => (
-                                            <RNImage key={uri + i} source={{ uri }} style={styles.photo} />
+                                            <Pressable
+                                                key={uri + i}
+                                                onPress={() => { setPhotoViewerIdx(i); setPhotoViewerOpen(true); }}
+                                                style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
+                                            >
+                                                <RNImage source={{ uri }} style={styles.photo} />
+                                            </Pressable>
                                         ))}
                                     </ScrollView>
                                 </>
@@ -627,12 +639,7 @@ export function HousePassportScreen() {
                     <UkPublicStatsCard stats={ukStats} />
                     <View style={styles.ukGap} />
                     <Card>
-                        <Text style={[textStyles.caption, styles.ratingHint]}>
-                            Раз в календарный месяц вы можете один раз оценить двор, подъезд и работу
-                            УК (без привязки к заявке). После отправки изменить оценку за этот месяц
-                            нельзя. Удобнее оценивать ближе к концу месяца — так вы учтёте ситуацию за
-                            большую часть периода.
-                        </Text>
+                        <CollapsibleHint text="Раз в календарный месяц вы можете один раз оценить двор, подъезд и работу УК (без привязки к заявке). После отправки изменить оценку за этот месяц нельзя. Удобнее оценивать ближе к концу месяца — так вы учтёте ситуацию за большую часть периода." />
                         {ratedThisMonth && environmentRating ? (
                             <View style={styles.ratingLocked}>
                                 <Text style={[textStyles.subtitle, styles.lockedTitle]}>
@@ -741,7 +748,7 @@ export function HousePassportScreen() {
                                             </View>
                                         ) : null}
                                         <View style={styles.gapMd} />
-                                        <Button title="Отправить" onPress={trySubmitRating} />
+                                        <Button title="Отправить" onPress={trySubmitRating} style={styles.ratingSubmitBtn} />
                                     </View>
                                 ) : null}
                             </>
@@ -751,8 +758,47 @@ export function HousePassportScreen() {
             ) : null}
 
         </ScreenLayout>
+
+        <Modal
+            visible={photoViewerOpen}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setPhotoViewerOpen(false)}
+            statusBarTranslucent
+        >
+            <View style={pvStyles.backdrop}>
+                <ScrollView
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    decelerationRate="fast"
+                    contentOffset={{ x: photoViewerIdx * SCREEN_W, y: 0 }}
+                >
+                    {photos.map((uri, i) => (
+                        <View key={i} style={pvStyles.page}>
+                            <RNImage source={{ uri }} style={pvStyles.img} resizeMode="contain" />
+                        </View>
+                    ))}
+                </ScrollView>
+                <Pressable style={pvStyles.closeBtn} onPress={() => setPhotoViewerOpen(false)} hitSlop={16}>
+                    <Ionicons name="close" size={28} color="#fff" />
+                </Pressable>
+            </View>
+        </Modal>
     );
 }
+
+const pvStyles = StyleSheet.create({
+    backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.96)", justifyContent: "center" },
+    page: { width: SCREEN_W, height: SCREEN_H, justifyContent: "center", alignItems: "center" },
+    img: { width: SCREEN_W, height: SCREEN_H * 0.8 },
+    closeBtn: {
+        position: "absolute", top: 52, right: 20,
+        width: 40, height: 40, borderRadius: 20,
+        backgroundColor: "rgba(0,0,0,0.55)",
+        alignItems: "center", justifyContent: "center",
+    },
+});
 
 function formatAgendaDate(iso: string): string {
     const [y, m, d] = iso.split("-").map(Number);
@@ -970,7 +1016,7 @@ const styles = StyleSheet.create({
     headerActions: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.xs },
     profileButton: { marginTop: spacing.xs },
     profileButtonPressed: { opacity: 0.6 },
-    sectionFirst: { color: colors.textMuted, marginTop: 0 },
+    sectionFirst: { color: colors.text, marginTop: 0 },
     section: { color: colors.textMuted, marginTop: spacing.lg },
     filterRow: {
         flexDirection: "row",
@@ -1021,6 +1067,7 @@ const styles = StyleSheet.create({
     specLabel: { color: colors.textMuted },
     specVal: { color: colors.text, marginTop: spacing.xs },
     ratingHint: { color: colors.textMuted, marginBottom: spacing.md, lineHeight: 20 },
+    ratingSubmitBtn: { alignSelf: "flex-end", borderRadius: 999, paddingHorizontal: 28 },
     ratingForm: { marginTop: spacing.lg },
     ratingLocked: { marginTop: spacing.md },
     lockedTitle: { color: colors.text },

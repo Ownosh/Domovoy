@@ -1,8 +1,9 @@
 import type { CommunityScreenProps } from "../../navigation/types";
 import React, { useEffect, useState } from "react";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { Button, Card, Input, ScreenLayout, VerificationWall } from "../../components/ui";
+import { Button, Card, CollapsibleHint, Input, ScreenLayout, VerificationWall } from "../../components/ui";
 import { uploadFile } from "../../api/files";
 import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type { NeighborAdCategory } from "../../types";
@@ -61,11 +62,15 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
         }
     }, [preset, existing]);
 
-    useEffect(() => {
+    const handleToggleProfilePhone = () => {
         if (useProfilePhone) {
+            setUseProfilePhone(false);
+            setPhone("");
+        } else {
+            setUseProfilePhone(true);
             setPhone(profile.phone ?? "");
         }
-    }, [useProfilePhone, profile.phone]);
+    };
 
     const pickPhoto = async () => {
         if (photos.length >= MAX_PHOTOS) {
@@ -105,7 +110,6 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
         const trimmedPhone = phone.trim();
         const showPhone = trimmedPhone.length > 0;
 
-        // Загружаем новые фото на сервер, существующие берём как есть
         let imageUrls: string[];
         try {
             imageUrls = await Promise.all(
@@ -150,26 +154,26 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
             subtitle="Видно только вашему дому · 30 дней"
             onBack={() => navigation.goBack()}
         >
-            <Text style={[textStyles.label, styles.label]}>Категория</Text>
-            <View style={styles.chips}>
-                {categories.map((c) => (
-                    <Pressable
-                        key={c}
-                        onPress={() => setCategory(c)}
-                        style={[styles.chip, category === c && styles.chipActive]}
-                    >
-                        <Text style={[textStyles.caption, category === c ? styles.chipTextActive : styles.chipText]}>
-                            {labels[c]}
-                        </Text>
-                    </Pressable>
-                ))}
-            </View>
             <Card style={styles.adCard}>
-                <View style={styles.adHeader}>
-                    <View style={styles.adBadge}>
-                        <Text style={styles.adBadgeText}>{labels[category]}</Text>
-                    </View>
+                <CollapsibleHint text="Укажите заголовок, текст и категорию объявления. Оно будет видно только верифицированным жильцам вашего дома в течение 30 дней." />
+
+                <Text style={[textStyles.label, styles.sectionLabel]}>Категория</Text>
+                <View style={[styles.chips, styles.rowGap]}>
+                    {categories.map((c) => (
+                        <Pressable
+                            key={c}
+                            onPress={() => setCategory(c)}
+                            style={[styles.chip, category === c && styles.chipActive]}
+                        >
+                            <Text style={[textStyles.caption, category === c ? styles.chipTextActive : styles.chipText]}>
+                                {labels[c]}
+                            </Text>
+                        </Pressable>
+                    ))}
                 </View>
+
+                <View style={styles.divider} />
+
                 <Input
                     label="Заголовок"
                     value={title}
@@ -184,9 +188,8 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
                     style={styles.area}
                 />
                 <View style={styles.gap} />
-                <Text style={[textStyles.label, styles.photoLabel]}>
-                    Фото (необязательно, до {MAX_PHOTOS})
-                </Text>
+                <Text style={[textStyles.label, styles.photoLabel]}>Фото</Text>
+                <Text style={[textStyles.caption, styles.photoSub]}>необязательно, до {MAX_PHOTOS} фотографий</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoRow}>
                     {photos.map((p, i) => (
                         <View key={i} style={styles.thumbWrap}>
@@ -203,20 +206,22 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
                     )}
                 </ScrollView>
                 <View style={styles.gap} />
-                <Input
-                    label="Телефон для связи (необязательно)"
-                    value={phone}
-                    onChangeText={(v) => { if (!useProfilePhone) setPhone(v); }}
-                    keyboardType="phone-pad"
-                    placeholder="+7 900 000-00-00"
-                    editable={!useProfilePhone}
-                />
-                <Pressable
-                    style={styles.row}
-                    onPress={() => setUseProfilePhone((v) => !v)}
-                >
-                    <View style={[styles.checkbox, useProfilePhone && styles.checkboxOn]} />
-                    <Text style={[textStyles.caption, styles.rowText]}>
+                {!useProfilePhone && (
+                    <Input
+                        label="Телефон для связи (необязательно)"
+                        value={phone}
+                        onChangeText={setPhone}
+                        keyboardType="phone-pad"
+                        placeholder="+7 900 000-00-00"
+                    />
+                )}
+                <Pressable style={styles.checkRow} onPress={handleToggleProfilePhone}>
+                    <View style={[styles.checkbox, useProfilePhone && styles.checkboxOn]}>
+                        {useProfilePhone && (
+                            <Ionicons name="checkmark" size={13} color="#fff" />
+                        )}
+                    </View>
+                    <Text style={[textStyles.caption, styles.checkLabel]}>
                         Использовать номер из профиля
                     </Text>
                 </Pressable>
@@ -239,28 +244,16 @@ const THUMB_SIZE = 90;
 
 const styles = StyleSheet.create({
     submitBtn: { alignSelf: "flex-end", borderRadius: 999, paddingHorizontal: 28 },
-    label: { color: colors.textMuted },
     adCard: { borderLeftWidth: 3, borderLeftColor: colors.primary },
-    adHeader: { marginBottom: spacing.md },
-    adBadge: {
-        alignSelf: "flex-start",
-        paddingHorizontal: spacing.sm,
-        paddingVertical: 3,
-        borderRadius: 6,
-        backgroundColor: "rgba(61, 158, 122, 0.12)",
-    },
-    adBadgeText: { fontSize: 11, fontWeight: "600", color: colors.primary },
-    chips: {
-        flexDirection: "row",
-        flexWrap: "wrap",
-        gap: spacing.sm,
-        marginBottom: spacing.md,
-    },
+    sectionLabel: { color: colors.text, marginBottom: spacing.sm },
+    rowGap: { marginBottom: spacing.md },
+    divider: { height: 1, backgroundColor: colors.borderSubtle, marginVertical: spacing.md },
+    chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
     chip: {
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.sm,
         borderRadius: radius.full,
-        backgroundColor: colors.surface,
+        backgroundColor: colors.bgElevated,
         borderWidth: 1,
         borderColor: colors.border,
     },
@@ -271,19 +264,25 @@ const styles = StyleSheet.create({
     gapLg: { height: spacing.lg },
     area: { minHeight: 100, textAlignVertical: "top" },
     err: { color: colors.danger, marginTop: spacing.sm },
-    row: {
+    checkRow: {
         flexDirection: "row",
         alignItems: "center",
         gap: spacing.md,
         marginTop: spacing.md,
     },
     checkbox: {
-        width: 20, height: 20, borderRadius: 5,
-        borderWidth: 2, borderColor: colors.border,
+        width: 20,
+        height: 20,
+        borderRadius: 5,
+        borderWidth: 2,
+        borderColor: colors.border,
+        alignItems: "center",
+        justifyContent: "center",
     },
     checkboxOn: { borderColor: colors.primary, backgroundColor: colors.primary },
-    rowText: { color: colors.textMuted },
-    photoLabel: { color: colors.textMuted, marginBottom: spacing.sm },
+    checkLabel: { color: colors.textMuted },
+    photoLabel: { color: colors.text },
+    photoSub: { color: colors.textDim, marginTop: 2, marginBottom: spacing.sm },
     photoRow: { flexDirection: "row", marginBottom: spacing.xs },
     thumbWrap: {
         width: THUMB_SIZE, height: THUMB_SIZE,
@@ -301,7 +300,7 @@ const styles = StyleSheet.create({
         backgroundColor: colors.danger,
         alignItems: "center", justifyContent: "center",
     },
-    removeBtnText: { color: colors.bg, fontSize: 16, lineHeight: 20, fontWeight: "700" },
+    removeBtnText: { color: "#fff", fontSize: 16, lineHeight: 20, fontWeight: "700" },
     addBtn: {
         width: THUMB_SIZE, height: THUMB_SIZE,
         borderRadius: radius.md,
@@ -309,5 +308,5 @@ const styles = StyleSheet.create({
         alignItems: "center", justifyContent: "center",
         backgroundColor: colors.surface,
     },
-    addBtnText: { color: colors.primary, fontSize: 32, lineHeight: 36 },
+    addBtnText: { color: colors.text, fontSize: 32, lineHeight: 36 },
 });

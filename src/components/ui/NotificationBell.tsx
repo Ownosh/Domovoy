@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
         alignItems: "center", justifyContent: "center",
         paddingHorizontal: 4,
     },
-    badgeText: { color: colors.bg, fontSize: 10, fontWeight: "700" },
+    badgeText: { color: "#fff", fontSize: 10, fontWeight: "700" },
     backdrop: {
         flex: 1,
         backgroundColor: colors.overlay,

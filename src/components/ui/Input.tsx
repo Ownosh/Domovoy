@@ -6,12 +6,14 @@ import {
     Text,
     TextInput,
     TextInputProps,
+    TextStyle,
     View,
 } from "react-native";
 import { colors, fontFamily, radius, spacing, textStyles } from "../../theme";
 
 type Props = TextInputProps & {
     label?: string;
+    labelStyle?: TextStyle;
     hint?: string;
     error?: string;
     showPasswordToggle?: boolean;
@@ -19,6 +21,7 @@ type Props = TextInputProps & {
 
 export function Input({
     label,
+    labelStyle,
     hint,
     error,
     style,
@@ -44,7 +47,7 @@ export function Input({
     return (
         <View style={styles.wrap}>
             {!!label && (
-                <Text style={[textStyles.label, styles.label]}>{label}</Text>
+                <Text style={[textStyles.label, styles.label, labelStyle]}>{label}</Text>
             )}
             <View style={[styles.inputWrapper, !!error && styles.inputWrapperError]}>
                 <TextInput
@@ -83,7 +86,7 @@ export function Input({
 
 const styles = StyleSheet.create({
     wrap: { gap: spacing.sm },
-    label: { color: colors.textMuted },
+    label: { color: colors.text },
     inputWrapper: {
         flexDirection: "row",
         alignItems: "center",

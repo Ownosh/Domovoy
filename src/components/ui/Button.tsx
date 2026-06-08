@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     disabled: { opacity: 0.42 },
     pressed: { opacity: 0.84, transform: [{ scale: 0.97 }, { translateY: 1 }] },
     label: { fontSize: 15, letterSpacing: 0.3 },
-    labelOnSolid: { color: colors.bg },
+    labelOnSolid: { color: "#fff" },
     labelSecondary: { color: colors.text },
     labelGhost: { color: colors.primary },
 });

@@ -1,7 +1,7 @@
 import type { CommunityScreenProps } from "../../navigation/types";
 import React, { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
-import { Button, Card, Input, ScreenLayout, VerificationWall } from "../../components/ui";
+import { Button, Card, CollapsibleHint, Input, ScreenLayout, VerificationWall } from "../../components/ui";
 import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type { VoteVisibility } from "../../types";
 import { colors, radius, spacing, textStyles } from "../../theme";
@@ -64,11 +64,7 @@ export function VoteNewScreen({ navigation, route }: Props) {
             subtitle="Инициатива жильца · видно вашему дому"
             onBack={() => navigation.goBack()}
         >
-            <Text style={[textStyles.caption, styles.intro]}>
-                Укажите тему, пояснение и варианты ответа (от 2 до 4). Создавать опрос
-                могут жильцы с подтверждённой верификацией; вес по площади берётся из
-                профиля. Это не заменяет официальное ОСС.
-            </Text>
+            <CollapsibleHint text="Укажите тему, пояснение и варианты ответа (от 2 до 4). Создавать опрос могут жильцы с подтверждённой верификацией; вес по площади берётся из профиля. Это не заменяет официальное ОСС." />
             <Card style={styles.voteCard}>
                 <View style={styles.cardHeader}>
                     <View style={styles.voteBadge}>
@@ -149,34 +145,42 @@ export function VoteNewScreen({ navigation, route }: Props) {
                 </View>
                 <Text style={[textStyles.label, styles.label]}>Варианты ответа</Text>
                 <Input
-                    label="Вариант 1 (обязательно)"
+                    label="Вариант 1"
+                    labelStyle={styles.variantLabel}
                     value={opt1}
                     onChangeText={setOpt1}
+                    placeholder="Обязательно"
                 />
                 <View style={styles.gapSm} />
                 <Input
-                    label="Вариант 2 (обязательно)"
+                    label="Вариант 2"
+                    labelStyle={styles.variantLabel}
                     value={opt2}
                     onChangeText={setOpt2}
+                    placeholder="Обязательно"
                 />
                 <View style={styles.gapSm} />
                 <Input
-                    label="Вариант 3 (необязательно)"
+                    label="Вариант 3"
+                    labelStyle={styles.variantLabel}
                     value={opt3}
                     onChangeText={setOpt3}
+                    placeholder="Необязательно"
                 />
                 <View style={styles.gapSm} />
                 <Input
-                    label="Вариант 4 (необязательно)"
+                    label="Вариант 4"
+                    labelStyle={styles.variantLabel}
                     value={opt4}
                     onChangeText={setOpt4}
+                    placeholder="Необязательно"
                 />
                 {!!err && (
                     <Text style={[textStyles.caption, styles.err]}>{err}</Text>
                 )}
                 <View style={styles.gapLg} />
                 <Button
-                    title={submitting ? "Сохранение..." : editId ? "Сохранить" : "Создать голосование"}
+                    title={submitting ? "Сохранение..." : editId ? "Сохранить" : "Опубликовать"}
                     onPress={() => { void submit(); }}
                     disabled={submitting}
                     style={styles.submitBtn}
@@ -188,6 +192,7 @@ export function VoteNewScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
     submitBtn: { alignSelf: "flex-end", borderRadius: 999, paddingHorizontal: 28 },
+    variantLabel: { color: colors.textDim, fontSize: 10, letterSpacing: 0.6 },
     voteCard: { borderLeftWidth: 3, borderLeftColor: colors.accent },
     cardHeader: { marginBottom: spacing.md },
     voteBadge: {
@@ -198,11 +203,6 @@ const styles = StyleSheet.create({
         backgroundColor: "rgba(212, 168, 83, 0.12)",
     },
     voteBadgeText: { fontSize: 11, fontWeight: "600", color: colors.accent },
-    intro: {
-        color: colors.textMuted,
-        lineHeight: 20,
-        marginBottom: spacing.md,
-    },
     label: { color: colors.textMuted, marginTop: spacing.md, marginBottom: spacing.sm },
     row: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
     chip: {

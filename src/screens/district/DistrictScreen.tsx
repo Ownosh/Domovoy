@@ -586,6 +586,7 @@ const styles = StyleSheet.create({
     profileButtonPressed: { opacity: 0.6 },
     mapCard: {
         overflow: "hidden",
+        borderRadius: 0,
     },
     mapRow: {
         flexDirection: "row",

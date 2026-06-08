@@ -285,7 +285,7 @@ export function AppealsListScreen() {
                     hitSlop={10}
                     style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
                 >
-                    <Ionicons name="add" size={28} color={colors.bg} />
+                    <Ionicons name="add" size={28} color="#fff" />
                 </Pressable>
             </View>
         </ScreenLayout>

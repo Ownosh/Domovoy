@@ -3,6 +3,7 @@ export { FeedAuthorRow } from "./FeedAuthorRow";
 export { NotificationBell } from "./NotificationBell";
 export { VerificationWall } from "./VerificationWall";
 export { Button } from "./Button";
+export { CollapsibleHint } from "./CollapsibleHint";
 export { Card } from "./Card";
 export { Input } from "./Input";
 export { ScreenLayout } from "./ScreenLayout";

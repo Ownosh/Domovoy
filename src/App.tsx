@@ -5,7 +5,10 @@ import {
     Montserrat_700Bold,
     useFonts,
 } from "@expo-google-fonts/montserrat";
+import YaMap from "react-native-yamap";
 import React from "react";
+
+YaMap.init("380e6e80-b316-4896-9572-fd01f0e87a80");
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";

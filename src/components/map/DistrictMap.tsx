@@ -20,7 +20,7 @@ import {
     Text,
     View,
 } from "react-native";
-import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
+import YaMap, { Animation, Marker } from "react-native-yamap";
 import { districtMapCenter } from "../../data/mockData";
 import { Button } from "../ui/Button";
 import { colors, textStyles } from "../../theme";
@@ -44,23 +44,21 @@ type DetailPanel =
     | { kind: "poi"; poi: DistrictPoi }
     | { kind: "search"; hit: DistrictSearchHit };
 
+function latDeltaToZoom(delta: number): number {
+    return Math.max(10, Math.min(18, Math.round(Math.log2(360 / delta))));
+}
+
 export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
     function DistrictMap(
         { pois, mapFocus, searchHit }: DistrictMapProps,
         ref,
     ) {
-        const mapRef = useRef<MapView>(null);
+        const mapRef = useRef<YaMap>(null);
         const insets = useSafeAreaInsets();
         const [panel, setPanel] = useState<DetailPanel | null>(null);
         const [navPickerOpen, setNavPickerOpen] = useState(false);
         const [locationAllowed, setLocationAllowed] = useState(false);
         const [isFullscreen, setIsFullscreen] = useState(false);
-        const [currentRegion, setCurrentRegion] = useState(() => ({
-            latitude: districtMapCenter.lat,
-            longitude: districtMapCenter.lng,
-            latitudeDelta: 0.08,
-            longitudeDelta: 0.08,
-        }));
 
         useImperativeHandle(ref, () => ({
             showPoiDetail: (poi: DistrictPoi) => {
@@ -82,36 +80,42 @@ export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
                     setLocationAllowed(true);
                 }
             })();
-            return () => {
-                cancelled = true;
-            };
+            return () => { cancelled = true; };
         }, []);
 
         useEffect(() => {
             if (!mapFocus || Platform.OS === "web") return;
             const t = setTimeout(() => {
-                mapRef.current?.animateToRegion(mapFocus, 450);
+                mapRef.current?.setCenter(
+                    { lat: mapFocus.latitude, lon: mapFocus.longitude },
+                    latDeltaToZoom(mapFocus.latitudeDelta),
+                    0, 0, 0.45, Animation.SMOOTH,
+                );
             }, 50);
             return () => clearTimeout(t);
         }, [mapFocus]);
 
         const renderMapView = useCallback((fullscreen: boolean) => (
             <View style={fullscreen ? mapFullStyles.mapWrap : styles.mapWrap}>
-                <MapView
+                <YaMap
                     ref={mapRef}
                     style={fullscreen ? mapFullStyles.map : styles.map}
-                    provider={PROVIDER_DEFAULT}
-                    initialRegion={currentRegion}
-                    onRegionChangeComplete={setCurrentRegion}
+                    initialRegion={{
+                        lat: districtMapCenter.lat,
+                        lon: districtMapCenter.lng,
+                        zoom: 14,
+                    }}
                     showsUserLocation={locationAllowed && Platform.OS !== "web"}
                     showsMyLocationButton={false}
+                    nightMode={true}
                 >
                     {pois.map((p) => (
                         <Marker
                             key={p.id}
-                            coordinate={{ latitude: p.lat, longitude: p.lng }}
+                            point={{ lat: p.lat, lon: p.lng }}
                             onPress={() => setPanel({ kind: "poi", poi: p })}
-                            tracksViewChanges={false}
+                            anchor={{ x: 0.5, y: 0.5 }}
+                            scale={1}
                         >
                             <View
                                 style={[
@@ -130,14 +134,12 @@ export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
                     {searchHit ? (
                         <Marker
                             key={`search-${searchHit.id}`}
-                            coordinate={{
-                                latitude: searchHit.lat,
-                                longitude: searchHit.lng,
-                            }}
+                            point={{ lat: searchHit.lat, lon: searchHit.lng }}
                             onPress={() =>
                                 setPanel({ kind: "search", hit: searchHit })
                             }
-                            tracksViewChanges={false}
+                            anchor={{ x: 0.5, y: 0.5 }}
+                            scale={1}
                         >
                             <View
                                 style={[
@@ -156,7 +158,7 @@ export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
                             </View>
                         </Marker>
                     ) : null}
-                </MapView>
+                </YaMap>
                 <Pressable
                     onPress={() => setIsFullscreen((v) => !v)}
                     hitSlop={8}
@@ -173,7 +175,7 @@ export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
                     />
                 </Pressable>
             </View>
-        ), [currentRegion, insets.top, locationAllowed, pois, searchHit]);
+        ), [insets.top, locationAllowed, pois, searchHit]);
 
         const destCoords = useCallback((d: DetailPanel) => {
             if (d.kind === "poi") {

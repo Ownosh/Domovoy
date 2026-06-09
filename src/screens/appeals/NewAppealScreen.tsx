@@ -195,8 +195,8 @@ export function NewAppealScreen({ navigation, route }: Props) {
                         {photos.map((p, i) => (
                             <View key={i} style={styles.thumbWrap}>
                                 <Image source={{ uri: p.uri }} style={styles.thumb} />
-                                <Pressable onPress={() => removePhoto(i)} style={styles.removeBtn} hitSlop={6}>
-                                    <Text style={styles.removeBtnText}>×</Text>
+                                <Pressable onPress={() => removePhoto(i)} style={styles.removeBtn} hitSlop={8}>
+                                    <Ionicons name="close" size={14} color="#fff" />
                                 </Pressable>
                             </View>
                         ))}
@@ -292,11 +292,12 @@ const styles = StyleSheet.create({
     thumbWrap: { width: THUMB_SIZE, height: THUMB_SIZE, marginRight: spacing.sm, position: "relative" },
     thumb: { width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: radius.md, backgroundColor: colors.border },
     removeBtn: {
-        position: "absolute", top: -6, right: -6,
-        width: 22, height: 22, borderRadius: 11,
-        backgroundColor: colors.danger, alignItems: "center", justifyContent: "center",
+        position: "absolute", top: 5, right: 5,
+        width: 26, height: 26, borderRadius: 13,
+        backgroundColor: "rgba(0,0,0,0.58)",
+        borderWidth: 1, borderColor: "rgba(255,255,255,0.18)",
+        alignItems: "center", justifyContent: "center",
     },
-    removeBtnText: { color: "#fff", fontSize: 16, lineHeight: 20, fontWeight: "700" },
     addBtn: {
         width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: radius.md,
         borderWidth: 1, borderColor: colors.border, borderStyle: "dashed",

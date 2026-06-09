@@ -1,12 +1,15 @@
 import React from "react";
+import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
-import { colors, spacing, textStyles } from "../../theme";
+import { colors, radius, spacing, textStyles } from "../../theme";
 
 type Props = {
     title: string;
     description?: string;
     value: boolean;
     onValueChange: (v: boolean) => void;
+    icon?: keyof typeof Ionicons.glyphMap;
+    iconColor?: string;
 };
 
 export function ToggleRow({
@@ -14,12 +17,19 @@ export function ToggleRow({
     description,
     value,
     onValueChange,
+    icon,
+    iconColor = colors.primary,
 }: Props) {
     return (
         <Pressable
             onPress={() => onValueChange(!value)}
             style={({ pressed }) => [styles.row, pressed && styles.pressed]}
         >
+            {icon && (
+                <View style={[styles.iconWrap, { backgroundColor: `${iconColor}18` }]}>
+                    <Ionicons name={icon} size={18} color={iconColor} />
+                </View>
+            )}
             <View style={styles.texts}>
                 <Text style={[textStyles.subtitle, styles.title]}>{title}</Text>
                 {!!description && (
@@ -46,19 +56,26 @@ export function ToggleRow({
 const styles = StyleSheet.create({
     row: {
         flexDirection: "row",
-        alignItems: "flex-start",
+        alignItems: "center",
         justifyContent: "space-between",
         paddingHorizontal: spacing.lg,
-        paddingVertical: spacing.md,
+        paddingVertical: spacing.md + 2,
         gap: spacing.md,
     },
-    pressed: { opacity: 0.85 },
+    pressed: { backgroundColor: colors.surfaceHover },
+    iconWrap: {
+        width: 36,
+        height: 36,
+        borderRadius: radius.md,
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+    },
     texts: { flex: 1 },
     switchWrap: {
         minWidth: 56,
         alignItems: "flex-end",
-        marginTop: 2,
     },
     title: { color: colors.text },
-    desc: { color: colors.textMuted, marginTop: spacing.xs },
+    desc: { color: colors.textDim, marginTop: 3, fontSize: 12 },
 });

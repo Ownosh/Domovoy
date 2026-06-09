@@ -36,7 +36,7 @@ export function FeedAuthorRow({ name, photo, sub }: Props) {
                 <Image source={{ uri: photo }} style={styles.avatar} />
             ) : name === "УК" ? (
                 <View style={[styles.avatar, styles.avatarUk]}>
-                    <Ionicons name="business-outline" size={16} color={colors.info} />
+                    <Ionicons name="business-outline" size={16} color="#1a5f9a" />
                 </View>
             ) : (
                 <View style={[styles.avatar, { backgroundColor: `${bgColor}33`, borderWidth: 1, borderColor: `${bgColor}55` }]}>
@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
         borderTopColor: colors.borderSubtle,
     },
     avatar: { width: 28, height: 28, borderRadius: 14, overflow: "hidden", alignItems: "center", justifyContent: "center" },
-    avatarUk: { backgroundColor: "rgba(91, 159, 212, 0.15)" },
+    avatarUk: { backgroundColor: "rgba(26, 95, 154, 0.18)" },
     avatarInitial: { fontSize: 11, fontWeight: "700" },
     nameCol: { flex: 1 },
     name: { color: colors.textMuted, fontWeight: "600" },

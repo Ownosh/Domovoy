@@ -21,6 +21,7 @@ import {
 } from "react-native";
 import {
     AppealStatusBadge,
+    AvatarThumb,
     Button,
     Card,
     ScreenLayout,
@@ -67,6 +68,13 @@ function getAppealSteps(kind: AppealKind, status: AppealStatus): TimelineStep[] 
     return steps;
 }
 
+function formatDate(iso: string) {
+    try { return new Date(iso).toLocaleString("ru-RU", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return iso; }
+}
+function formatShortDate(iso: string) {
+    try { return new Date(iso).toLocaleDateString("ru-RU", { day: "numeric", month: "short" }); } catch { return iso; }
+}
+
 export function AppealDetailScreen({ route, navigation }: Props) {
     const { appeals, deleteAppeal, archiveAppeal, joinAppeal, verification, user, profile } = useApp();
     const goBack = useModalBack();
@@ -87,16 +95,12 @@ export function AppealDetailScreen({ route, navigation }: Props) {
     const sameHouseAsAppeal = item.buildingKey.toLowerCase() === myBuildingKey.toLowerCase();
     const alreadyJoined = !!user && item.participants.some((p) => String(p.userId) === String(user.id));
     const verified = isVerifiedResident(verification);
-    const canJoin =
-        item.kind === "collective" &&
-        !isAuthor &&
-        user &&
-        !alreadyJoined &&
-        verified &&
-        sameHouseAsAppeal;
+    const canJoin = item.kind === "collective" && !isAuthor && user && !alreadyJoined && verified && sameHouseAsAppeal;
 
     const statusColor = appealStatusColor[item.status] ?? colors.textMuted;
     const steps = getAppealSteps(item.kind, item.status);
+    const progress = Math.min(uniqueCount / MASS_APPEAL_THRESHOLD, 1);
+    const progressColor = progress >= 1 ? colors.primary : colors.warning;
 
     const onDelete = () => {
         Alert.alert("Удалить обращение?", "Действие нельзя отменить.", [
@@ -106,32 +110,33 @@ export function AppealDetailScreen({ route, navigation }: Props) {
     };
 
     return (
-        <ScreenLayout title={item.kind === "collective" ? "Коллективное обращение" : "Обращение"} scroll onBack={goBack}>
-
-            {/* ── Лента статусов ───────────────────────────── */}
+        <ScreenLayout
+            title={item.kind === "collective" ? "Коллективное обращение" : "Обращение"}
+            scroll
+            onBack={goBack}
+        >
+            {/* ── Лента статусов ── */}
             <View style={styles.timelineWrap}>
                 <StatusTimeline steps={steps} currentKey={item.status} />
             </View>
 
-            {/* ── Основная карточка ────────────────────────── */}
+            {/* ── Основная карточка ── */}
             <Card style={[styles.mainCard, { borderLeftColor: statusColor }]}>
-                {/* Строка: статус + дата */}
                 <View style={styles.topRow}>
                     <View style={styles.topLeft}>
                         <AppealStatusBadge status={item.status} />
                         {item.kind === "collective" && (
-                            <View style={styles.kindBadge}>
-                                <Text style={styles.kindBadgeText}>Коллективное</Text>
+                            <View style={styles.collectiveBadge}>
+                                <Ionicons name="people-outline" size={12} color={colors.warning} />
+                                <Text style={styles.collectiveBadgeText}>Коллективное</Text>
                             </View>
                         )}
                     </View>
                     <Text style={styles.date}>{formatDate(item.createdAt)}</Text>
                 </View>
 
-                {/* Тема */}
                 <Text style={[textStyles.title, styles.title]}>{item.title}</Text>
 
-                {/* Фотографии */}
                 {item.imageUrls.length > 0 && (
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imgRow}>
                         {item.imageUrls.map((uri, i) => (
@@ -140,35 +145,110 @@ export function AppealDetailScreen({ route, navigation }: Props) {
                     </ScrollView>
                 )}
 
-                {/* Разделитель */}
                 <View style={styles.divider} />
-
-                {/* Категория + дата */}
                 <Text style={[textStyles.caption, styles.meta]}>{item.category}</Text>
-
-                {/* Описание */}
                 <Text style={[textStyles.body, styles.body]}>{item.body}</Text>
 
                 {item.escalatedToUk && (
-                    <Text style={[textStyles.caption, styles.esc]}>Передано в УК (эскалация)</Text>
-                )}
-                {item.kind === "collective" && (
-                    <Text style={[textStyles.caption, styles.threshold]}>
-                        Квартир в подъезде {item.entrance ?? "—"}: {uniqueCount} из {MASS_APPEAL_THRESHOLD}
-                    </Text>
+                    <View style={styles.escRow}>
+                        <Ionicons name="business-outline" size={14} color={colors.primary} />
+                        <Text style={[textStyles.caption, styles.escText]}>Передано в УК</Text>
+                    </View>
                 )}
             </Card>
 
-            {/* ── Кнопки редактирования/удаления ──────────── */}
+            {/* ── Прогресс сбора подписей (только коллективное) ── */}
+            {item.kind === "collective" && (
+                <Card style={[styles.progressCard, { borderLeftColor: progressColor }]}>
+                    <View style={styles.progressHeader}>
+                        <Ionicons name="people-outline" size={18} color={progressColor} />
+                        <Text style={[textStyles.label, styles.progressTitle]}>Сбор подписей</Text>
+                        <Text style={[textStyles.subtitle, { color: progressColor }]}>
+                            {uniqueCount} / {MASS_APPEAL_THRESHOLD}
+                        </Text>
+                    </View>
+                    <View style={styles.progressBarBg}>
+                        <View style={[styles.progressBarFill, { width: `${progress * 100}%` as any, backgroundColor: progressColor }]} />
+                    </View>
+                    <Text style={[textStyles.caption, styles.progressSub]}>
+                        {progress >= 1
+                            ? "Порог достигнут — обращение передано в УК"
+                            : `Нужно ещё ${MASS_APPEAL_THRESHOLD - uniqueCount} кв. в подъезде ${item.entrance ?? "—"}`}
+                    </Text>
+                </Card>
+            )}
+
+            {/* ── Участники ── */}
+            {item.kind === "collective" && item.participants.length > 0 && (
+                <View style={styles.section}>
+                    <Text style={[textStyles.label, styles.sectionTitle]}>
+                        Присоединились · {item.participants.length}
+                    </Text>
+                    <View style={styles.participantsList}>
+                        {item.participants.map((p, idx) => {
+                            const isMe = String(p.userId) === String(user?.id);
+                            const name = isMe ? "Вы" : (p.displayName || `Житель …${String(p.userId).slice(-4)}`);
+                            return (
+                                <View
+                                    key={`${p.userId}_${p.joinedAt}`}
+                                    style={[styles.participantRow, isMe && styles.participantRowMe]}
+                                >
+                                    <AvatarThumb name={p.displayName || "Житель"} photo={p.photoUri} size={36} />
+                                    <View style={styles.participantInfo}>
+                                        <Text style={[textStyles.body, styles.participantName]}>{name}</Text>
+                                        {p.comment ? (
+                                            <Text style={[textStyles.caption, styles.participantComment]} numberOfLines={1}>{p.comment}</Text>
+                                        ) : null}
+                                    </View>
+                                    <View style={styles.participantRight}>
+                                        <Text style={styles.participantApt}>кв. {p.apartment}</Text>
+                                        <Text style={styles.participantDate}>{formatShortDate(p.joinedAt)}</Text>
+                                    </View>
+                                </View>
+                            );
+                        })}
+                    </View>
+                </View>
+            )}
+
+            {/* ── Кнопка «Присоединиться» ── */}
+            {canJoin && (
+                <View style={styles.joinBlock}>
+                    <Button title="Присоединиться к обращению" variant="accent" onPress={() => void joinAppeal(item.id)} style={styles.joinBtn} />
+                    <Text style={[textStyles.caption, styles.joinNote]}>
+                        Ваша квартира будет учтена в счётчике. Действие выполняется под вашим логином.
+                    </Text>
+                </View>
+            )}
+            {item.kind === "collective" && !isAuthor && user && alreadyJoined && (
+                <View style={styles.joinedRow}>
+                    <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+                    <Text style={[textStyles.caption, styles.joinedNote]}>Вы уже присоединились к этому обращению</Text>
+                </View>
+            )}
+            {item.kind === "collective" && !isAuthor && user && !verified && (
+                <VerificationWall message="Присоединиться могут только верифицированные жильцы." />
+            )}
+
+            {/* ── Комментарий от УК ── */}
+            {item.adminComment ? (
+                <View style={styles.adminBlock}>
+                    <View style={styles.adminHeader}>
+                        <Ionicons name="chatbox-ellipses" size={16} color={colors.warning} />
+                        <Text style={[textStyles.label, styles.adminTitle]}>Комментарий от УК</Text>
+                        {item.adminCommentAt && (
+                            <Text style={styles.adminDate}>{formatShortDate(item.adminCommentAt)}</Text>
+                        )}
+                    </View>
+                    <Text style={[textStyles.body, styles.adminText]}>{item.adminComment}</Text>
+                </View>
+            ) : null}
+
+            {/* ── Действия автора ── */}
             {isAuthor && !isArchivedAppeal(item) && (
                 <View style={styles.actionsRow}>
                     {(item.status === "resolved" || item.status === "rejected" || item.status === "closed") && (
-                        <Button
-                            title="В архив"
-                            variant="secondary"
-                            onPress={() => { archiveAppeal(item.id); goBack(); }}
-                            style={styles.archiveBtn}
-                        />
+                        <Button title="В архив" variant="secondary" onPress={() => { archiveAppeal(item.id); goBack(); }} style={styles.archiveBtn} />
                     )}
                     <View style={styles.iconBtns}>
                         <Pressable
@@ -195,125 +275,91 @@ export function AppealDetailScreen({ route, navigation }: Props) {
                     </View>
                 </View>
             )}
-
-            {/* ── Комментарий от УК ────────────────────────── */}
-            {item.adminComment ? (
-                <View style={styles.adminBlock}>
-                    <View style={styles.adminHeader}>
-                        <Ionicons name="chatbox-ellipses" size={16} color={colors.warning} />
-                        <Text style={[textStyles.label, styles.adminTitle]}>Комментарий от УК</Text>
-                        {item.adminCommentAt && (
-                            <Text style={styles.adminDate}>{formatDate(item.adminCommentAt)}</Text>
-                        )}
-                    </View>
-                    <Text style={[textStyles.body, styles.adminText]}>{item.adminComment}</Text>
-                </View>
-            ) : null}
-
-            {/* ── Участники (коллективное) ──────────────────── */}
-            {item.kind === "collective" && item.participants.length > 0 && (
-                <View style={styles.block}>
-                    <Text style={[textStyles.label, styles.blockTitle]}>
-                        Присоединились ({item.participants.length})
-                    </Text>
-                    <View style={styles.partTable}>
-                        <View style={[styles.partTr, styles.partTrHead]}>
-                            <Text style={[textStyles.caption, styles.partTh, { flex: 1 }]}>Житель</Text>
-                            <Text style={[textStyles.caption, styles.partTh, styles.partTdApt]}>Квартира</Text>
-                            <Text style={[textStyles.caption, styles.partTh, styles.partTdDate]}>Дата</Text>
-                        </View>
-                        {item.participants.map((p, idx) => {
-                            const isLast = idx === item.participants.length - 1;
-                            const isMe = String(p.userId) === String(user?.id);
-                            return (
-                                <View key={`${p.userId}_${p.joinedAt}`} style={[styles.partTr, isLast && styles.partTrLast, isMe && styles.partTrMe]}>
-                                    <Text style={[textStyles.body, styles.partTd, { flex: 1 }]}>
-                                        {isMe ? "Вы" : (p.displayName || `Житель …${String(p.userId).slice(-4)}`)}
-                                    </Text>
-                                    <Text style={[textStyles.body, styles.partTd, styles.partTdApt]}>{p.apartment}</Text>
-                                    <Text style={[textStyles.caption, styles.partTd, styles.partTdDate]}>{formatDate(p.joinedAt)}</Text>
-                                </View>
-                            );
-                        })}
-                    </View>
-                </View>
-            )}
-
-            {/* ── Кнопка «Присоединиться» ──────────────────── */}
-            {canJoin && (
-                <View style={styles.joinBlock}>
-                    <Button title="Присоединиться" onPress={() => void joinAppeal(item.id)} />
-                    <Text style={[textStyles.caption, styles.joinNote]}>
-                        Это действие выполняется под вашим логином.
-                    </Text>
-                </View>
-            )}
-            {item.kind === "collective" && !isAuthor && user && alreadyJoined && (
-                <Text style={[textStyles.caption, styles.joinedNote]}>Вы уже среди участников.</Text>
-            )}
-            {item.kind === "collective" && !isAuthor && user && !verified && (
-                <VerificationWall message="Присоединиться могут только верифицированные жильцы." />
-            )}
         </ScreenLayout>
     );
 }
 
-function formatDate(iso: string) {
-    try { return new Date(iso).toLocaleString("ru-RU"); } catch { return iso; }
-}
-
 const styles = StyleSheet.create({
     miss: { color: colors.textMuted },
+
+    // Timeline
     timelineWrap: {
         marginHorizontal: -spacing.lg,
         borderBottomWidth: 1,
         borderBottomColor: colors.borderSubtle,
         marginBottom: spacing.md,
     },
-    mainCard: {
-        borderLeftWidth: 3,
-        gap: spacing.sm,
-    },
-    topRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        flexWrap: "wrap",
-        gap: spacing.sm,
-    },
+
+    // Main card
+    mainCard: { borderLeftWidth: 3, gap: spacing.sm },
+    topRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: spacing.sm },
     topLeft: { flexDirection: "row", gap: spacing.sm, alignItems: "center", flexWrap: "wrap" },
     date: { fontSize: 12, color: colors.textDim },
-    kindBadge: {
+    collectiveBadge: {
+        flexDirection: "row", alignItems: "center", gap: 4,
         paddingHorizontal: spacing.sm, paddingVertical: 3,
-        borderRadius: 6, backgroundColor: "rgba(251,191,36,0.15)",
+        borderRadius: 6, backgroundColor: "rgba(232,162,61,0.15)",
     },
-    kindBadgeText: { fontSize: 11, fontWeight: "600", color: "#fbbf24" },
+    collectiveBadgeText: { fontSize: 11, fontWeight: "600", color: colors.warning },
     title: { color: colors.text },
     imgRow: { marginTop: spacing.sm },
     img: { width: 240, height: 160, borderRadius: radius.md, backgroundColor: colors.border, marginRight: spacing.sm },
     divider: { height: 1, backgroundColor: colors.borderSubtle, marginVertical: spacing.sm },
     meta: { color: colors.textMuted },
     body: { color: colors.text, lineHeight: 22 },
-    esc: { color: colors.warning, marginTop: spacing.xs },
-    threshold: { color: colors.textDim, marginTop: spacing.xs },
-    actionsRow: {
+    escRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.xs },
+    escText: { color: colors.primary },
+
+    // Progress card
+    progressCard: {
+        marginTop: spacing.md,
+        gap: spacing.sm,
+        borderLeftWidth: 3,
+    },
+    progressHeader: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+    progressTitle: { flex: 1, color: colors.text },
+    progressBarBg: {
+        height: 6,
+        backgroundColor: colors.borderSubtle,
+        borderRadius: 3,
+        overflow: "hidden",
+    },
+    progressBarFill: { height: 6, borderRadius: 3 },
+    progressSub: { color: colors.textDim },
+
+    // Participants
+    section: { marginTop: spacing.lg },
+    sectionTitle: { color: colors.textMuted, marginBottom: spacing.md },
+    participantsList: { gap: spacing.sm },
+    participantRow: {
         flexDirection: "row",
         alignItems: "center",
-        justifyContent: "flex-end",
         gap: spacing.md,
-        marginTop: spacing.md,
+        backgroundColor: colors.surface,
+        borderRadius: radius.md,
+        borderWidth: 1,
+        borderColor: colors.borderSubtle,
+        padding: spacing.md,
     },
-    archiveBtn: { alignSelf: "flex-end", borderRadius: 999, paddingHorizontal: 20 },
-    iconBtns: { flexDirection: "row", gap: spacing.sm },
-    iconBtn: {
-        width: 46, height: 46, borderRadius: 23,
-        alignItems: "center", justifyContent: "center",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.28, shadowRadius: 8, elevation: 3,
+    participantRowMe: {
+        borderColor: `${colors.primary}55`,
+        backgroundColor: `${colors.primary}0a`,
     },
-    iconBtnEdit: { backgroundColor: colors.primary, shadowColor: colors.primary },
-    iconBtnDelete: { backgroundColor: colors.danger, shadowColor: colors.danger, borderWidth: 1, borderColor: "#f08b8b" },
-    iconBtnPressed: { opacity: 0.9, transform: [{ scale: 0.97 }] },
+    participantInfo: { flex: 1 },
+    participantName: { color: colors.text, fontWeight: "600" },
+    participantComment: { color: colors.textDim, marginTop: 2 },
+    participantRight: { alignItems: "flex-end", gap: 2 },
+    participantApt: { fontSize: 12, color: colors.textMuted, fontWeight: "600" },
+    participantDate: { fontSize: 11, color: colors.textDim },
+
+    // Join
+    joinBlock: { gap: spacing.sm, marginTop: spacing.lg },
+    joinBtn: { borderRadius: 999, paddingHorizontal: 28 },
+    joinNote: { color: colors.textDim, lineHeight: 18 },
+    joinedRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.md },
+    joinedNote: { color: colors.primary },
+
+    // Admin comment
     adminBlock: {
         backgroundColor: `${colors.warning}0d`,
         borderRadius: radius.md,
@@ -327,18 +373,24 @@ const styles = StyleSheet.create({
     adminTitle: { color: colors.warning, flex: 1 },
     adminDate: { fontSize: 11, color: colors.textDim },
     adminText: { color: colors.text, lineHeight: 22 },
-    block: { marginTop: spacing.lg },
-    blockTitle: { color: colors.textMuted, marginBottom: spacing.sm },
-    partTable: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, overflow: "hidden", backgroundColor: colors.surface },
-    partTr: { flexDirection: "row", alignItems: "center", paddingVertical: spacing.md, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
-    partTrHead: { backgroundColor: colors.bgElevated, borderBottomColor: colors.border },
-    partTrLast: { borderBottomWidth: 0 },
-    partTrMe: { backgroundColor: "rgba(61,158,122,0.08)" },
-    partTh: { color: colors.textDim, fontWeight: "600" },
-    partTd: { color: colors.text },
-    partTdApt: { width: 72, textAlign: "center" },
-    partTdDate: { width: 80, textAlign: "right", color: colors.textDim, fontSize: 11 },
-    joinBlock: { gap: spacing.sm, marginTop: spacing.md },
-    joinNote: { color: colors.textDim, lineHeight: 18 },
-    joinedNote: { color: colors.primary, marginTop: spacing.md },
+
+    // Author actions
+    actionsRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "flex-end",
+        gap: spacing.md,
+        marginTop: spacing.lg,
+    },
+    archiveBtn: { alignSelf: "flex-end", borderRadius: 999, paddingHorizontal: 20 },
+    iconBtns: { flexDirection: "row", gap: spacing.sm },
+    iconBtn: {
+        width: 46, height: 46, borderRadius: 23,
+        alignItems: "center", justifyContent: "center",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.28, shadowRadius: 8, elevation: 3,
+    },
+    iconBtnEdit: { backgroundColor: colors.primary, shadowColor: colors.primary },
+    iconBtnDelete: { backgroundColor: colors.danger, shadowColor: colors.danger, borderWidth: 1, borderColor: "#f08b8b" },
+    iconBtnPressed: { opacity: 0.9, transform: [{ scale: 0.97 }] },
 });

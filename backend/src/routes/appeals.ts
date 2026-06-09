@@ -158,10 +158,11 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         const prof = await getProfile(userId);
         if (!prof) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
+        const initialStatus = kind === "collective" ? "collecting_signatures" : "new";
         const [result] = await pool.execute<ResultSetHeader>(
-            `INSERT INTO appeals (user_id, building_key, title, body, category, kind, entrance, author_apartment)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [userId, prof.buildingKey, title.trim(), body.trim(), category?.trim() ?? "", kind!, entrance?.trim() || null, prof.apartment],
+            `INSERT INTO appeals (user_id, building_key, title, body, category, kind, entrance, author_apartment, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [userId, prof.buildingKey, title.trim(), body.trim(), category?.trim() ?? "", kind!, entrance?.trim() || null, prof.apartment, initialStatus],
         );
 
         const urls = Array.isArray(imageUrls) ? imageUrls : [];

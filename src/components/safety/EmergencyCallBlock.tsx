@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
-        alignSelf: "flex-end",
+        alignSelf: "center",
         gap: spacing.sm,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.22,

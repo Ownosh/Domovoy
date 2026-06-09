@@ -16,6 +16,7 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     View,
 } from "react-native";
 import {
@@ -29,7 +30,7 @@ import {
     districtPoiLayerLabel,
     type DistrictLayerMeta,
 } from "../../components/map/districtMapConstants";
-import { Card, Input, NotificationBell, ScreenLayout } from "../../components/ui";
+import { Card, NotificationBell, ScreenLayout } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
 import type { MainTabNavigationProp } from "../../navigation/types";
 import type {
@@ -284,6 +285,7 @@ export function DistrictScreen() {
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 >
                     <Card padded={false} style={styles.mapCard}>
+                        {/* ── Карта + боковые рельсы ── */}
                         <View style={styles.mapRow}>
                             <MapLayerRail
                                 title="Город"
@@ -295,9 +297,7 @@ export function DistrictScreen() {
                             <View
                                 style={styles.mapCenter}
                                 onLayout={(e) =>
-                                    setMapInnerWidth(
-                                        Math.round(e.nativeEvent.layout.width),
-                                    )
+                                    setMapInnerWidth(Math.round(e.nativeEvent.layout.width))
                                 }
                             >
                                 <DistrictMap
@@ -316,84 +316,65 @@ export function DistrictScreen() {
                                 edge="right"
                             />
                         </View>
-                    </Card>
 
-                    <Card style={styles.searchCard}>
-                        <View style={styles.searchRow}>
-                            <View style={styles.searchInputWrap}>
-                                <Input
+                        {/* ── Поиск (под картой) ── */}
+                        <View style={styles.searchBar}>
+                            <View style={styles.searchField}>
+                                <Ionicons name="search-outline" size={17} color={RAIL_TEXT} />
+                                <TextInput
+                                    style={styles.searchTextInput}
                                     placeholder="Адрес в Кирове…"
+                                    placeholderTextColor={RAIL_PLACEHOLDER}
                                     value={searchQuery}
                                     onChangeText={setSearchQuery}
                                     onSubmitEditing={onSearchSubmit}
                                     returnKeyType="search"
-                                    style={styles.searchInput}
+                                    selectionColor={colors.primary}
                                 />
-                            </View>
-                            <Pressable
-                                onPress={onSearchSubmit}
-                                style={({ pressed }) => [
-                                    styles.searchBtn,
-                                    pressed && styles.searchBtnPressed,
-                                ]}
-                                accessibilityLabel="Искать адрес"
-                            >
                                 {searchLoading ? (
-                                    <ActivityIndicator color={colors.bg} />
-                                ) : (
-                                    <Ionicons
-                                        name="search"
-                                        size={22}
-                                        color={colors.bg}
-                                    />
-                                )}
-                            </Pressable>
+                                    <ActivityIndicator size="small" color={RAIL_TEXT} />
+                                ) : searchQuery.length > 0 ? (
+                                    <Pressable
+                                        hitSlop={8}
+                                        onPress={() => { setSearchQuery(""); setSearchResults([]); setSearchError(null); }}
+                                    >
+                                        <Ionicons name="close-circle" size={17} color={RAIL_TEXT} />
+                                    </Pressable>
+                                ) : null}
+                            </View>
                         </View>
-                        {searchError ? (
-                            <Text style={[textStyles.caption, styles.searchErr]}>
-                                {searchError}
-                            </Text>
-                        ) : null}
-                        {searchResults.map((r) => (
-                            <Pressable
-                                key={r.id}
-                                onPress={() => applySearchHit(r)}
-                                style={({ pressed }) => [
-                                    styles.searchHitRow,
-                                    pressed && styles.searchHitRowPressed,
-                                ]}
-                            >
-                                <Ionicons
-                                    name="location-outline"
-                                    size={20}
-                                    color={colors.warning}
-                                />
-                                <View style={{ flex: 1 }}>
-                                    <Text
-                                        style={[
-                                            textStyles.subtitle,
-                                            styles.searchHitTitle,
+
+                        {/* ── Результаты поиска ── */}
+                        {(searchError || searchResults.length > 0) && (
+                            <View style={styles.searchDropdown}>
+                                {searchError ? (
+                                    <Text style={[textStyles.caption, styles.searchErr]}>
+                                        {searchError}
+                                    </Text>
+                                ) : null}
+                                {searchResults.map((r) => (
+                                    <Pressable
+                                        key={r.id}
+                                        onPress={() => applySearchHit(r)}
+                                        style={({ pressed }) => [
+                                            styles.searchHitRow,
+                                            pressed && styles.searchHitRowPressed,
                                         ]}
                                     >
-                                        {r.title}
-                                    </Text>
-                                    <Text
-                                        style={[
-                                            textStyles.caption,
-                                            styles.searchHitAddr,
-                                        ]}
-                                        numberOfLines={2}
-                                    >
-                                        {r.address}
-                                    </Text>
-                                </View>
-                                <Ionicons
-                                    name="chevron-forward"
-                                    size={18}
-                                    color={colors.textDim}
-                                />
-                            </Pressable>
-                        ))}
+                                        <Ionicons name="location-outline" size={20} color={colors.warning} />
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={[textStyles.subtitle, styles.searchHitTitle]}>
+                                                {r.title}
+                                            </Text>
+                                            <Text style={[textStyles.caption, styles.searchHitAddr]} numberOfLines={2}>
+                                                {r.address}
+                                            </Text>
+                                        </View>
+                                        <Ionicons name="chevron-forward" size={18} color={colors.textDim} />
+                                    </Pressable>
+                                ))}
+                            </View>
+                        )}
                     </Card>
 
                     {groupedSections.length === 0 ? (
@@ -572,6 +553,9 @@ function PoiListRow({
 }
 
 const RAIL_W = 52;
+const RAIL_BG = "rgba(19, 26, 34, 0.97)";
+const RAIL_TEXT = "rgba(255,255,255,0.75)";
+const RAIL_PLACEHOLDER = "rgba(255,255,255,0.35)";
 
 const styles = StyleSheet.create({
     screenBody: { flex: 1 },
@@ -712,34 +696,47 @@ const styles = StyleSheet.create({
     poiDist: { color: colors.info, fontSize: 12 },
     poiAddr: { color: colors.textMuted },
     poiSchedule: { color: colors.textDim, lineHeight: 20 },
-    searchCard: { gap: spacing.sm },
-    searchRow: {
+    searchBar: {
+        backgroundColor: RAIL_BG,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm + 2,
+        borderTopWidth: 1,
+        borderTopColor: "rgba(255,255,255,0.07)",
+    },
+    searchField: {
         flexDirection: "row",
-        alignItems: "flex-end",
-        gap: spacing.sm,
-    },
-    searchInputWrap: { flex: 1 },
-    searchInput: { marginBottom: 0 },
-    searchBtn: {
-        width: 48,
-        height: 48,
-        borderRadius: radius.md,
-        backgroundColor: colors.primary,
         alignItems: "center",
-        justifyContent: "center",
-        marginBottom: 2,
+        gap: spacing.sm,
+        backgroundColor: "rgba(255,255,255,0.07)",
+        borderRadius: radius.full,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.1)",
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
     },
-    searchBtnPressed: { opacity: 0.9 },
-    searchErr: { color: colors.danger },
+    searchTextInput: {
+        flex: 1,
+        fontSize: 14,
+        color: "rgba(255,255,255,0.9)",
+        paddingVertical: 0,
+    },
+    searchDropdown: {
+        backgroundColor: RAIL_BG,
+        paddingHorizontal: spacing.md,
+        paddingBottom: spacing.sm,
+        borderTopWidth: 1,
+        borderTopColor: "rgba(255,255,255,0.07)",
+    },
+    searchErr: { color: colors.danger, paddingVertical: spacing.xs },
     searchHitRow: {
         flexDirection: "row",
         alignItems: "center",
         gap: spacing.md,
-        paddingVertical: spacing.md,
+        paddingVertical: spacing.sm,
         borderTopWidth: 1,
-        borderTopColor: colors.borderSubtle,
+        borderTopColor: "rgba(255,255,255,0.07)",
     },
-    searchHitRowPressed: { opacity: 0.88 },
-    searchHitTitle: { color: colors.text },
-    searchHitAddr: { color: colors.text, marginTop: 2 },
+    searchHitRowPressed: { opacity: 0.75 },
+    searchHitTitle: { color: "rgba(255,255,255,0.9)" },
+    searchHitAddr: { color: RAIL_TEXT, marginTop: 2 },
 });

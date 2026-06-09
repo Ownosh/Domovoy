@@ -177,7 +177,6 @@ export function VoteNewScreen({ navigation, route }: Props) {
                 {!!err && (
                     <Text style={[textStyles.caption, styles.err]}>{err}</Text>
                 )}
-                <CollapsibleHint text="Укажите тему, пояснение и варианты ответа (от 2 до 4). Создавать опрос могут жильцы с подтверждённой верификацией; вес по площади берётся из профиля. Это не заменяет официальное ОСС." defaultOpen={false} />
                 <View style={styles.gapSm} />
                 <Button
                     title={submitting ? "Сохранение..." : editId ? "Сохранить" : "Опубликовать"}
@@ -187,6 +186,7 @@ export function VoteNewScreen({ navigation, route }: Props) {
                     style={styles.submitBtn}
                 />
             </Card>
+            <CollapsibleHint text="Укажите тему, пояснение и варианты ответа (от 2 до 4). Создавать опрос могут жильцы с подтверждённой верификацией; вес по площади берётся из профиля. Это не заменяет официальное ОСС." defaultOpen={false} />
         </ScreenLayout>
     );
 }

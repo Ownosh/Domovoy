@@ -204,12 +204,6 @@ export function NewAppealScreen({ navigation, route }: Props) {
                     {!!err && (
                         <Text style={[textStyles.caption, styles.err]}>{err}</Text>
                     )}
-                    <CollapsibleHint
-                        text={kind === "collective"
-                            ? "Коллективное попадает в ленту дома — соседи смогут присоединиться. Опишите проблему подробно."
-                            : "Опишите проблему подробно. Личное обращение видно только вам и УК."}
-                        defaultOpen={false}
-                    />
                     <View style={styles.gapSm} />
                     <Button
                         title={submitting ? "Сохранение..." : editId ? "Сохранить" : "Отправить"}
@@ -219,6 +213,12 @@ export function NewAppealScreen({ navigation, route }: Props) {
                         style={styles.submitBtn}
                     />
                 </Card>
+            <CollapsibleHint
+                text={kind === "collective"
+                    ? "Коллективное попадает в ленту дома — соседи смогут присоединиться. Опишите проблему подробно."
+                    : "Опишите проблему подробно. Личное обращение видно только вам и УК."}
+                defaultOpen={false}
+            />
         </ScreenLayout>
     );
 }

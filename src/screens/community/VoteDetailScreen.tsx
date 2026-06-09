@@ -160,79 +160,74 @@ export function VoteDetailScreen({ route }: Props) {
                 )}
             </Card>
 
-            {/* ── Варианты для голосования ── */}
-            {canVote && (
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <Ionicons name="hand-left-outline" size={16} color={sc} />
-                        <Text style={[textStyles.label, styles.sectionTitle, { color: sc }]}>Выберите вариант</Text>
-                    </View>
-                    <View style={styles.optionsList}>
-                        {vote.options.map((o, i) => (
-                            <Pressable
-                                key={o.id}
-                                onPress={() => onPick(o.id)}
-                                style={({ pressed }) => [
-                                    styles.optionBtn,
-                                    { borderColor: `${sc}55`, backgroundColor: pressed ? `${sc}22` : `${sc}0a` },
-                                ]}
-                            >
-                                <Text style={[textStyles.body, styles.optionLabel, { color: sc }]}>{o.label}</Text>
-                                <View style={[styles.optionNum, { backgroundColor: `${sc}22` }]}>
-                                    <Text style={[styles.optionNumText, { color: sc }]}>{i + 1}</Text>
-                                </View>
-                            </Pressable>
-                        ))}
-                    </View>
-                </View>
-            )}
-
-            {/* ── Мой голос ── */}
-            {myCast && myOption && (
-                <View style={[styles.myVoteBanner, { backgroundColor: `${sc}14`, borderColor: `${sc}33` }]}>
-                    <Ionicons name="checkmark-circle" size={20} color={sc} />
-                    <View style={styles.myVoteInfo}>
-                        <Text style={[textStyles.caption, { color: sc, fontWeight: "700" }]}>Ваш голос зафиксирован</Text>
-                        <Text style={[textStyles.body, { color: sc }]}>{myOption.label}</Text>
-                        <Text style={[textStyles.caption, { color: colors.textDim }]}>{formatDateTime(myCast.votedAt)}</Text>
-                    </View>
-                </View>
-            )}
-
-            {/* ── Результаты ── */}
+            {/* ── Варианты / Результаты (единый блок) ── */}
             <View style={styles.section}>
                 <View style={styles.sectionHeader}>
-                    <Ionicons name="bar-chart-outline" size={16} color={sc} />
+                    <Ionicons name={canVote ? "hand-left-outline" : "bar-chart-outline"} size={16} color={sc} />
                     <Text style={[textStyles.label, styles.sectionTitle, { color: sc }]}>
-                        Результаты · {totalVotes} {totalVotes === 1 ? "голос" : totalVotes < 5 ? "голоса" : "голосов"}
+                        {canVote
+                            ? "Выберите вариант"
+                            : `Результаты · ${totalVotes} ${totalVotes === 1 ? "голос" : totalVotes < 5 ? "голоса" : "голосов"}`}
                     </Text>
                 </View>
-                <View style={styles.resultsList}>
-                    {vote.options.map((o, i) => {
+                <View style={styles.optionsList}>
+                    {vote.options.map((o) => {
                         const row = agg.find((x) => x.optionId === o.id);
                         const cnt = row?.count ?? 0;
                         const pct = totalVotes > 0 ? cnt / totalVotes : 0;
-                        const isWinner = ended && cnt === Math.max(...agg.map((a) => a.count)) && cnt > 0;
                         const isMyVote = myCast?.optionId === o.id;
+                        const isWinner = ended && cnt > 0 && cnt === Math.max(...agg.map((a) => a.count));
+
+                        if (canVote) {
+                            return (
+                                <Pressable
+                                    key={o.id}
+                                    onPress={() => onPick(o.id)}
+                                    style={({ pressed }) => [
+                                        styles.optionBtn,
+                                        { borderColor: pressed ? sc : `${sc}55`, backgroundColor: pressed ? `${sc}1a` : `${sc}08` },
+                                    ]}
+                                >
+                                    <View style={[styles.optionRadio, { borderColor: `${sc}88` }]} />
+                                    <Text style={[textStyles.body, styles.optionLabel]}>{o.label}</Text>
+                                </Pressable>
+                            );
+                        }
+
                         return (
                             <View key={o.id} style={[styles.resultRow, isMyVote && { borderColor: `${sc}44`, backgroundColor: `${sc}07` }]}>
                                 <View style={styles.resultTop}>
                                     <View style={styles.resultLabelRow}>
                                         {isWinner && <Ionicons name="trophy-outline" size={13} color={colors.accent} style={{ marginRight: 4 }} />}
-                                        <Text style={[textStyles.body, styles.resultLabel, isWinner && { fontWeight: "700" }]}>{o.label}</Text>
+                                        {isMyVote && !isWinner && <Ionicons name="checkmark-circle" size={13} color={sc} style={{ marginRight: 4 }} />}
+                                        <Text style={[textStyles.body, styles.resultLabel, (isWinner || isMyVote) && { fontWeight: "700", color: isMyVote ? sc : colors.text }]}>
+                                            {o.label}
+                                        </Text>
                                     </View>
                                     <Text style={[textStyles.subtitle, styles.resultPct, { color: pct > 0 ? sc : colors.textDim }]}>
                                         {totalVotes > 0 ? `${Math.round(pct * 100)}%` : "—"}
                                     </Text>
                                 </View>
                                 <View style={styles.barBg}>
-                                    <View style={[styles.barFill, { width: `${pct * 100}%` as any, backgroundColor: sc, opacity: isWinner ? 1 : 0.6 }]} />
+                                    <View style={[styles.barFill, { width: `${pct * 100}%` as any, backgroundColor: sc, opacity: isMyVote || isWinner ? 1 : 0.45 }]} />
                                 </View>
                                 <Text style={[textStyles.caption, styles.resultCount]}>{cnt} голосов</Text>
                             </View>
                         );
                     })}
                 </View>
+
+                {/* Ваш голос — под результатами */}
+                {myCast && myOption && (
+                    <View style={[styles.myVoteBanner, { backgroundColor: `${sc}14`, borderColor: `${sc}33` }]}>
+                        <Ionicons name="checkmark-circle" size={18} color={sc} />
+                        <View style={styles.myVoteInfo}>
+                            <Text style={[textStyles.caption, { color: sc, fontWeight: "700" }]}>
+                                Ваш голос зафиксирован · {formatDateTime(myCast.votedAt)}
+                            </Text>
+                        </View>
+                    </View>
+                )}
             </View>
 
             {/* ── Кто как проголосовал (открытое) ── */}
@@ -311,13 +306,15 @@ const styles = StyleSheet.create({
     optionsList: { gap: spacing.sm },
     optionBtn: {
         flexDirection: "row", alignItems: "center",
-        borderWidth: 1, borderRadius: radius.md,
-        paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+        borderWidth: 1.5, borderRadius: radius.md,
+        paddingHorizontal: spacing.lg, paddingVertical: spacing.md + 2,
         gap: spacing.md,
     },
-    optionLabel: { flex: 1, fontWeight: "600" },
-    optionNum: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-    optionNumText: { fontSize: 11, fontWeight: "700" },
+    optionRadio: {
+        width: 20, height: 20, borderRadius: 10,
+        borderWidth: 2, flexShrink: 0,
+    },
+    optionLabel: { flex: 1, fontWeight: "600", color: colors.text },
 
     // My vote
     myVoteBanner: {

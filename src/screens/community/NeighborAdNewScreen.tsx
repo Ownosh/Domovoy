@@ -226,7 +226,6 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
                 {!!err && (
                     <Text style={[textStyles.caption, styles.err]}>{err}</Text>
                 )}
-                <CollapsibleHint text="Объявление будет видно только верифицированным жильцам вашего дома в течение 30 дней." defaultOpen={false} />
                 <View style={styles.gapSm} />
                 <Button
                     title={submitting ? "Сохранение..." : editId ? "Сохранить" : "Опубликовать"}
@@ -236,6 +235,7 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
                     style={styles.submitBtn}
                 />
             </Card>
+            <CollapsibleHint text="Объявление будет видно только верифицированным жильцам вашего дома в течение 30 дней." defaultOpen={false} />
         </ScreenLayout>
     );
 }

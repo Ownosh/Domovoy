@@ -13,7 +13,7 @@ import { Button, Card, ScreenLayout, StatusTimeline, VerificationWall, VoteStatu
 import { voteLabels, voteStatusColor } from "../../components/ui/StatusBadge";
 import type { TimelineStep } from "../../components/ui/StatusTimeline";
 import { voteEffectiveStatus } from "../../utils/appeals";
-import { useApp, isVerifiedResident } from "../../context/AppContext";
+import { useApp, isVerifiedResident, isVerifiedOwner } from "../../context/AppContext";
 import type { Vote, VoteCast, VoteStatus } from "../../types";
 import { voteSourceLine } from "../../utils/voteSponsor";
 import { colors, radius, spacing, textStyles } from "../../theme";
@@ -101,7 +101,8 @@ export function VoteDetailScreen({ route }: Props) {
 
     const voteStatus = voteEffectiveStatus(vote);
     const sc = voteStatusColor[voteStatus] ?? colors.textMuted;
-    const canVote = isVerifiedResident(verification) && !ended && !myCast;
+    const isLeaseholder = isVerifiedResident(verification) && verification.docType === "lease";
+    const canVote = isVerifiedOwner(verification) && !ended && !myCast;
     const myOption = myCast ? vote.options.find((o) => o.id === myCast.optionId) : undefined;
     const myVoteCasts = voteCasts.filter((c) => c.voteId === vote.id);
 
@@ -269,6 +270,14 @@ export function VoteDetailScreen({ route }: Props) {
             {!isVerifiedResident(verification) && (
                 <VerificationWall message="Участвовать могут только верифицированные жильцы." />
             )}
+            {isLeaseholder && (
+                <View style={styles.leaseWall}>
+                    <Ionicons name="lock-closed-outline" size={18} color={colors.warning} />
+                    <Text style={styles.leaseWallText}>
+                        Голосование доступно только собственникам жилья. Арендаторы не имеют права голоса на ОСС (ЖК РФ ст. 48).
+                    </Text>
+                </View>
+            )}
 
             {ended && (
                 <Button title="Скачать протокол (PDF)" variant="secondary" onPress={() => Alert.alert("Протокол PDF", "Функция будет доступна в релизе.")} style={styles.pdfBtn} />
@@ -360,4 +369,23 @@ const styles = StyleSheet.create({
 
     // PDF
     pdfBtn: { marginTop: spacing.md, alignSelf: "center", borderRadius: 999, paddingHorizontal: 28 },
+
+    // Lease wall
+    leaseWall: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        gap: spacing.sm,
+        marginTop: spacing.md,
+        padding: spacing.md,
+        borderRadius: radius.md,
+        borderWidth: 1,
+        borderColor: `${colors.warning}44`,
+        backgroundColor: `${colors.warning}0d`,
+    },
+    leaseWallText: {
+        flex: 1,
+        fontSize: 13,
+        color: colors.warning,
+        lineHeight: 18,
+    },
 });

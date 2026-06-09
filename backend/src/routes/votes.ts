@@ -275,6 +275,17 @@ router.post("/:id/cast", requireAuth, async (req: AuthRequest, res) => {
     if (!optionId) return res.status(400).json({ error: "optionId обязателен" });
 
     try {
+        const [[verif]] = await pool.query<RowDataPacket[]>(
+            `SELECT doc_type FROM verification_requests
+             WHERE user_id = ? AND status = 'approved'
+             ORDER BY reviewed_at DESC LIMIT 1`,
+            [userId],
+        );
+        if (!verif) return res.status(403).json({ error: "Необходима верификация для голосования" });
+        if (verif.doc_type === "lease") {
+            return res.status(403).json({ error: "Голосование доступно только собственникам жилья (ЖК РФ ст. 48)" });
+        }
+
         const [[vote]] = await pool.query<RowDataPacket[]>(
             `SELECT ends_at, closed FROM votes WHERE id = ?`, [voteId],
         );

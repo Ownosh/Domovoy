@@ -1304,10 +1304,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             if (!state.account?.user) {
                 return { ok: false, reason: "Войдите в аккаунт" };
             }
-            if (!isVerifiedResident(state.verification)) {
+            if (!isVerifiedOwner(state.verification)) {
                 return {
                     ok: false,
-                    reason: "Голосование доступно после подтверждения статуса жильца в разделе «Верификация»",
+                    reason: state.verification.status === "approved" && state.verification.docType === "lease"
+                        ? "Голосование доступно только собственникам жилья. Арендаторы не имеют права голоса на ОСС (ЖК РФ ст. 48)."
+                        : "Голосование доступно после подтверждения статуса жильца в разделе «Верификация»",
                 };
             }
             const vote = state.votes.find((v) => v.id === input.voteId);

@@ -231,6 +231,15 @@ export function VerificationScreen({ navigation }: Props) {
                         })}
                     </View>
 
+                    {docType === "lease" && (
+                        <View style={styles.leaseHint}>
+                            <Ionicons name="information-circle-outline" size={16} color={colors.warning} />
+                            <Text style={styles.leaseHintText}>
+                                Арендаторы не участвуют в голосованиях — право голоса на ОСС принадлежит только собственникам (ЖК РФ ст. 48).
+                            </Text>
+                        </View>
+                    )}
+
                     {/* Фото документа */}
                     <View style={styles.sectionHeader}>
                         <View style={[styles.sectionIconWrap, { backgroundColor: colors.primarySoft }]}>
@@ -481,4 +490,21 @@ const styles = StyleSheet.create({
     },
 
     gap: { height: spacing.md },
+
+    leaseHint: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        gap: spacing.sm,
+        padding: spacing.md,
+        borderRadius: radius.md,
+        borderWidth: 1,
+        borderColor: `${colors.warning}44`,
+        backgroundColor: `${colors.warning}0d`,
+    },
+    leaseHintText: {
+        flex: 1,
+        fontSize: 13,
+        color: colors.warning,
+        lineHeight: 18,
+    },
 });

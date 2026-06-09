@@ -6,6 +6,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Button, Card, CollapsibleHint, Input, ScreenLayout, VerificationWall } from "../../components/ui";
 import { uploadFile } from "../../api/files";
 import { useApp, isVerifiedResident } from "../../context/AppContext";
+import type { ModerationData } from "../../api/client";
 import type { NeighborAdCategory } from "../../types";
 import { colors, radius, spacing, textStyles } from "../../theme";
 
@@ -54,6 +55,7 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
         () => (existing?.imageUrls ?? []).map((uri) => ({ kind: "existing" as const, uri })),
     );
     const [err, setErr] = useState("");
+    const [moderation, setModeration] = useState<ModerationData | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
@@ -142,9 +144,11 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
         setSubmitting(false);
         if (!r.ok) {
             setErr("reason" in r ? r.reason : "");
+            setModeration("moderation" in r ? r.moderation ?? null : null);
             return;
         }
         setErr("");
+        setModeration(null);
         navigation.goBack();
     };
 
@@ -223,8 +227,17 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
                         Использовать номер из профиля
                     </Text>
                 </Pressable>
-                {!!err && (
+                {!!err && !moderation && (
                     <Text style={[textStyles.caption, styles.err]}>{err}</Text>
+                )}
+                {!!moderation && (
+                    <View style={styles.modBanner}>
+                        <Ionicons name="warning-outline" size={20} color={colors.warning} style={styles.modIcon} />
+                        <View style={styles.modTexts}>
+                            <Text style={styles.modIssue}>{err}</Text>
+                            <Text style={styles.modSuggestion}>Попробуйте: «{moderation.suggestion}»</Text>
+                        </View>
+                    </View>
                 )}
                 <View style={styles.gapSm} />
                 <Button
@@ -265,6 +278,23 @@ const styles = StyleSheet.create({
     gapLg: { height: spacing.lg },
     area: { minHeight: 100, textAlignVertical: "top" },
     err: { color: colors.danger, marginTop: spacing.sm },
+    modBanner: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        gap: spacing.sm,
+        marginTop: spacing.md,
+        padding: spacing.md,
+        borderRadius: radius.md,
+        backgroundColor: `${colors.warning}12`,
+        borderWidth: 1,
+        borderColor: `${colors.warning}40`,
+        borderLeftWidth: 3,
+        borderLeftColor: colors.warning,
+    },
+    modIcon: { flexShrink: 0, marginTop: 1 },
+    modTexts: { flex: 1, gap: 4 },
+    modIssue: { fontSize: 13, color: colors.warning, fontWeight: "600", lineHeight: 18 },
+    modSuggestion: { fontSize: 12, color: colors.textMuted, lineHeight: 17 },
     checkRow: {
         flexDirection: "row",
         alignItems: "center",

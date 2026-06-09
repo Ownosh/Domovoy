@@ -59,8 +59,14 @@ async function refreshAccessToken(): Promise<string | null> {
     return _refreshPromise;
 }
 
+export type ModerationData = { field: string; issue: string; suggestion: string };
+
 export class ApiError extends Error {
-    constructor(public readonly status: number, message: string) {
+    constructor(
+        public readonly status: number,
+        message: string,
+        public readonly moderation?: ModerationData,
+    ) {
         super(message);
         this.name = "ApiError";
     }
@@ -108,7 +114,7 @@ export async function apiRequest<T>(
 
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new ApiError(res.status, body.error ?? "Ошибка сервера");
+        throw new ApiError(res.status, body.error ?? "Ошибка сервера", body.moderation);
     }
 
     return res.json() as Promise<T>;

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/client";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
+import { moderateContent } from "../utils/moderation";
 
 const router = Router();
 const MASS_APPEAL_THRESHOLD = 5;
@@ -155,6 +156,14 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         return res.status(400).json({ error: "Некорректный тип обращения" });
 
     try {
+        const mod = await moderateContent({ title: title.trim(), body: body.trim() });
+        if (!mod.ok) {
+            return res.status(422).json({
+                error: mod.issue,
+                moderation: { field: mod.field, issue: mod.issue, suggestion: mod.suggestion },
+            });
+        }
+
         const prof = await getProfile(userId);
         if (!prof) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
@@ -251,6 +260,14 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     if (!title?.trim() || !body?.trim())
         return res.status(400).json({ error: "Тема и описание обязательны" });
     try {
+        const mod = await moderateContent({ title: title.trim(), body: body.trim() });
+        if (!mod.ok) {
+            return res.status(422).json({
+                error: mod.issue,
+                moderation: { field: mod.field, issue: mod.issue, suggestion: mod.suggestion },
+            });
+        }
+
         const [result] = await pool.execute<ResultSetHeader>(
             `UPDATE appeals SET title=?, body=?, category=?, entrance=?, status='new', escalated_to_uk=0
              WHERE id=? AND user_id=?`,

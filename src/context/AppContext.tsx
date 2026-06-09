@@ -746,7 +746,7 @@ type AppContextValue = {
         kind: AppealKind;
         entrance?: string;
         imageUrls?: string[];
-    }) => Promise<{ ok: true } | { ok: false; reason: string }>;
+    }) => Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }>;
     joinAppeal: (appealId: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
     deleteAppeal: (id: string) => void;
     archiveAppeal: (id: string) => void;
@@ -763,13 +763,13 @@ type AppContextValue = {
         imageUrls?: string[];
         showPhone: boolean;
         authorPhone?: string;
-    }) => Promise<{ ok: true } | { ok: false; reason: string }>;
+    }) => Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }>;
     extendNeighborAd: (id: string) => void;
     deleteNeighborAd: (id: string) => void;
     reportNeighborAd: (id: string) => void;
-    editNeighborAd: (id: string, data: { title: string; body: string; category: NeighborAdCategory; imageUrls?: string[]; showPhone: boolean; authorPhone?: string }) => Promise<{ ok: true } | { ok: false; reason: string }>;
-    editAppeal: (id: string, data: { title: string; body: string; category: string; entrance?: string; imageUrls?: string[] }) => Promise<{ ok: true } | { ok: false; reason: string }>;
-    editVote: (id: string, data: { topic: string; description: string; visibility: string; optionLabels: string[] }) => Promise<{ ok: true } | { ok: false; reason: string }>;
+    editNeighborAd: (id: string, data: { title: string; body: string; category: NeighborAdCategory; imageUrls?: string[]; showPhone: boolean; authorPhone?: string }) => Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }>;
+    editAppeal: (id: string, data: { title: string; body: string; category: string; entrance?: string; imageUrls?: string[] }) => Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }>;
+    editVote: (id: string, data: { topic: string; description: string; visibility: string; optionLabels: string[] }) => Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }>;
     deleteVote: (id: string) => Promise<void>;
     castVote: (input: {
         voteId: string;
@@ -777,7 +777,7 @@ type AppContextValue = {
     }) => { ok: true } | { ok: false; reason: string };
     addResidentVote: (
         input: ResidentVoteCreateInput,
-    ) => Promise<{ ok: true } | { ok: false; reason: string }>;
+    ) => Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }>;
     environmentRating: EnvironmentRatingSnapshot | null;
     ukStats: Partial<UkTransparencyStats>;
     setEnvironmentRating: (input: EnvironmentRatingSubmitInput) => void;
@@ -1017,7 +1017,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             kind: AppealKind;
             entrance?: string;
             imageUrls?: string[];
-        }): Promise<{ ok: true } | { ok: false; reason: string }> => {
+        }): Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }> => {
             if (!state.account?.user) return { ok: false, reason: "Войдите в аккаунт" };
             try {
                 await apiCreateAppeal({
@@ -1032,7 +1032,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 dispatch({ type: "SET_APPEALS", payload: updated });
                 return { ok: true };
             } catch (e: any) {
-                return { ok: false, reason: e?.message ?? "Ошибка сервера" };
+                return { ok: false, reason: e?.message ?? "Ошибка сервера", moderation: e?.moderation };
             }
         },
         [state.account],
@@ -1160,7 +1160,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             imageUrls?: string[];
             showPhone: boolean;
             authorPhone?: string;
-        }): Promise<{ ok: true } | { ok: false; reason: string }> => {
+        }): Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }> => {
             if (!state.account?.user) {
                 return { ok: false, reason: "Войдите в аккаунт" };
             }
@@ -1185,7 +1185,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 });
                 return { ok: true };
             } catch (e: any) {
-                return { ok: false, reason: e?.message ?? "Ошибка сервера" };
+                return { ok: false, reason: e?.message ?? "Ошибка сервера", moderation: e?.moderation };
             }
         },
         [state.account, state.verification],
@@ -1207,40 +1207,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const editNeighborAd = useCallback(
-        async (id: string, data: { title: string; body: string; category: NeighborAdCategory; imageUrls?: string[]; showPhone: boolean; authorPhone?: string }): Promise<{ ok: true } | { ok: false; reason: string }> => {
+        async (id: string, data: { title: string; body: string; category: NeighborAdCategory; imageUrls?: string[]; showPhone: boolean; authorPhone?: string }): Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }> => {
             try {
                 const updated = await apiEditNeighborAd(id, data);
                 dispatch({ type: "SET_NEIGHBOR_ADS", payload: (await apiFetchNeighborAds()) });
                 void updated;
                 return { ok: true };
             } catch (e: any) {
-                return { ok: false, reason: e?.message ?? "Ошибка сервера" };
+                return { ok: false, reason: e?.message ?? "Ошибка сервера", moderation: e?.moderation };
             }
         }, [],
     );
 
     const editAppeal = useCallback(
-        async (id: string, data: { title: string; body: string; category: string; entrance?: string; imageUrls?: string[] }): Promise<{ ok: true } | { ok: false; reason: string }> => {
+        async (id: string, data: { title: string; body: string; category: string; entrance?: string; imageUrls?: string[] }): Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }> => {
             try {
                 await apiEditAppeal(id, data);
                 const list = await apiFetchAppeals();
                 dispatch({ type: "SET_APPEALS", payload: list });
                 return { ok: true };
             } catch (e: any) {
-                return { ok: false, reason: e?.message ?? "Ошибка сервера" };
+                return { ok: false, reason: e?.message ?? "Ошибка сервера", moderation: e?.moderation };
             }
         }, [],
     );
 
     const editVote = useCallback(
-        async (id: string, data: { topic: string; description: string; visibility: string; optionLabels: string[] }): Promise<{ ok: true } | { ok: false; reason: string }> => {
+        async (id: string, data: { topic: string; description: string; visibility: string; optionLabels: string[] }): Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }> => {
             try {
                 await apiEditVote(id, data);
                 const result = await apiFetchVotes();
                 dispatch({ type: "SET_VOTES", payload: result });
                 return { ok: true };
             } catch (e: any) {
-                return { ok: false, reason: e?.message ?? "Ошибка сервера" };
+                return { ok: false, reason: e?.message ?? "Ошибка сервера", moderation: e?.moderation };
             }
         }, [],
     );
@@ -1307,7 +1307,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const addResidentVote = useCallback(
         async (
             input: ResidentVoteCreateInput,
-        ): Promise<{ ok: true } | { ok: false; reason: string }> => {
+        ): Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }> => {
             if (!state.account?.user) {
                 return { ok: false, reason: "Войдите в аккаунт" };
             }
@@ -1349,7 +1349,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 dispatch({ type: "ADD_VOTE", payload: normalizeVoteRaw(serverVote) });
                 return { ok: true };
             } catch (e: any) {
-                return { ok: false, reason: e?.message ?? "Ошибка создания голосования" };
+                return { ok: false, reason: e?.message ?? "Ошибка создания голосования", moderation: e?.moderation };
             }
         },
         [state.account, state.verification],

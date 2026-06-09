@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/client";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
+import { moderateContent } from "../utils/moderation";
 
 const router = Router();
 
@@ -108,6 +109,14 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         return res.status(400).json({ error: "Срок: 3, 7 или 14 дней" });
 
     try {
+        const mod = await moderateContent({ topic: topic.trim(), description: description.trim() });
+        if (!mod.ok) {
+            return res.status(422).json({
+                error: mod.issue,
+                moderation: { field: mod.field, issue: mod.issue, suggestion: mod.suggestion },
+            });
+        }
+
         const buildingKey = await getBuildingKey(userId);
         if (!buildingKey) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
@@ -173,6 +182,14 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
         return res.status(400).json({ error: "Нужно 2–4 варианта ответа" });
 
     try {
+        const mod = await moderateContent({ topic: topic.trim(), description: description.trim() });
+        if (!mod.ok) {
+            return res.status(422).json({
+                error: mod.issue,
+                moderation: { field: mod.field, issue: mod.issue, suggestion: mod.suggestion },
+            });
+        }
+
         const [[vote]] = await pool.query<RowDataPacket[]>(
             `SELECT id, user_id FROM votes WHERE id = ?`, [voteId],
         );

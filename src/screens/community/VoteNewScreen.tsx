@@ -1,8 +1,10 @@
 import type { CommunityScreenProps } from "../../navigation/types";
 import React, { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { Button, Card, CollapsibleHint, Input, ScreenLayout, VerificationWall } from "../../components/ui";
 import { useApp, isVerifiedResident } from "../../context/AppContext";
+import type { ModerationData } from "../../api/client";
 import type { VoteVisibility } from "../../types";
 import { colors, radius, spacing, textStyles } from "../../theme";
 
@@ -35,6 +37,7 @@ export function VoteNewScreen({ navigation, route }: Props) {
     const [opt4, setOpt4] = useState(existing?.options[3]?.label ?? "");
     const [durationDays, setDurationDays] = useState<3 | 7 | 14>(7);
     const [err, setErr] = useState("");
+    const [moderation, setModeration] = useState<ModerationData | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
     const submit = async () => {
@@ -48,9 +51,11 @@ export function VoteNewScreen({ navigation, route }: Props) {
         setSubmitting(false);
         if (!r.ok) {
             setErr("reason" in r ? r.reason : "");
+            setModeration("moderation" in r ? r.moderation ?? null : null);
             return;
         }
         setErr("");
+        setModeration(null);
         Alert.alert(
             "Голосование создано",
             "Оно появится в ленте дома. Напоминаем: для юридически значимого ОСС используется официальная процедура и ГИС ЖКХ.",
@@ -174,8 +179,17 @@ export function VoteNewScreen({ navigation, route }: Props) {
                     onChangeText={setOpt4}
                     placeholder="Необязательно"
                 />
-                {!!err && (
+                {!!err && !moderation && (
                     <Text style={[textStyles.caption, styles.err]}>{err}</Text>
+                )}
+                {!!moderation && (
+                    <View style={styles.modBanner}>
+                        <Ionicons name="warning-outline" size={20} color={colors.warning} style={styles.modIcon} />
+                        <View style={styles.modTexts}>
+                            <Text style={styles.modIssue}>{err}</Text>
+                            <Text style={styles.modSuggestion}>Попробуйте: «{moderation.suggestion}»</Text>
+                        </View>
+                    </View>
                 )}
                 <View style={styles.gapSm} />
                 <Button
@@ -225,4 +239,21 @@ const styles = StyleSheet.create({
     gapLg: { height: spacing.lg },
     area: { minHeight: 100, textAlignVertical: "top" },
     err: { color: colors.danger, marginTop: spacing.md },
+    modBanner: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        gap: spacing.sm,
+        marginTop: spacing.md,
+        padding: spacing.md,
+        borderRadius: radius.md,
+        backgroundColor: `${colors.warning}12`,
+        borderWidth: 1,
+        borderColor: `${colors.warning}40`,
+        borderLeftWidth: 3,
+        borderLeftColor: colors.warning,
+    },
+    modIcon: { flexShrink: 0, marginTop: 1 },
+    modTexts: { flex: 1, gap: 4 },
+    modIssue: { fontSize: 13, color: colors.warning, fontWeight: "600", lineHeight: 18 },
+    modSuggestion: { fontSize: 12, color: colors.textMuted, lineHeight: 17 },
 });

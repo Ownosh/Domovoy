@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/client";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
+import { moderateContent } from "../utils/moderation";
 
 const router = Router();
 
@@ -107,6 +108,14 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         return res.status(400).json({ error: "Некорректная категория" });
 
     try {
+        const mod = await moderateContent({ title: title.trim(), body: body.trim() });
+        if (!mod.ok) {
+            return res.status(422).json({
+                error: mod.issue,
+                moderation: { field: mod.field, issue: mod.issue, suggestion: mod.suggestion },
+            });
+        }
+
         const buildingKey = await getBuildingKey(userId);
         if (!buildingKey) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
@@ -160,6 +169,14 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     if (category && !VALID_CATEGORIES.includes(category))
         return res.status(400).json({ error: "Некорректная категория" });
     try {
+        const mod = await moderateContent({ title: title.trim(), body: body.trim() });
+        if (!mod.ok) {
+            return res.status(422).json({
+                error: mod.issue,
+                moderation: { field: mod.field, issue: mod.issue, suggestion: mod.suggestion },
+            });
+        }
+
         const [result] = await pool.execute<ResultSetHeader>(
             `UPDATE neighbor_ads SET title=?, body=?, category=COALESCE(?,category),
              show_phone=?, author_phone=?

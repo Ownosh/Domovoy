@@ -83,15 +83,42 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 CREATE TABLE IF NOT EXISTS verification_requests (
   id               BIGINT UNSIGNED                                  NOT NULL AUTO_INCREMENT,
   user_id          BIGINT UNSIGNED                                  NOT NULL,
+  apartment_id     BIGINT UNSIGNED                                  DEFAULT NULL,
   status           ENUM('none','pending','approved','rejected')     NOT NULL DEFAULT 'none',
   doc_type         ENUM('lease','ownership')                        DEFAULT NULL,
+  photo_url        TEXT                                             DEFAULT NULL,
+  building_key     VARCHAR(120)                                     DEFAULT NULL,
   submitted_at     DATETIME                                         DEFAULT NULL,
   reviewer_comment TEXT                                             DEFAULT NULL,
+  comment          TEXT                                             DEFAULT NULL,
+  reviewed_at      DATETIME                                         DEFAULT NULL,
   created_at       DATETIME                                         NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at       DATETIME                                         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  CONSTRAINT fk_vr_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  INDEX idx_vr_user_created (user_id, created_at DESC)
+  CONSTRAINT fk_vr_user      FOREIGN KEY (user_id)      REFERENCES users(id)            ON DELETE CASCADE,
+  CONSTRAINT fk_vr_apartment FOREIGN KEY (apartment_id) REFERENCES user_apartments(id)  ON DELETE SET NULL,
+  INDEX idx_vr_user_created (user_id, created_at DESC),
+  INDEX idx_vr_apartment    (apartment_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+--  ДОПОЛНИТЕЛЬНЫЕ КВАРТИРЫ ПОЛЬЗОВАТЕЛЯ
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS user_apartments (
+  id                 BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id            BIGINT UNSIGNED NOT NULL,
+  building_key       VARCHAR(120)    NOT NULL,
+  apartment          VARCHAR(20)     NOT NULL DEFAULT '',
+  entrance           INT             DEFAULT NULL,
+  apartment_area_sqm DECIMAL(6,2)   DEFAULT NULL,
+  created_at         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT fk_ua_user     FOREIGN KEY (user_id)      REFERENCES users(id)               ON DELETE CASCADE,
+  CONSTRAINT fk_ua_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE,
+  INDEX idx_ua_user     (user_id),
+  INDEX idx_ua_building (building_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================

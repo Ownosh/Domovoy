@@ -367,6 +367,8 @@ export async function migrate(): Promise<void> {
     await pool.query(`ALTER TABLE verification_requests ADD COLUMN IF NOT EXISTS building_key VARCHAR(120) DEFAULT NULL`).catch(() => {});
     await pool.query(`ALTER TABLE verification_requests ADD COLUMN IF NOT EXISTS comment TEXT DEFAULT NULL`).catch(() => {});
     await pool.query(`ALTER TABLE verification_requests ADD COLUMN IF NOT EXISTS reviewed_at DATETIME DEFAULT NULL`).catch(() => {});
+    // Ссылка на конкретную квартиру (для верификации доп. квартир)
+    await pool.query(`ALTER TABLE verification_requests ADD COLUMN IF NOT EXISTS apartment_id BIGINT UNSIGNED DEFAULT NULL`).catch(() => {});
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS neighbor_ad_photos (
@@ -435,6 +437,33 @@ export async function migrate(): Promise<void> {
         ENUM('new','under_review','published','archived','rejected','under_review_appeal')
         NOT NULL DEFAULT 'new'
     `).catch(() => {});
+
+    // Таблица дополнительных квартир пользователя (без полей верификации — они в verification_requests)
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS user_apartments (
+            id                 BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            user_id            BIGINT UNSIGNED NOT NULL,
+            building_key       VARCHAR(120)    NOT NULL,
+            apartment          VARCHAR(20)     NOT NULL DEFAULT '',
+            entrance           INT             DEFAULT NULL,
+            apartment_area_sqm DECIMAL(6,2)   DEFAULT NULL,
+            created_at         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            CONSTRAINT fk_ua_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_ua_user     (user_id),
+            INDEX idx_ua_building (building_key)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    // Удаляем устаревшие поля верификации если они есть (из ранней версии миграции)
+    await pool.query(`ALTER TABLE user_apartments DROP COLUMN IF EXISTS doc_type`).catch(() => {});
+    await pool.query(`ALTER TABLE user_apartments DROP COLUMN IF EXISTS doc_url`).catch(() => {});
+    await pool.query(`ALTER TABLE user_apartments DROP COLUMN IF EXISTS verification_status`).catch(() => {});
+    await pool.query(`ALTER TABLE user_apartments DROP COLUMN IF EXISTS reviewer_comment`).catch(() => {});
+    await pool.query(`ALTER TABLE user_apartments DROP COLUMN IF EXISTS submitted_at`).catch(() => {});
+
+    // Ссылка на активную квартиру пользователя
+    await pool.query(`ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS active_apartment_id BIGINT UNSIGNED DEFAULT NULL`).catch(() => {});
 
     console.log("Migration complete");
 }

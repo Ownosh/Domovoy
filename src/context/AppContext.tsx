@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { AppState } from "react-native";
+import { AppState as RNAppState } from "react-native";
 import { apiLogin, apiLogout, apiRegister, apiChangePassword } from "../api/auth";
 import { apiFetchNews } from "../api/news";
 import { apiFetchVotes, apiCreateVote, apiCastVote, apiEditVote, apiDeleteVote } from "../api/votes";
@@ -11,6 +11,7 @@ import { apiFetchBuildingInfo, apiFetchBuildingPhotos, apiFetchBuildingSpecs, ap
 import { apiFetchDistrictPois } from "../api/district";
 import { apiFetchNotifications, apiMarkNotificationRead, apiMarkAllNotificationsRead } from "../api/notifications";
 import { apiFetchVerificationStatus, apiSubmitVerification } from "../api/verification";
+import { apiFetchApartments, apiAddApartment, apiActivateApartment, apiDeleteApartment } from "../api/apartments";
 import React, {
     createContext,
     useCallback,
@@ -45,6 +46,7 @@ import type {
     Profile,
     ResidentVoteCreateInput,
     User,
+    UserApartment,
     VerificationState,
     Vote,
     VoteCast,
@@ -102,6 +104,7 @@ type AppState = {
     houseCalendar: HouseCalendarActivity[];
     ukContacts: UkContacts | null;
     houseStatus: HouseStatusItem[];
+    apartments: UserApartment[];
 };
 
 const defaultPrefs: NotificationPrefs = {
@@ -133,6 +136,7 @@ const initialState: AppState = {
     houseCalendar: [],
     ukContacts: null,
     houseStatus: [],
+    apartments: [],
 };
 
 type Action =
@@ -188,7 +192,11 @@ type Action =
     | { type: "SET_NOTIFICATIONS"; payload: AppNotification[] }
     | { type: "SET_DISTRICT"; payload: { pois: DistrictPoi[]; anchor: { lat: number; lng: number } | null } }
     | { type: "SET_HOUSE_DATA"; payload: { info?: BuildingInfo; photos?: string[]; specs?: BuildingSpec[]; schedule?: HouseScheduleItem[]; calendar?: HouseCalendarActivity[]; contacts?: UkContacts | null; status?: HouseStatusItem[] } }
-    | { type: "REPLACE_APPEAL"; payload: Appeal };
+    | { type: "REPLACE_APPEAL"; payload: Appeal }
+    | { type: "SET_APARTMENTS"; payload: UserApartment[] }
+    | { type: "ADD_APARTMENT"; payload: UserApartment }
+    | { type: "ACTIVATE_APARTMENT"; payload: string }
+    | { type: "REMOVE_APARTMENT"; payload: string };
 
 function appealRecipientUserIds(appeal: Appeal): string[] {
     const ids = new Set<string>();
@@ -469,6 +477,23 @@ function reducer(state: AppState, action: Action): AppState {
             appeals[idx] = action.payload;
             return { ...state, appeals };
         }
+        case "SET_APARTMENTS":
+            return { ...state, apartments: action.payload };
+        case "ADD_APARTMENT":
+            return { ...state, apartments: [...state.apartments, action.payload] };
+        case "ACTIVATE_APARTMENT":
+            return {
+                ...state,
+                apartments: state.apartments.map((a) => ({
+                    ...a,
+                    isActive: a.id === action.payload,
+                })),
+            };
+        case "REMOVE_APARTMENT":
+            return {
+                ...state,
+                apartments: state.apartments.filter((a) => a.id !== action.payload),
+            };
         default:
             return state;
     }
@@ -614,6 +639,7 @@ function mergeHydrated(parsed: Partial<AppState>): AppState {
         ukContacts: parsed.ukContacts ?? null,
         houseStatus: parsed.houseStatus ?? [],
         ukStats: parsed.ukStats ?? {},
+        apartments: [],
     };
 }
 
@@ -790,6 +816,18 @@ type AppContextValue = {
     houseCalendar: HouseCalendarActivity[];
     ukContacts: UkContacts | null;
     houseStatus: HouseStatusItem[];
+    apartments: UserApartment[];
+    fetchApartments: () => Promise<void>;
+    addApartment: (data: {
+        buildingKey: string;
+        apartment: string;
+        entrance?: number;
+        apartmentAreaSqm?: number;
+        docType: "lease" | "ownership";
+        docUrl: string;
+    }) => Promise<{ ok: true } | { ok: false; reason: string }>;
+    activateApartment: (id: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
+    removeApartment: (id: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -863,6 +901,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         apiFetchVerificationStatus()
             .then((v) => dispatch({ type: "SET_VERIFICATION_STATUS", payload: v }))
             .catch(() => {});
+        apiFetchApartments()
+            .then((list) => dispatch({ type: "SET_APARTMENTS", payload: list }))
+            .catch(() => {});
         apiFetchDistrictPois()
             .then(({ anchor, pois }) => dispatch({ type: "SET_DISTRICT", payload: { pois, anchor } }))
             .catch(() => {});
@@ -893,7 +934,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         registerPushToken().catch(() => {});
         fetchAllData();
 
-        const sub = AppState.addEventListener("change", (next) => {
+        const sub = RNAppState.addEventListener("change", (next) => {
             if (next === "active") fetchAllData();
         });
 
@@ -1384,6 +1425,80 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }).catch(() => {});
     }, []);
 
+    const fetchApartments = useCallback(async () => {
+        try {
+            const list = await apiFetchApartments();
+            dispatch({ type: "SET_APARTMENTS", payload: list });
+        } catch {
+            // ignore
+        }
+    }, []);
+
+    const addApartment = useCallback(
+        async (data: {
+            buildingKey: string;
+            apartment: string;
+            entrance?: number;
+            apartmentAreaSqm?: number;
+            docType: "lease" | "ownership";
+            docUrl: string;
+        }): Promise<{ ok: true } | { ok: false; reason: string }> => {
+            try {
+                const apt = await apiAddApartment(data);
+                dispatch({ type: "ADD_APARTMENT", payload: apt });
+                return { ok: true };
+            } catch (e: any) {
+                return { ok: false, reason: e?.message ?? "Ошибка добавления квартиры" };
+            }
+        },
+        [],
+    );
+
+    const activateApartment = useCallback(
+        async (id: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
+            try {
+                await apiActivateApartment(id);
+                dispatch({ type: "ACTIVATE_APARTMENT", payload: id });
+                // Обновляем профиль — берём данные из обновлённого списка
+                const list = await apiFetchApartments();
+                dispatch({ type: "SET_APARTMENTS", payload: list });
+                const active = list.find((a) => a.id === id);
+                if (active) {
+                    dispatch({
+                        type: "UPDATE_PROFILE",
+                        payload: {
+                            building: active.buildingKey,
+                            buildingName: active.buildingName,
+                            apartment: active.apartment,
+                            entrance: active.entrance ?? undefined,
+                            apartmentAreaSqm: active.apartmentAreaSqm ?? undefined,
+                        },
+                    });
+                }
+                return { ok: true };
+            } catch (e: any) {
+                return { ok: false, reason: e?.message ?? "Ошибка переключения квартиры" };
+            }
+        },
+        [],
+    );
+
+    const removeApartment = useCallback(
+        async (id: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
+            try {
+                await apiDeleteApartment(id);
+                dispatch({ type: "REMOVE_APARTMENT", payload: id });
+                // Перезагружаем список чтобы получить актуальный isActive
+                const list = await apiFetchApartments();
+                dispatch({ type: "SET_APARTMENTS", payload: list });
+                return { ok: true };
+            } catch (e: any) {
+                return { ok: false, reason: e?.message ?? "Ошибка удаления квартиры" };
+            }
+        },
+        [],
+    );
+
     const visibleNotifications = useMemo(() => {
         const uid = state.account?.user.id;
         return state.notifications.filter((n) => {
@@ -1471,6 +1586,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             houseCalendar: state.houseCalendar,
             ukContacts: state.ukContacts,
             houseStatus: state.houseStatus,
+            apartments: state.apartments,
+            fetchApartments,
+            addApartment,
+            activateApartment,
+            removeApartment,
         }),
         [
             hydrated,
@@ -1525,6 +1645,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             state.houseCalendar,
             state.ukContacts,
             state.houseStatus,
+            state.apartments,
+            fetchApartments,
+            addApartment,
+            activateApartment,
+            removeApartment,
         ],
     );
 

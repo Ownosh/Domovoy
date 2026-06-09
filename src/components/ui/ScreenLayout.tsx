@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, spacing, textStyles } from "../../theme";
+import { ApartmentSwitcher } from "./ApartmentSwitcher";
 
 type Props = {
     title?: string;
@@ -24,6 +25,8 @@ type Props = {
     centerHeader?: boolean;
     onRefresh?: () => void;
     refreshing?: boolean;
+    /** Показывать переключатель квартир справа в шапке (по умолч. true для экранов без кнопки назад) */
+    showApartmentSwitcher?: boolean;
 };
 
 export function ScreenLayout({
@@ -37,7 +40,11 @@ export function ScreenLayout({
     centerHeader,
     onRefresh,
     refreshing = false,
+    showApartmentSwitcher,
 }: Props) {
+    // Показываем переключатель по умолчанию на верхних экранах (без кнопки назад),
+    // если пользователь явно не передал rightAccessory и не отключил его
+    const showSwitcher = showApartmentSwitcher ?? (!onBack && !rightAccessory);
     const body = (
         <View
             style={[
@@ -108,6 +115,8 @@ export function ScreenLayout({
                         </View>
                         {rightAccessory ? (
                             <View style={styles.rightAccessory}>{rightAccessory}</View>
+                        ) : showSwitcher ? (
+                            <View style={styles.rightAccessory}><ApartmentSwitcher /></View>
                         ) : null}
                     </View>
                 )}

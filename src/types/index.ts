@@ -346,3 +346,20 @@ export type EmergencyContactLine = {
     /** Только цифры и + для tel: */
     phone: string;
 };
+
+export type ApartmentVerificationStatus = "pending" | "approved" | "rejected";
+
+export type UserApartment = {
+    id: string;
+    buildingKey: string;
+    buildingName: string;
+    apartment: string;
+    entrance: number | null;
+    apartmentAreaSqm: number | null;
+    /** null — заявка ещё не подана */
+    docType: "lease" | "ownership" | null;
+    verificationStatus: ApartmentVerificationStatus | "none";
+    reviewerComment: string | null;
+    submittedAt: string | null;
+    isActive: boolean;
+};

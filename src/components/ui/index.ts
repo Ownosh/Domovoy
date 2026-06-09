@@ -13,3 +13,4 @@ export { AppealStatusBadge, VoteStatusBadge, AdStatusBadge, VerificationStatusBa
 export { appealStatusColor, voteStatusColor, adStatusColor } from "./StatusBadge";
 export { ToggleRow } from "./ToggleRow";
 export { UkPublicStatsCard } from "./UkPublicStatsCard";
+export { ApartmentSwitcher } from "./ApartmentSwitcher";

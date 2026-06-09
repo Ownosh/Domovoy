@@ -17,6 +17,7 @@ import imagekitRoutes from "./routes/imagekit";
 import notificationsRoutes from "./routes/notifications";
 import verificationRoutes from "./routes/verification";
 import filesRoutes from "./routes/files";
+import apartmentsRoutes from "./routes/apartments";
 
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
@@ -50,6 +51,7 @@ app.use("/api/imagekit", imagekitRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/verification", verificationRoutes);
 app.use("/api/files", filesRoutes);
+app.use("/api/apartments", apartmentsRoutes);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 

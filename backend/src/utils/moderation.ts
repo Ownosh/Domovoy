@@ -20,9 +20,22 @@ export type ModerationResult =
     | { ok: true }
     | { ok: false; field: string; issue: string; suggestion: string };
 
+type ModerationProblem = {
+    фрагмент: string;
+    тип: "оскорбление" | "мат" | "грубость" | "угроза";
+    замена: string;
+};
+
 type YandexModerationResponse = {
     найдено: boolean;
-    проблемы: Array<{ слово: string; замена: string }>;
+    проблемы: ModerationProblem[];
+};
+
+const TYPE_LABELS: Record<ModerationProblem["тип"], string> = {
+    мат:        "нецензурная лексика",
+    оскорбление: "оскорбление",
+    грубость:   "грубость",
+    угроза:     "угроза",
 };
 
 export async function moderateContent(fields: {
@@ -35,16 +48,15 @@ export async function moderateContent(fields: {
     if (!client) return { ok: true };
 
     const entries: Array<{ key: string; text: string }> = [];
-    if (fields.title) entries.push({ key: "title", text: fields.title });
-    if (fields.body) entries.push({ key: "body", text: fields.body });
-    if (fields.topic) entries.push({ key: "topic", text: fields.topic });
+    if (fields.title)       entries.push({ key: "title",       text: fields.title });
+    if (fields.body)        entries.push({ key: "body",        text: fields.body });
+    if (fields.topic)       entries.push({ key: "topic",       text: fields.topic });
     if (fields.description) entries.push({ key: "description", text: fields.description });
     if (!entries.length) return { ok: true };
 
     const promptId = process.env.YANDEX_PROMPT_ID;
     if (!promptId) return { ok: true };
 
-    // Отправляем только текст — инструкции уже в промт-шаблоне Yandex
     const combinedText = entries.map((e) => e.text).join(" ");
 
     try {
@@ -65,21 +77,24 @@ export async function moderateContent(fields: {
         const first = parsed.проблемы[0];
         let field = entries[0].key;
         for (const entry of entries) {
-            if (entry.text.toLowerCase().includes(first.слово.toLowerCase())) {
+            if (entry.text.toLowerCase().includes(first.фрагмент.toLowerCase())) {
                 field = entry.key;
                 break;
             }
         }
 
-        const wordList = parsed.проблемы.map((p) => `«${p.слово}»`).join(", ");
+        const issueList = parsed.проблемы
+            .map((p) => `«${p.фрагмент}» (${TYPE_LABELS[p.тип] ?? p.тип})`)
+            .join(", ");
+
         const replacements = parsed.проблемы
-            .map((p) => `«${p.слово}» → «${p.замена}»`)
+            .map((p) => `«${p.фрагмент}» → «${p.замена}»`)
             .join("; ");
 
         return {
             ok: false,
             field,
-            issue: `Обнаружены недопустимые выражения: ${wordList}`,
+            issue: `Обнаружено нежелательное содержание: ${issueList}`,
             suggestion: replacements,
         };
     } catch (err) {

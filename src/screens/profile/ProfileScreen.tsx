@@ -22,7 +22,8 @@ type RowDef = {
         | "AppealHistory"
         | "NotificationSettings"
         | "Contacts"
-        | "DeleteAccount";
+        | "DeleteAccount"
+        | "Apartments";
     danger?: boolean;
 };
 
@@ -31,82 +32,92 @@ type Section = {
     rows: RowDef[];
 };
 
-const sections: Section[] = [
-    {
-        label: "Аккаунт",
-        rows: [
-            {
-                icon: "person-outline",
-                title: "Личные данные",
-                subtitle: "Имя, телефон, адрес квартиры",
-                iconColor: colors.info,
-                iconBg: "rgba(91, 159, 212, 0.15)",
-                target: "EditProfile",
-            },
-            {
-                icon: "key-outline",
-                title: "Смена пароля",
-                subtitle: "Обновить пароль для входа",
-                iconColor: colors.accent,
-                iconBg: colors.accentSoft,
-                target: "ChangePassword",
-            },
-            {
-                icon: "shield-checkmark-outline",
-                title: "Верификация",
-                subtitle: "Подтверждение права на жильё",
-                iconColor: colors.primary,
-                iconBg: colors.primarySoft,
-                target: "Verification",
-            },
-        ],
-    },
-    {
-        label: "Активность",
-        rows: [
-            {
-                icon: "archive-outline",
-                title: "Архив",
-                subtitle: "Завершённые обращения",
-                iconColor: colors.textMuted,
-                iconBg: "rgba(154, 165, 181, 0.12)",
-                target: "AppealHistory",
-            },
-            {
-                icon: "notifications-outline",
-                title: "Уведомления",
-                subtitle: "Типы и способы оповещений",
-                iconColor: colors.warning,
-                iconBg: "rgba(232, 162, 61, 0.12)",
-                target: "NotificationSettings",
-            },
-            {
-                icon: "business-outline",
-                title: "Контакты УК",
-                subtitle: "Телефон и часы работы",
-                iconColor: colors.info,
-                iconBg: "rgba(91, 159, 212, 0.12)",
-                target: "Contacts",
-            },
-        ],
-    },
-    {
-        rows: [
-            {
-                icon: "trash-outline",
-                title: "Удалить аккаунт",
-                subtitle: "Удаление профиля и данных",
-                iconColor: colors.danger,
-                iconBg: colors.dangerSoft,
-                target: "DeleteAccount",
-                danger: true,
-            },
-        ],
-    },
-];
-
 export function ProfileScreen({ navigation }: Props) {
-    const { profile, user, logout, verification, refreshFeed } = useApp();
+    const { profile, user, logout, verification, refreshFeed, apartments } = useApp();
+
+    const sections: Section[] = [
+        {
+            label: "Аккаунт",
+            rows: [
+                {
+                    icon: "person-outline",
+                    title: "Личные данные",
+                    subtitle: "Имя, телефон, адрес квартиры",
+                    iconColor: colors.info,
+                    iconBg: "rgba(91, 159, 212, 0.15)",
+                    target: "EditProfile",
+                },
+                {
+                    icon: "key-outline",
+                    title: "Смена пароля",
+                    subtitle: "Обновить пароль для входа",
+                    iconColor: colors.accent,
+                    iconBg: colors.accentSoft,
+                    target: "ChangePassword",
+                },
+                {
+                    icon: "shield-checkmark-outline",
+                    title: "Верификация",
+                    subtitle: "Подтверждение права на жильё",
+                    iconColor: colors.primary,
+                    iconBg: colors.primarySoft,
+                    target: "Verification",
+                },
+                {
+                    icon: "copy-outline",
+                    title: "Мои квартиры",
+                    subtitle: apartments.length > 0
+                        ? `${apartments.length} ${apartments.length === 1 ? "квартира" : apartments.length < 5 ? "квартиры" : "квартир"}`
+                        : "Добавить адрес или переключить активный",
+                    iconColor: colors.info,
+                    iconBg: "rgba(91, 159, 212, 0.15)",
+                    target: "Apartments",
+                },
+            ],
+        },
+        {
+            label: "Активность",
+            rows: [
+                {
+                    icon: "archive-outline",
+                    title: "Архив",
+                    subtitle: "Завершённые обращения",
+                    iconColor: colors.textMuted,
+                    iconBg: "rgba(154, 165, 181, 0.12)",
+                    target: "AppealHistory",
+                },
+                {
+                    icon: "notifications-outline",
+                    title: "Уведомления",
+                    subtitle: "Типы и способы оповещений",
+                    iconColor: colors.warning,
+                    iconBg: "rgba(232, 162, 61, 0.12)",
+                    target: "NotificationSettings",
+                },
+                {
+                    icon: "business-outline",
+                    title: "Контакты УК",
+                    subtitle: "Телефон и часы работы",
+                    iconColor: colors.info,
+                    iconBg: "rgba(91, 159, 212, 0.12)",
+                    target: "Contacts",
+                },
+            ],
+        },
+        {
+            rows: [
+                {
+                    icon: "trash-outline",
+                    title: "Удалить аккаунт",
+                    subtitle: "Удаление профиля и данных",
+                    iconColor: colors.danger,
+                    iconBg: colors.dangerSoft,
+                    target: "DeleteAccount",
+                    danger: true,
+                },
+            ],
+        },
+    ];
 
     const onRefresh = useCallback(() => { void refreshFeed(); }, [refreshFeed]);
 

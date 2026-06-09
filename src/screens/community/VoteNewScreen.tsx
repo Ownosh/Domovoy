@@ -64,7 +64,6 @@ export function VoteNewScreen({ navigation, route }: Props) {
             subtitle="Инициатива жильца · видно вашему дому"
             onBack={() => navigation.goBack()}
         >
-            <CollapsibleHint text="Укажите тему, пояснение и варианты ответа (от 2 до 4). Создавать опрос могут жильцы с подтверждённой верификацией; вес по площади берётся из профиля. Это не заменяет официальное ОСС." />
             <Card style={styles.voteCard}>
                 <View style={styles.cardHeader}>
                     <View style={styles.voteBadge}>
@@ -178,9 +177,11 @@ export function VoteNewScreen({ navigation, route }: Props) {
                 {!!err && (
                     <Text style={[textStyles.caption, styles.err]}>{err}</Text>
                 )}
-                <View style={styles.gapLg} />
+                <CollapsibleHint text="Укажите тему, пояснение и варианты ответа (от 2 до 4). Создавать опрос могут жильцы с подтверждённой верификацией; вес по площади берётся из профиля. Это не заменяет официальное ОСС." defaultOpen={false} />
+                <View style={styles.gapSm} />
                 <Button
                     title={submitting ? "Сохранение..." : editId ? "Сохранить" : "Опубликовать"}
+                    variant="info"
                     onPress={() => { void submit(); }}
                     disabled={submitting}
                     style={styles.submitBtn}
@@ -193,16 +194,16 @@ export function VoteNewScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
     submitBtn: { alignSelf: "flex-end", borderRadius: 999, paddingHorizontal: 28 },
     variantLabel: { color: colors.textDim, fontSize: 10, letterSpacing: 0.6 },
-    voteCard: { borderLeftWidth: 3, borderLeftColor: colors.accent },
+    voteCard: { borderLeftWidth: 3, borderLeftColor: colors.info },
     cardHeader: { marginBottom: spacing.md },
     voteBadge: {
         alignSelf: "flex-start",
         paddingHorizontal: spacing.sm,
         paddingVertical: 3,
         borderRadius: 6,
-        backgroundColor: "rgba(212, 168, 83, 0.12)",
+        backgroundColor: `${colors.info}18`,
     },
-    voteBadgeText: { fontSize: 11, fontWeight: "600", color: colors.accent },
+    voteBadgeText: { fontSize: 11, fontWeight: "600", color: colors.info },
     label: { color: colors.textMuted, marginTop: spacing.md, marginBottom: spacing.sm },
     row: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
     chip: {
@@ -214,11 +215,11 @@ const styles = StyleSheet.create({
         backgroundColor: colors.bgElevated,
     },
     chipOn: {
-        borderColor: colors.primary,
-        backgroundColor: colors.primarySoft,
+        borderColor: colors.info,
+        backgroundColor: `${colors.info}15`,
     },
     chipText: { color: colors.textMuted },
-    chipTextOn: { color: colors.primary },
+    chipTextOn: { color: colors.info },
     gap: { height: spacing.md },
     gapSm: { height: spacing.sm },
     gapLg: { height: spacing.lg },

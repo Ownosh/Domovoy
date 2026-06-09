@@ -1,9 +1,11 @@
 export { AddressAutocomplete } from "./AddressAutocomplete";
-export { FeedAuthorRow } from "./FeedAuthorRow";
+export { FeedAuthorRow, AvatarThumb } from "./FeedAuthorRow";
 export { NotificationBell } from "./NotificationBell";
 export { VerificationWall } from "./VerificationWall";
 export { Button } from "./Button";
 export { CollapsibleHint } from "./CollapsibleHint";
+export { StatusTimeline } from "./StatusTimeline";
+export type { TimelineStep } from "./StatusTimeline";
 export { Card } from "./Card";
 export { Input } from "./Input";
 export { ScreenLayout } from "./ScreenLayout";

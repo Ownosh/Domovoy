@@ -13,7 +13,9 @@ import {
     View,
 } from "react-native";
 
-import { AppealStatusBadge, Card, FeedAuthorRow, ScreenLayout } from "../../components/ui";
+import { AppealStatusBadge, VoteStatusBadge, AdStatusBadge, Card, FeedAuthorRow, ScreenLayout } from "../../components/ui";
+import { appealStatusColor, voteStatusColor, adStatusColor } from "../../components/ui/StatusBadge";
+import { voteEffectiveStatus, adEffectiveStatus } from "../../utils/appeals";
 import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type {
     AuthenticatedRootParamList,
@@ -28,6 +30,7 @@ import { colors, radius, spacing, textStyles } from "../../theme";
 
 const SCREEN_W = Dimensions.get("window").width;
 const SCREEN_H = Dimensions.get("window").height;
+const NEWS_COLOR = "#1a5f9a";
 
 const viewerStyles = StyleSheet.create({
     backdrop: {
@@ -726,7 +729,7 @@ function FeedNewsRow({ item, onOpenViewer, onOpen }: { item: NewsItem; onOpenVie
             <Card style={[styles.feedCard, styles.feedCardNews]} padded>
                 <View style={styles.cardTop}>
                     <View style={[styles.typeBadge, styles.typeBadgeNews]}>
-                        <Text style={[styles.typeBadgeText, { color: colors.info }]}>Новости УК</Text>
+                        <Text style={[styles.typeBadgeText, { color: NEWS_COLOR }]}>Новости УК</Text>
                     </View>
                     <Text style={styles.cardDate}>{formatNewsDate(item.date)}</Text>
                 </View>
@@ -756,12 +759,15 @@ function FeedNewsRow({ item, onOpenViewer, onOpen }: { item: NewsItem; onOpenVie
 }
 
 function FeedAppealRow({ appeal, onOpen }: { appeal: Appeal; onOpen: () => void }) {
+    const sc = appealStatusColor[appeal.status] ?? colors.warning;
     return (
         <Pressable onPress={onOpen}>
-            <Card style={[styles.feedCard, styles.feedCardAppeal]} padded>
+            <Card style={[styles.feedCard, { borderLeftWidth: 3, borderLeftColor: sc }]} padded>
                 <View style={styles.cardTop}>
-                    <View style={[styles.typeBadge, styles.typeBadgeAppeal]}>
-                        <Text style={[styles.typeBadgeText, { color: colors.warning }]}>Коллективное обращение</Text>
+                    <View style={[styles.typeBadge, { backgroundColor: `${sc}18` }]}>
+                        <Text style={[styles.typeBadgeText, { color: sc }]}>
+                            {appeal.kind === "collective" ? "Коллективное обращение" : "Обращение"}
+                        </Text>
                     </View>
                     <Text style={styles.cardDate}>{formatDate(appeal.createdAt)}</Text>
                 </View>
@@ -769,16 +775,10 @@ function FeedAppealRow({ appeal, onOpen }: { appeal: Appeal; onOpen: () => void 
                 <Text style={[textStyles.caption, styles.feedExcerpt]} numberOfLines={2}>{appeal.body}</Text>
                 <View style={styles.cardBottom}>
                     <AppealStatusBadge status={appeal.status} />
-                    {appeal.entrance ? (
-                        <Text style={styles.cardMeta}>подъезд {appeal.entrance}</Text>
-                    ) : null}
+                    {appeal.entrance ? <Text style={styles.cardMeta}>подъезд {appeal.entrance}</Text> : null}
                 </View>
                 {appeal.authorName && (
-                    <FeedAuthorRow
-                        name={appeal.authorName}
-                        photo={appeal.authorPhoto}
-                        sub={appeal.authorApartment ? `кв. ${appeal.authorApartment}` : undefined}
-                    />
+                    <FeedAuthorRow name={appeal.authorName} photo={appeal.authorPhoto} sub={appeal.authorApartment ? `кв. ${appeal.authorApartment}` : undefined} />
                 )}
             </Card>
         </Pressable>
@@ -786,27 +786,25 @@ function FeedAppealRow({ appeal, onOpen }: { appeal: Appeal; onOpen: () => void 
 }
 
 function FeedVoteRow({ vote, onOpen }: { vote: Vote; onOpen: () => void }) {
-    const ended = vote.closed || new Date(vote.endsAt).getTime() <= Date.now();
+    const vs = voteEffectiveStatus(vote);
+    const sc = voteStatusColor[vs] ?? colors.accent;
     return (
         <Pressable onPress={onOpen}>
-            <Card style={[styles.feedCard, styles.feedCardVote]} padded>
+            <Card style={[styles.feedCard, { borderLeftWidth: 3, borderLeftColor: sc }]} padded>
                 <View style={styles.cardTop}>
-                    <View style={[styles.typeBadge, styles.typeBadgeVote]}>
-                        <Text style={[styles.typeBadgeText, { color: colors.accent }]}>Голосование</Text>
+                    <View style={[styles.typeBadge, { backgroundColor: `${sc}18` }]}>
+                        <Text style={[styles.typeBadgeText, { color: sc }]}>Голосование</Text>
                     </View>
                     <Text style={styles.cardDate}>{formatDate(vote.createdAt)}</Text>
                 </View>
                 <Text style={[textStyles.subtitle, styles.feedTitle]}>{vote.topic}</Text>
                 <View style={styles.cardBottom}>
-                    <View style={[styles.statusDot, { backgroundColor: ended ? colors.textDim : colors.primary }]} />
+                    <VoteStatusBadge status={vs} />
                     <Text style={styles.cardMeta} numberOfLines={1}>
-                        {ended ? "Завершено" : "Активно"} · {vote.visibility === "open" ? "открытое" : "тайное"}
+                        {vote.visibility === "open" ? "открытое" : "тайное"}
                     </Text>
                 </View>
-                <FeedAuthorRow
-                    name={vote.authorName || vote.createdByLabel || "Житель"}
-                    photo={vote.authorPhoto}
-                />
+                <FeedAuthorRow name={vote.authorName || vote.createdByLabel || "Житель"} photo={vote.authorPhoto} />
             </Card>
         </Pressable>
     );
@@ -817,10 +815,12 @@ function FeedAdRow({ ad, onOpen }: { ad: NeighborAd; onOpen: () => void }) {
     const [viewerIndex, setViewerIndex] = useState(0);
     const openViewer = (i: number) => { setViewerIndex(i); setViewerVisible(true); };
     const multi = ad.imageUrls.length > 1;
+    const adStatus = adEffectiveStatus(ad);
+    const sc = adStatusColor[adStatus] ?? colors.primary;
 
     return (
         <Pressable onPress={onOpen}>
-            <Card style={[styles.feedCard, styles.feedCardAd]} padded>
+            <Card style={[styles.feedCard, { borderLeftWidth: 3, borderLeftColor: sc }]} padded>
                 <PhotoViewer
                     urls={ad.imageUrls}
                     initialIndex={viewerIndex}
@@ -828,22 +828,14 @@ function FeedAdRow({ ad, onOpen }: { ad: NeighborAd; onOpen: () => void }) {
                     onClose={() => setViewerVisible(false)}
                 />
                 <View style={styles.cardTop}>
-                    <View style={[styles.typeBadge, styles.typeBadgeAd]}>
-                        <Text style={[styles.typeBadgeText, { color: colors.primary }]}>
-                            {adCatRu[ad.category]}
-                        </Text>
+                    <View style={[styles.typeBadge, { backgroundColor: `${sc}18` }]}>
+                        <Text style={[styles.typeBadgeText, { color: sc }]}>{adCatRu[ad.category]}</Text>
                     </View>
                     <Text style={styles.cardDate}>{formatDate(ad.createdAt)}</Text>
                 </View>
                 {ad.imageUrls.length > 0 ? (
                     multi ? (
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            style={styles.newsImgScroll}
-                            contentContainerStyle={styles.newsImgScrollContent}
-                            nestedScrollEnabled
-                        >
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.newsImgScroll} contentContainerStyle={styles.newsImgScrollContent} nestedScrollEnabled>
                             {ad.imageUrls.map((url, i) => (
                                 <NewsImage key={i} uri={url} style={styles.newsImgThumb} onPress={() => openViewer(i)} />
                             ))}
@@ -854,15 +846,10 @@ function FeedAdRow({ ad, onOpen }: { ad: NeighborAd; onOpen: () => void }) {
                 ) : null}
                 <Text style={[textStyles.subtitle, styles.feedTitle]}>{ad.title}</Text>
                 <Text style={[textStyles.caption, styles.feedExcerpt]} numberOfLines={2}>{ad.body}</Text>
-                {ad.pendingModeration ? (
-                    <Text style={[styles.cardMeta, { color: colors.warning, marginTop: 4 }]}>на проверке УК</Text>
-                ) : null}
-                {ad.authorName && (
-                    <FeedAuthorRow
-                        name={ad.authorName}
-                        photo={ad.authorPhoto}
-                    />
-                )}
+                <View style={styles.cardBottom}>
+                    <AdStatusBadge status={adStatus} />
+                </View>
+                {ad.authorName && <FeedAuthorRow name={ad.authorName} photo={ad.authorPhoto} />}
             </Card>
         </Pressable>
     );
@@ -1128,11 +1115,7 @@ const styles = StyleSheet.create({
     newsDate: { color: colors.textDim },
     newsTitle: { color: colors.text, marginTop: spacing.xs },
     newsExcerpt: { color: colors.textMuted, marginTop: spacing.sm },
-    // Новые стили карточек ленты
-    feedCardNews: { borderLeftWidth: 3, borderLeftColor: colors.info },
-    feedCardVote: { borderLeftWidth: 3, borderLeftColor: colors.accent },
-    feedCardAppeal: { borderLeftWidth: 3, borderLeftColor: colors.warning },
-    feedCardAd: { borderLeftWidth: 3, borderLeftColor: colors.primary },
+    feedCardNews: { borderLeftWidth: 3, borderLeftColor: NEWS_COLOR },
     divider: {
         flexDirection: "row" as const,
         alignItems: "center" as const,
@@ -1163,7 +1146,7 @@ const styles = StyleSheet.create({
         paddingVertical: 3,
         borderRadius: 6,
     },
-    typeBadgeNews: { backgroundColor: "rgba(91, 159, 212, 0.15)" },
+    typeBadgeNews: { backgroundColor: "rgba(26, 95, 154, 0.15)" },
     typeBadgeVote: { backgroundColor: "rgba(212, 168, 83, 0.12)" },
     typeBadgeAppeal: { backgroundColor: "rgba(232, 162, 61, 0.12)" },
     typeBadgeAd: { backgroundColor: "rgba(61, 158, 122, 0.12)" },

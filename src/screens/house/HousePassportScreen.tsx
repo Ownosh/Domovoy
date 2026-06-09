@@ -640,7 +640,6 @@ export function HousePassportScreen() {
                     <UkPublicStatsCard stats={ukStats} />
                     <View style={styles.ukGap} />
                     <Card>
-                        <CollapsibleHint text="Раз в календарный месяц вы можете один раз оценить двор, подъезд и работу УК (без привязки к заявке). После отправки изменить оценку за этот месяц нельзя. Удобнее оценивать ближе к концу месяца — так вы учтёте ситуацию за большую часть периода." />
                         {ratedThisMonth && environmentRating ? (
                             <View style={styles.ratingLocked}>
                                 <Text style={[textStyles.subtitle, styles.lockedTitle]}>
@@ -748,6 +747,7 @@ export function HousePassportScreen() {
                                                 />
                                             </View>
                                         ) : null}
+                                        <CollapsibleHint text="Раз в календарный месяц вы можете один раз оценить двор, подъезд и работу УК. После отправки изменить оценку за этот месяц нельзя." defaultOpen={false} />
                                         <View style={styles.gapMd} />
                                         <Button title="Отправить" onPress={trySubmitRating} style={styles.ratingSubmitBtn} />
                                     </View>

@@ -74,12 +74,12 @@ export function NotificationBell() {
     const [detail, setDetail] = useState<AppNotification | null>(null);
     const { visibleNotifications, markNotificationRead, markAllNotificationsRead, verification } = useApp();
 
-    if (!isVerifiedResident(verification)) return null;
-
     const unreadCount = useMemo(
         () => visibleNotifications.filter((n) => !n.read).length,
         [visibleNotifications],
     );
+
+    if (!isVerifiedResident(verification)) return null;
 
     const handleOpen = (n: AppNotification) => {
         markNotificationRead(n.id);

@@ -20,13 +20,37 @@ import {
     Text,
     View,
 } from "react-native";
-import { Button, Card, ScreenLayout } from "../../components/ui";
+import { AdStatusBadge, Button, Card, ScreenLayout, StatusTimeline } from "../../components/ui";
+import { adLabels, adStatusColor } from "../../components/ui/StatusBadge";
+import type { TimelineStep } from "../../components/ui/StatusTimeline";
+import { adEffectiveStatus } from "../../utils/appeals";
 import { useApp } from "../../context/AppContext";
 import { colors, radius, spacing, textStyles } from "../../theme";
+import type { NeighborAdStatus } from "../../types";
 
 type Props = CommunityScreenProps<"NeighborAdDetail">;
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const AD_CHAIN: NeighborAdStatus[] = ["new", "under_review", "published", "archived"];
+
+const adIcons: Partial<Record<NeighborAdStatus, keyof typeof Ionicons.glyphMap>> = {
+    new: "radio-button-on-outline",
+    under_review: "time-outline",
+    under_review_appeal: "time-outline",
+    published: "play-forward-outline",
+    archived: "archive-outline",
+    rejected: "close-circle-outline",
+};
+
+function getAdSteps(status: NeighborAdStatus): TimelineStep[] {
+    const base = AD_CHAIN.includes(status) ? AD_CHAIN : [...AD_CHAIN, status];
+    return base.map((s) => ({
+        key: s,
+        label: adLabels[s] ?? s,
+        color: adStatusColor[s] ?? colors.textMuted,
+        icon: adIcons[s],
+    }));
+}
 
 const adCatRu: Record<string, string> = {
     sell: "Продаю", buy: "Ищу", lost: "Потеряно",
@@ -91,33 +115,25 @@ export function NeighborAdDetailScreen({ route, navigation }: Props) {
         ]);
     };
 
+    const adStatus = adEffectiveStatus(ad);
+    const statusColor = adStatusColor[adStatus] ?? colors.textMuted;
+
     return (
         <ScreenLayout title="Объявление" scroll onBack={goBack}>
-            <Card style={styles.adCard} padded>
+            <View style={styles.timelineWrap}>
+                <StatusTimeline steps={getAdSteps(adStatus)} currentKey={adStatus} />
+            </View>
+            <Card style={[styles.adCard, { borderLeftColor: statusColor }]} padded>
                 <View style={styles.cardTop}>
-                    <View style={styles.typeBadge}>
-                        <Text style={styles.typeBadgeText}>{adCatRu[ad.category] ?? "Объявление"}</Text>
-                    </View>
-                    {ad.archived ? (
-                        <Text style={[textStyles.caption, styles.arch]}>В архиве</Text>
-                    ) : (
-                        <View style={styles.timerRow}>
-                            <Ionicons
-                                name="time-outline"
-                                size={13}
-                                color={expired ? colors.danger : msLeft <= WEEK_MS ? colors.warning : colors.textDim}
-                            />
-                            <Text style={[textStyles.caption, expired ? styles.timerExpired : msLeft <= WEEK_MS ? styles.timerWarn : styles.timerOk]}>
-                                {expired ? "Истёк" : formatTimeLeft(msLeft)}
-                            </Text>
+                    <View style={styles.cardTopLeft}>
+                        <AdStatusBadge status={adStatus} />
+                        <View style={[styles.typeBadge, { backgroundColor: `${statusColor}15` }]}>
+                            <Text style={[styles.typeBadgeText, { color: statusColor }]}>{adCatRu[ad.category] ?? "Объявление"}</Text>
                         </View>
-                    )}
+                    </View>
+                    <Text style={styles.cardDate}>{formatAdDate(ad.createdAt)}</Text>
                 </View>
-                {ad.pendingModeration && (
-                    <Text style={[textStyles.caption, styles.mod]}>На проверке УК после жалобы</Text>
-                )}
                 <Text style={[textStyles.title, styles.title]}>{ad.title}</Text>
-                <Text style={[textStyles.body, styles.body]}>{ad.body}</Text>
                 {ad.imageUrls.length > 0 && (
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imgRow}>
                         {ad.imageUrls.map((uri, i) => (
@@ -125,6 +141,8 @@ export function NeighborAdDetailScreen({ route, navigation }: Props) {
                         ))}
                     </ScrollView>
                 )}
+                <View style={styles.bodyDivider} />
+                <Text style={[textStyles.body, styles.body]}>{ad.body}</Text>
             </Card>
 
             {!isAuthor && (
@@ -192,9 +210,19 @@ export function NeighborAdDetailScreen({ route, navigation }: Props) {
     );
 }
 
+function formatAdDate(iso: string): string {
+    try { return new Date(iso).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" }); } catch { return iso; }
+}
+
 const styles = StyleSheet.create({
     miss: { color: colors.textMuted },
-    adCard: { borderLeftWidth: 3, borderLeftColor: colors.primary, gap: spacing.xs },
+    timelineWrap: { marginHorizontal: -spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle, marginBottom: spacing.md },
+    adCard: { borderLeftWidth: 3, gap: spacing.xs },
+    cardTopLeft: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" },
+    cardDate: { fontSize: 12, color: colors.textDim },
+    imgRow: { marginVertical: spacing.sm },
+    img: { width: 240, height: 160, borderRadius: radius.md, backgroundColor: colors.border, marginRight: spacing.sm },
+    bodyDivider: { height: 1, backgroundColor: colors.borderSubtle, marginVertical: spacing.sm },
     cardTop: {
         flexDirection: "row",
         justifyContent: "space-between",

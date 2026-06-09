@@ -121,7 +121,6 @@ export function NewAppealScreen({ navigation, route }: Props) {
             onBack={() => navigation.goBack()}
         >
                 <Card style={kind === "collective" ? styles.cardCollective : styles.cardPersonal}>
-                    <CollapsibleHint text="Опишите проблему подробно. Личное обращение — только для вас. Коллективное попадает в ленту дома, соседи могут присоединиться после верификации." />
                     <Text style={[textStyles.label, styles.sectionLabel]}>Тип обращения</Text>
                     <View style={[styles.kindRow, styles.rowGap]}>
                         <Pressable
@@ -174,12 +173,6 @@ export function NewAppealScreen({ navigation, route }: Props) {
                     {kind === "collective" && (
                         <>
                             <View style={styles.gap} />
-                            <CollapsibleHint text="Коллективное попадает в общую ленту дома — соседи смогут присоединиться после верификации." />
-                        </>
-                    )}
-                    {kind === "collective" && (
-                        <>
-                            <View style={styles.gap} />
                             <Input
                                 label="Подъезд №"
                                 value={entrance}
@@ -211,10 +204,16 @@ export function NewAppealScreen({ navigation, route }: Props) {
                     {!!err && (
                         <Text style={[textStyles.caption, styles.err]}>{err}</Text>
                     )}
-                    <View style={styles.gapLg} />
+                    <CollapsibleHint
+                        text={kind === "collective"
+                            ? "Коллективное попадает в ленту дома — соседи смогут присоединиться. Опишите проблему подробно."
+                            : "Опишите проблему подробно. Личное обращение видно только вам и УК."}
+                        defaultOpen={false}
+                    />
+                    <View style={styles.gapSm} />
                     <Button
                         title={submitting ? "Сохранение..." : editId ? "Сохранить" : "Отправить"}
-                        variant={editId ? "primary" : kind === "collective" ? "accent" : "info"}
+                        variant={editId ? "primary" : "info"}
                         onPress={() => { void submit(); }}
                         disabled={submitting}
                         style={styles.submitBtn}
@@ -232,26 +231,27 @@ const styles = StyleSheet.create({
     rowGap: { marginBottom: spacing.md },
     divider: { height: 1, backgroundColor: colors.borderSubtle, marginVertical: spacing.md },
     cardPersonal: { borderLeftWidth: 3, borderLeftColor: colors.info },
-    cardCollective: { borderLeftWidth: 3, borderLeftColor: colors.warning },
+    cardCollective: { borderLeftWidth: 3, borderLeftColor: colors.info },
     kindRow: { flexDirection: "row", gap: spacing.sm },
     kindChip: {
         paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
         borderRadius: radius.full, borderWidth: 1,
         borderColor: colors.border, backgroundColor: colors.bgElevated,
     },
-    kindChipOn: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+    kindChipOn: { borderColor: colors.info, backgroundColor: `${colors.info}15` },
     kindChipText: { color: colors.textMuted },
-    kindChipTextOn: { color: colors.primary, fontWeight: "600" },
+    kindChipTextOn: { color: colors.info, fontWeight: "600" },
     chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
     chip: {
         paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
         borderRadius: radius.full, backgroundColor: colors.bgElevated,
         borderWidth: 1, borderColor: colors.border, maxWidth: "100%",
     },
-    chipActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+    chipActive: { borderColor: colors.info, backgroundColor: `${colors.info}15` },
     chipText: { color: colors.textMuted },
-    chipTextActive: { color: colors.primary },
+    chipTextActive: { color: colors.info },
     gap: { height: spacing.md },
+    gapSm: { height: spacing.sm },
     gapLg: { height: spacing.lg },
     area: { minHeight: 120, textAlignVertical: "top" },
     err: { color: colors.danger, marginTop: spacing.sm },

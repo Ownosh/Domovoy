@@ -155,8 +155,6 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
             onBack={() => navigation.goBack()}
         >
             <Card style={styles.adCard}>
-                <CollapsibleHint text="Укажите заголовок, текст и категорию объявления. Оно будет видно только верифицированным жильцам вашего дома в течение 30 дней." />
-
                 <Text style={[textStyles.label, styles.sectionLabel]}>Категория</Text>
                 <View style={[styles.chips, styles.rowGap]}>
                     {categories.map((c) => (
@@ -228,9 +226,11 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
                 {!!err && (
                     <Text style={[textStyles.caption, styles.err]}>{err}</Text>
                 )}
-                <View style={styles.gapLg} />
+                <CollapsibleHint text="Объявление будет видно только верифицированным жильцам вашего дома в течение 30 дней." defaultOpen={false} />
+                <View style={styles.gapSm} />
                 <Button
                     title={submitting ? "Сохранение..." : editId ? "Сохранить" : "Опубликовать"}
+                    variant="info"
                     onPress={() => { void submit(); }}
                     disabled={submitting}
                     style={styles.submitBtn}
@@ -244,7 +244,7 @@ const THUMB_SIZE = 90;
 
 const styles = StyleSheet.create({
     submitBtn: { alignSelf: "flex-end", borderRadius: 999, paddingHorizontal: 28 },
-    adCard: { borderLeftWidth: 3, borderLeftColor: colors.primary },
+    adCard: { borderLeftWidth: 3, borderLeftColor: colors.info },
     sectionLabel: { color: colors.text, marginBottom: spacing.sm },
     rowGap: { marginBottom: spacing.md },
     divider: { height: 1, backgroundColor: colors.borderSubtle, marginVertical: spacing.md },
@@ -257,10 +257,11 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: colors.border,
     },
-    chipActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+    chipActive: { borderColor: colors.info, backgroundColor: `${colors.info}15` },
     chipText: { color: colors.textMuted },
-    chipTextActive: { color: colors.primary },
+    chipTextActive: { color: colors.info },
     gap: { height: spacing.md },
+    gapSm: { height: spacing.sm },
     gapLg: { height: spacing.lg },
     area: { minHeight: 100, textAlignVertical: "top" },
     err: { color: colors.danger, marginTop: spacing.sm },
@@ -279,7 +280,7 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
     },
-    checkboxOn: { borderColor: colors.primary, backgroundColor: colors.primary },
+    checkboxOn: { borderColor: colors.info, backgroundColor: colors.info },
     checkLabel: { color: colors.textMuted },
     photoLabel: { color: colors.text },
     photoSub: { color: colors.textDim, marginTop: 2, marginBottom: spacing.sm },

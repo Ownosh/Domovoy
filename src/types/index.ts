@@ -85,6 +85,8 @@ export type Appeal = {
     imageUrls: string[];
     resolvedAt?: string;
     manuallyArchived?: boolean;
+    adminComment?: string;
+    adminCommentAt?: string;
     authorName?: string;
     authorPhoto?: string;
 };

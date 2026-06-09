@@ -44,6 +44,15 @@ async function insertAppealPhotos(appealId: number, imageUrls: string[]): Promis
     }
 }
 
+const STATUS_MAP: Record<string, string> = {
+    accepted: "in_progress",
+    mass_appeal: "collecting_signatures",
+};
+
+function normalizeStatus(s: string): string {
+    return STATUS_MAP[s] ?? s;
+}
+
 function mapAppealRow(v: RowDataPacket, parts: RowDataPacket[], photoUrls: string[]): object {
     return {
         id: String(v.id),
@@ -53,13 +62,15 @@ function mapAppealRow(v: RowDataPacket, parts: RowDataPacket[], photoUrls: strin
         body: String(v.body),
         category: String(v.category ?? ""),
         kind: v.kind as string,
-        status: v.status as string,
+        status: normalizeStatus(v.status as string),
         entrance: v.entrance ? String(v.entrance) : undefined,
         authorApartment: String(v.author_apartment ?? ""),
         escalatedToUk: Boolean(v.escalated_to_uk),
         createdAt: (v.created_at as Date).toISOString(),
         resolvedAt: v.resolved_at ? (v.resolved_at as Date).toISOString() : undefined,
         manuallyArchived: Boolean(v.manually_archived),
+        adminComment: (v.admin_comment as string | null) ?? undefined,
+        adminCommentAt: v.admin_comment_at ? (v.admin_comment_at as Date).toISOString() : undefined,
         authorName: (v.author_name as string | null) ?? undefined,
         authorPhoto: (v.author_photo as string | null) ?? undefined,
         imageUrls: photoUrls,
@@ -81,7 +92,7 @@ async function fetchWithParticipants(appealIds: number[]): Promise<object[]> {
     const [rows] = await pool.query<RowDataPacket[]>(
         `SELECT a.id, a.user_id, a.building_key, a.title, a.body, a.category, a.kind, a.status,
                 a.entrance, a.author_apartment, a.escalated_to_uk, a.created_at,
-                a.resolved_at, a.manually_archived,
+                a.resolved_at, a.manually_archived, a.admin_comment, a.admin_comment_at,
                 p.full_name AS author_name, p.profile_photo AS author_photo
          FROM appeals a
          LEFT JOIN user_profiles p ON p.user_id = a.user_id
@@ -215,7 +226,7 @@ router.post("/:id/join", requireAuth, async (req: AuthRequest, res) => {
             );
             if (Number(countRow?.cnt ?? 0) >= MASS_APPEAL_THRESHOLD) {
                 await pool.execute(
-                    `UPDATE appeals SET status = 'accepted', escalated_to_uk = 1 WHERE id = ? AND escalated_to_uk = 0`,
+                    `UPDATE appeals SET status = 'in_progress', escalated_to_uk = 1 WHERE id = ? AND escalated_to_uk = 0`,
                     [appealId],
                 );
             }

@@ -77,6 +77,12 @@ function AppealCard({ item, onPress }: { item: Appeal; onPress: () => void }) {
                     {item.entrance ? (
                         <Text style={styles.cardMeta}>подъезд {item.entrance}</Text>
                     ) : null}
+                    {item.adminComment ? (
+                        <View style={styles.commentBadge}>
+                            <Ionicons name="chatbox-ellipses" size={11} color={colors.warning} />
+                            <Text style={styles.commentBadgeText}>Новый комментарий</Text>
+                        </View>
+                    ) : null}
                 </View>
             </Card>
         </Pressable>
@@ -356,6 +362,18 @@ const styles = StyleSheet.create({
     },
     cardMeta: { color: colors.textMuted, fontSize: 13 },
     statusDot: { width: 6, height: 6, borderRadius: 3 },
+    commentBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        backgroundColor: `${colors.warning}18`,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 3,
+        borderRadius: radius.full,
+        borderWidth: 1,
+        borderColor: `${colors.warning}44`,
+    },
+    commentBadgeText: { fontSize: 11, fontWeight: "600", color: colors.warning },
     fab: {
         position: "absolute",
         right: spacing.lg,

@@ -5,7 +5,7 @@ import { colors, radius, spacing, textStyles } from "../../theme";
 
 // ─── Appeals ────────────────────────────────────────────────────────────────
 
-const appealLabels: Record<AppealStatus, string> = {
+export const appealLabels: Record<AppealStatus, string> = {
     new: "Новое",
     collecting_signatures: "Сбор подписей",
     in_progress: "В работе",
@@ -34,7 +34,7 @@ export function AppealStatusBadge({ status }: { status: AppealStatus }) {
 
 // ─── Votes ───────────────────────────────────────────────────────────────────
 
-const voteLabels: Record<VoteStatus, string> = {
+export const voteLabels: Record<VoteStatus, string> = {
     new: "Новое",
     under_review: "На проверке",
     active: "Идёт голосование",
@@ -61,7 +61,7 @@ export function VoteStatusBadge({ status }: { status: VoteStatus }) {
 
 // ─── Neighbor Ads ─────────────────────────────────────────────────────────────
 
-const adLabels: Record<NeighborAdStatus, string> = {
+export const adLabels: Record<NeighborAdStatus, string> = {
     new: "Новое",
     under_review: "На проверке",
     published: "Опубликовано",

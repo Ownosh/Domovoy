@@ -18,9 +18,12 @@ function SectionDivider() {
         </View>
     );
 }
-import { Button, Card, ScreenLayout, VerificationWall } from "../../components/ui";
+import { Button, Card, ScreenLayout, StatusTimeline, VerificationWall, VoteStatusBadge } from "../../components/ui";
+import { voteLabels, voteStatusColor } from "../../components/ui/StatusBadge";
+import type { TimelineStep } from "../../components/ui/StatusTimeline";
+import { voteEffectiveStatus } from "../../utils/appeals";
 import { useApp, isVerifiedResident } from "../../context/AppContext";
-import type { Vote, VoteCast } from "../../types";
+import type { Vote, VoteCast, VoteStatus } from "../../types";
 import { voteSourceLine } from "../../utils/voteSponsor";
 import { colors, radius, spacing, textStyles } from "../../theme";
 
@@ -60,6 +63,26 @@ function aggregate(
         optionId: o.id,
         area: map.get(o.id)?.area ?? 0,
         count: map.get(o.id)?.count ?? 0,
+    }));
+}
+
+const VOTE_CHAIN: VoteStatus[] = ["new", "under_review", "active", "completed"];
+
+const voteIcons: Partial<Record<VoteStatus, keyof typeof Ionicons.glyphMap>> = {
+    new: "radio-button-on-outline",
+    under_review: "time-outline",
+    active: "people-outline",
+    completed: "play-forward-outline",
+    cancelled: "close-circle-outline",
+};
+
+function getVoteSteps(status: VoteStatus): TimelineStep[] {
+    const base = VOTE_CHAIN.includes(status) ? VOTE_CHAIN : [...VOTE_CHAIN, status];
+    return base.map((s) => ({
+        key: s,
+        label: voteLabels[s] ?? s,
+        color: voteStatusColor[s] ?? colors.textMuted,
+        icon: voteIcons[s],
     }));
 }
 
@@ -119,20 +142,23 @@ export function VoteDetailScreen({ route }: Props) {
         );
     };
 
+    const voteStatus = voteEffectiveStatus(vote);
+    const statusColor = voteStatusColor[voteStatus] ?? colors.textMuted;
+
     return (
         <ScreenLayout
             title="Голосование"
             scroll
             onBack={goBack}
         >
-            <Card style={styles.voteCard} padded>
+            <View style={styles.timelineWrap}>
+                <StatusTimeline steps={getVoteSteps(voteStatus)} currentKey={voteStatus} />
+            </View>
+            <Card style={[styles.voteCard, { borderLeftColor: statusColor }]} padded>
                 <View style={styles.cardTop}>
-                    <View style={styles.typeBadge}>
-                        <Text style={styles.typeBadgeText}>Голосование</Text>
-                    </View>
+                    <VoteStatusBadge status={voteStatus} />
                     <Text style={styles.cardDate}>
-                        {vote.visibility === "open" ? "открытое" : "тайное"}
-                        {ended ? " · завершено" : ""}
+                        {vote.visibility === "open" ? "открытое" : "тайное"} · {formatVoteDate(vote.createdAt)}
                     </Text>
                 </View>
                 <Text style={[textStyles.caption, styles.sourceTag]}>
@@ -279,6 +305,10 @@ export function VoteDetailScreen({ route }: Props) {
     );
 }
 
+function formatVoteDate(iso: string): string {
+    try { return new Date(iso).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" }); } catch { return iso; }
+}
+
 function formatRemaining(endsAt: string): string {
     const end = new Date(endsAt).getTime();
     const ms = end - Date.now();
@@ -311,7 +341,8 @@ function formatVotedAt(iso: string): string {
 
 const styles = StyleSheet.create({
     miss: { color: colors.textMuted },
-    voteCard: { borderLeftWidth: 3, borderLeftColor: colors.accent, gap: spacing.xs },
+    timelineWrap: { marginHorizontal: -spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle, marginBottom: spacing.md },
+    voteCard: { borderLeftWidth: 3, gap: spacing.xs },
     cardTop: {
         flexDirection: "row",
         justifyContent: "space-between",
@@ -333,13 +364,13 @@ const styles = StyleSheet.create({
         marginTop: spacing.sm,
         lineHeight: 18,
     },
-    topic: { color: colors.text, marginTop: spacing.sm },
-    desc: { color: colors.textMuted, marginTop: spacing.md, lineHeight: 22 },
-    timer: { color: colors.primary, marginTop: spacing.md },
-    ended: { color: colors.textDim, marginTop: spacing.sm },
-    block: { marginTop: spacing.lg, gap: spacing.sm },
+    topic: { color: colors.text, marginTop: spacing.xs },
+    desc: { color: colors.textMuted, marginTop: spacing.sm, lineHeight: 20 },
+    timer: { color: colors.primary, marginTop: spacing.sm },
+    ended: { color: colors.textDim, marginTop: spacing.xs },
+    block: { marginTop: spacing.md, gap: spacing.xs },
     label: { color: colors.textMuted },
-    btnWrap: { marginBottom: spacing.sm },
+    btnWrap: { marginBottom: spacing.xs },
     verifyBlock: { gap: spacing.md, marginTop: spacing.md },
     warn: { color: colors.warning, lineHeight: 20 },
     table: {
@@ -353,7 +384,7 @@ const styles = StyleSheet.create({
     tr: {
         flexDirection: "row",
         alignItems: "center",
-        paddingVertical: spacing.md,
+        paddingVertical: spacing.sm,
         paddingHorizontal: spacing.md,
         borderBottomWidth: 1,
         borderBottomColor: colors.borderSubtle,
@@ -373,7 +404,7 @@ const styles = StyleSheet.create({
         flexDirection: "row" as const,
         alignItems: "center" as const,
         paddingHorizontal: spacing.lg,
-        marginVertical: spacing.sm,
+        marginVertical: spacing.xs,
     },
     dividerLine: { flex: 1, height: 1, backgroundColor: colors.border, opacity: 0.5 },
     dividerDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.border, marginHorizontal: spacing.md },
@@ -384,8 +415,8 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: spacing.sm,
-        marginTop: spacing.lg,
-        padding: spacing.md,
+        marginTop: spacing.sm,
+        padding: spacing.sm,
         borderRadius: radius.md,
         backgroundColor: `${colors.primary}14`,
         borderWidth: 1,

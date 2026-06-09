@@ -405,6 +405,14 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    // Миграция старых статусов обращений на новые
+    await pool.query(`UPDATE appeals SET status = 'in_progress' WHERE status = 'accepted'`).catch(() => {});
+    await pool.query(`UPDATE appeals SET status = 'collecting_signatures' WHERE status = 'mass_appeal'`).catch(() => {});
+
+    // Комментарий администратора к обращению
+    await pool.query(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_comment TEXT DEFAULT NULL`).catch(() => {});
+    await pool.query(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_comment_at DATETIME DEFAULT NULL`).catch(() => {});
+
     // Новые статусы обращений
     await pool.query(`
         ALTER TABLE appeals

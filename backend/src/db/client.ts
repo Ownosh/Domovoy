@@ -15,7 +15,7 @@ export const pool = mysql.createPool({
     maxIdle: 1,           // держим не более 1 idle-соединения
     idleTimeout: 10000,   // закрываем idle через 10 секунд
     charset: "utf8mb4",
-    ssl: { rejectUnauthorized: false },
+    ssl: {},
 });
 
 // Закрываем все соединения при остановке — tsx watch должен их освободить

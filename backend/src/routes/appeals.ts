@@ -156,7 +156,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         return res.status(400).json({ error: "Некорректный тип обращения" });
 
     try {
-        const mod = await moderateContent({ title: title.trim(), body: body.trim() });
+        const mod = await moderateContent({ title: title.trim(), body: body.trim(), category: category?.trim() });
         if (!mod.ok) {
             return res.status(422).json({
                 error: mod.issue,
@@ -260,7 +260,7 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     if (!title?.trim() || !body?.trim())
         return res.status(400).json({ error: "Тема и описание обязательны" });
     try {
-        const mod = await moderateContent({ title: title.trim(), body: body.trim() });
+        const mod = await moderateContent({ title: title.trim(), body: body.trim(), category: category?.trim() });
         if (!mod.ok) {
             return res.status(422).json({
                 error: mod.issue,

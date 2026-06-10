@@ -22,10 +22,22 @@
           "locationAlwaysAndWhenInUsePermission": "Приложению нужен доступ к геолокации, чтобы построить маршрут до выбранного места от вашего текущего положения.",
           "locationWhenInUsePermission": "Приложению нужен доступ к геолокации, чтобы построить маршрут до выбранного места от вашего текущего положения."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
       ]
     ],
     "android": {
-      "package": "com.domovoy.app"
+      "package": "com.domovoy.app",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "ios": {
       "bundleIdentifier": "com.domovoy.app",
@@ -34,6 +46,11 @@
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         }
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "9812f923-7d68-4eba-afad-cb74a1c12170"
       }
     }
   }

@@ -1,9 +1,14 @@
 {
   "build": {
-    "preview-apk": { 
-      "distribution": "internal", 
+    "preview-apk": {
+      "distribution": "internal",
       "android": {
-        "buildType": "apk" 
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://192.168.0.104:3001",
+        "EXPO_PUBLIC_IMAGEKIT_PUBLIC_KEY": "public_4/F5JOUr3FfPiIctm5D62MR8xa0=",
+        "EXPO_PUBLIC_IMAGEKIT_URL_ENDPOINT": "https://ik.imagekit.io/k9opkddi7"
       }
     }
   }

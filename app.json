@@ -27,15 +27,8 @@
         "expo-build-properties",
         {
           "android": {
-            "usesCleartextTraffic": true,
-            "kotlinVersion": "1.9.25"
+            "usesCleartextTraffic": true
           }
-        }
-      ],
-      [
-        "./plugins/withYandexMapKit.js",
-        {
-          "apiKey": "380e6e80-b316-4896-9572-fd01f0e87a80"
         }
       ]
     ],
@@ -44,7 +37,12 @@
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
-      ]
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyA6VXl-1PW-iedTXigQWo579WiQe27H-nw"
+        }
+      }
     },
     "ios": {
       "bundleIdentifier": "com.domovoy.app",
@@ -53,6 +51,9 @@
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         }
+      },
+      "config": {
+        "googleMapsApiKey": "AIzaSyA6VXl-1PW-iedTXigQWo579WiQe27H-nw"
       }
     },
     "extra": {

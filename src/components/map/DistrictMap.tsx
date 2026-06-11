@@ -20,7 +20,7 @@ import {
     Text,
     View,
 } from "react-native";
-import YaMap, { Marker } from "react-native-yamap";
+import MapView, { Marker, PROVIDER_GOOGLE, type Region } from "react-native-maps";
 import { districtMapCenter } from "../../data/mockData";
 import { Button } from "../ui/Button";
 import { colors, textStyles } from "../../theme";
@@ -33,6 +33,13 @@ import {
     districtPoiLayerLabel,
     type DistrictMapProps,
 } from "./districtMapConstants";
+
+const INITIAL_REGION: Region = {
+    latitude: districtMapCenter.lat,
+    longitude: districtMapCenter.lng,
+    latitudeDelta: 0.04,
+    longitudeDelta: 0.04,
+};
 
 export type DistrictMapHandle = {
     showPoiDetail: (poi: DistrictPoi) => void;
@@ -49,7 +56,8 @@ export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
         ref,
     ) {
         const insets = useSafeAreaInsets();
-        const mapRef = useRef<YaMap>(null);
+        const mapRefNormal = useRef<MapView>(null);
+        const mapRefFull = useRef<MapView>(null);
         const [panel, setPanel] = useState<DetailPanel | null>(null);
         const [navPickerOpen, setNavPickerOpen] = useState(false);
         const [locationAllowed, setLocationAllowed] = useState(false);
@@ -82,22 +90,31 @@ export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
 
         useEffect(() => {
             if (pois.length === 0) return;
-            const points = pois.map((p) => ({ lat: p.lat, lon: p.lng }));
+            const points = pois.map((p) => ({
+                latitude: p.lat,
+                longitude: p.lng,
+            }));
             const timeout = setTimeout(() => {
-                mapRef.current?.fitMarkers(points);
+                const edgePadding = { top: 40, right: 40, bottom: 40, left: 40 };
+                if (!isFullscreen) {
+                    mapRefNormal.current?.fitToCoordinates(points, {
+                        edgePadding,
+                        animated: true,
+                    });
+                } else {
+                    mapRefFull.current?.fitToCoordinates(points, {
+                        edgePadding,
+                        animated: true,
+                    });
+                }
             }, 300);
             return () => clearTimeout(timeout);
         }, [pois, isFullscreen]);
 
         useEffect(() => {
             if (!mapFocus) return;
-            mapRef.current?.setCenter(
-                { lat: mapFocus.latitude, lon: mapFocus.longitude },
-                16,
-                0,
-                0,
-                300,
-            );
+            mapRefNormal.current?.animateToRegion(mapFocus, 300);
+            mapRefFull.current?.animateToRegion(mapFocus, 300);
         }, [mapFocus]);
 
         const handlePoiPress = useCallback((poi: DistrictPoi) => {
@@ -146,63 +163,55 @@ export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
             [destCoords],
         );
 
-        const renderMapView = useCallback((fullscreen: boolean) => (
-            <View style={fullscreen ? mapFullStyles.mapWrap : styles.mapWrap}>
-                <YaMap
-                    ref={mapRef}
-                    style={fullscreen ? mapFullStyles.map : styles.map}
-                    initialRegion={{
-                        lat: districtMapCenter.lat,
-                        lon: districtMapCenter.lng,
-                        zoom: 14,
-                    }}
-                    showUserPosition={locationAllowed}
-                >
-                    {pois.map((p) => (
-                        <Marker
-                            key={p.id}
-                            point={{ lat: p.lat, lon: p.lng }}
-                            onPress={() => handlePoiPress(p)}
-                        >
-                            <View
-                                style={[
-                                    mapFullStyles.poiDot,
-                                    { backgroundColor: districtPoiColor(p) },
-                                ]}
+        const renderMapView = useCallback(
+            (fullscreen: boolean) => (
+                <View style={fullscreen ? mapFullStyles.mapWrap : styles.mapWrap}>
+                    <MapView
+                        ref={fullscreen ? mapRefFull : mapRefNormal}
+                        provider={PROVIDER_GOOGLE}
+                        style={fullscreen ? mapFullStyles.map : styles.map}
+                        initialRegion={INITIAL_REGION}
+                        showsUserLocation={locationAllowed}
+                        showsMyLocationButton={false}
+                    >
+                        {pois.map((p) => (
+                            <Marker
+                                key={p.id}
+                                coordinate={{ latitude: p.lat, longitude: p.lng }}
+                                pinColor={districtPoiColor(p)}
+                                onPress={() => handlePoiPress(p)}
                             />
-                        </Marker>
-                    ))}
-                    {searchHit ? (
-                        <Marker
-                            point={{ lat: searchHit.lat, lon: searchHit.lng }}
-                            onPress={handleSearchPress}
-                        >
-                            <View
-                                style={[
-                                    mapFullStyles.poiDot,
-                                    { backgroundColor: colors.warning },
-                                ]}
+                        ))}
+                        {searchHit ? (
+                            <Marker
+                                coordinate={{
+                                    latitude: searchHit.lat,
+                                    longitude: searchHit.lng,
+                                }}
+                                pinColor={colors.warning}
+                                onPress={handleSearchPress}
                             />
-                        </Marker>
-                    ) : null}
-                </YaMap>
-                <Pressable
-                    onPress={() => setIsFullscreen((v) => !v)}
-                    hitSlop={8}
-                    style={({ pressed }) => [
-                        mapFullStyles.expandBtn,
-                        fullscreen && { top: insets.top + 12 },
-                        pressed && mapFullStyles.expandBtnPressed,
-                    ]}
-                >
-                    <Ionicons
-                        name={fullscreen ? "contract-outline" : "expand-outline"}
-                        size={20}
-                        color={colors.text}
-                    />
-                </Pressable>
-            </View>
-        ), [handlePoiPress, handleSearchPress, insets.top, locationAllowed, pois, searchHit]);
+                        ) : null}
+                    </MapView>
+                    <Pressable
+                        onPress={() => setIsFullscreen((v) => !v)}
+                        hitSlop={8}
+                        style={({ pressed }) => [
+                            mapFullStyles.expandBtn,
+                            fullscreen && { top: insets.top + 12 },
+                            pressed && mapFullStyles.expandBtnPressed,
+                        ]}
+                    >
+                        <Ionicons
+                            name={fullscreen ? "contract-outline" : "expand-outline"}
+                            size={20}
+                            color={colors.text}
+                        />
+                    </Pressable>
+                </View>
+            ),
+            [pois, searchHit, locationAllowed, handlePoiPress, handleSearchPress, insets.top],
+        );
 
         const detailVisible = panel !== null && !navPickerOpen;
         const navVisible = navPickerOpen && panel !== null;
@@ -397,13 +406,6 @@ const mapFullStyles = StyleSheet.create({
     },
     map: {
         flex: 1,
-    },
-    poiDot: {
-        width: 18,
-        height: 18,
-        borderRadius: 9,
-        borderWidth: 2,
-        borderColor: colors.bg,
     },
     expandBtn: {
         position: "absolute",

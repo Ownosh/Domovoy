@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import React from "react";
-import { Platform, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppealsNavigator } from "./AppealsNavigator";
 import { ProfileNavigator } from "./ProfileNavigator";
 import { SafetyNavigator } from "./SafetyNavigator";
@@ -19,13 +20,20 @@ const HIDDEN: object = { display: "none" as const };
 export function MainTabs() {
     const { verification } = useApp();
     const verified = isVerifiedResident(verification);
+    const insets = useSafeAreaInsets();
 
     return (
         <Tab.Navigator
             id="MainTabs"
             screenOptions={{
                 headerShown: false,
-                tabBarStyle: styles.tabBar,
+                tabBarStyle: [
+                    styles.tabBar,
+                    {
+                        height: 64 + insets.bottom,
+                        paddingBottom: spacing.sm + insets.bottom,
+                    },
+                ],
                 tabBarActiveTintColor: colors.primary,
                 tabBarInactiveTintColor: colors.textDim,
                 tabBarLabelStyle: styles.label,
@@ -102,9 +110,7 @@ const styles = StyleSheet.create({
         backgroundColor: colors.bgElevated,
         borderTopColor: colors.border,
         borderTopWidth: 1,
-        height: Platform.OS === "ios" ? 88 : 64,
         paddingTop: spacing.sm,
-        paddingBottom: Platform.OS === "ios" ? spacing.lg : spacing.sm,
     },
     label: { fontSize: 11, fontWeight: "600" },
     item: { paddingTop: 4 },

@@ -7,7 +7,6 @@ import React, {
     useCallback,
     useEffect,
     useImperativeHandle,
-    useMemo,
     useRef,
     useState,
 } from "react";
@@ -21,7 +20,7 @@ import {
     Text,
     View,
 } from "react-native";
-import WebView, { type WebViewMessageEvent } from "react-native-webview";
+import YaMap, { Marker } from "react-native-yamap";
 import { districtMapCenter } from "../../data/mockData";
 import { Button } from "../ui/Button";
 import { colors, textStyles } from "../../theme";
@@ -44,146 +43,17 @@ type DetailPanel =
     | { kind: "poi"; poi: DistrictPoi }
     | { kind: "search"; hit: DistrictSearchHit };
 
-type WebViewDataMessage =
-    | { type: "ready" }
-    | { type: "poi"; id?: string }
-    | { type: "search"; id?: string }
-    | { type: "debug"; msg: string }
-    | { type: "jsError"; msg: string };
-
-const YANDEX_MAPS_API_KEY = process.env.EXPO_PUBLIC_YANDEX_MAPS_API_KEY ?? "";
-
-function buildMapHtml(centerLat: number, centerLng: number): string {
-    return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <style>
-    html, body { width: 100%; height: 100%; margin: 0; padding: 0; }
-    #map { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #1a2838; }
-  </style>
-  <script>
-    // Отключаем WebGL до загрузки API Яндекс.Карт: внутри WebView векторный
-    // (WebGL) рендер часто рисует чёрный канвас, поэтому форсируем растровые тайлы.
-    try { delete window.WebGLRenderingContext; } catch (e) { window.WebGLRenderingContext = undefined; }
-  </script>
-  <script src="https://api-maps.yandex.ru/2.1/?apikey=${YANDEX_MAPS_API_KEY}&lang=ru_RU"></script>
-</head>
-<body>
-  <div id="map"></div>
-  <script>
-    var map;
-    var poiPlacemarks = {};
-    var searchPlacemark = null;
-
-    function post(msg) {
-      window.ReactNativeWebView.postMessage(JSON.stringify(msg));
-    }
-
-    function setPois(pois) {
-      Object.keys(poiPlacemarks).forEach(function (id) {
-        map.geoObjects.remove(poiPlacemarks[id]);
-      });
-      poiPlacemarks = {};
-      pois.forEach(function (p) {
-        var pm = new ymaps.Placemark([p.lat, p.lng], {}, {
-          preset: 'islands#circleIcon',
-          iconColor: p.color
-        });
-        pm.events.add('click', function () {
-          post({ type: 'poi', id: p.id });
-        });
-        map.geoObjects.add(pm);
-        poiPlacemarks[p.id] = pm;
-      });
-      if (pois.length > 0) {
-        map.setBounds(map.geoObjects.getBounds(), { checkZoomRange: true, zoomMargin: 40 });
-      }
-    }
-
-    function setSearchHit(hit) {
-      if (searchPlacemark) {
-        map.geoObjects.remove(searchPlacemark);
-        searchPlacemark = null;
-      }
-      if (!hit) return;
-      searchPlacemark = new ymaps.Placemark([hit.lat, hit.lng], {}, {
-        preset: 'islands#circleIcon',
-        iconColor: '${colors.warning}'
-      });
-      searchPlacemark.events.add('click', function () {
-        post({ type: 'search', id: hit.id });
-      });
-      map.geoObjects.add(searchPlacemark);
-    }
-
-    function setCenter(lat, lng, zoom) {
-      map.setCenter([lat, lng], zoom || map.getZoom(), { duration: 300 });
-    }
-
-    function handleMessage(e) {
-      var data;
-      try { data = JSON.parse(e.data); } catch (err) { return; }
-      if (data.type === 'pois') setPois(data.pois);
-      if (data.type === 'searchHit') setSearchHit(data.hit);
-      if (data.type === 'center') setCenter(data.lat, data.lng, data.zoom);
-    }
-
-    document.addEventListener('message', handleMessage);
-    window.addEventListener('message', handleMessage);
-
-    window.onerror = function (msg, src, line, col) {
-      post({ type: 'jsError', msg: String(msg) + ' @ ' + line + ':' + col });
-    };
-
-    post({ type: 'debug', msg: 'script started, ymaps=' + (typeof ymaps) });
-
-    if (typeof ymaps === 'undefined') {
-      post({ type: 'jsError', msg: 'ymaps is undefined - API script failed to load' });
-    } else {
-      ymaps.ready(function () {
-        var mapDiv = document.getElementById('map');
-        post({ type: 'debug', msg: 'ymaps.ready fired, #map size=' + mapDiv.offsetWidth + 'x' + mapDiv.offsetHeight
-          + ', window=' + window.innerWidth + 'x' + window.innerHeight
-          + ', html=' + document.documentElement.clientWidth + 'x' + document.documentElement.clientHeight
-          + ', body=' + document.body.clientWidth + 'x' + document.body.clientHeight });
-        try {
-          map = new ymaps.Map('map', {
-            center: [${centerLat}, ${centerLng}],
-            zoom: 14,
-            controls: ['zoomControl']
-          });
-          post({ type: 'debug', msg: 'map created ok' });
-        } catch (err) {
-          post({ type: 'jsError', msg: 'map creation failed: ' + (err && err.message ? err.message : String(err)) });
-          return;
-        }
-        post({ type: 'ready' });
-      });
-    }
-  </script>
-</body>
-</html>`;
-}
-
 export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
     function DistrictMap(
         { pois, mapFocus, searchHit }: DistrictMapProps,
         ref,
     ) {
         const insets = useSafeAreaInsets();
-        const webViewRef = useRef<WebView>(null);
-        const [mapReady, setMapReady] = useState(false);
+        const mapRef = useRef<YaMap>(null);
         const [panel, setPanel] = useState<DetailPanel | null>(null);
         const [navPickerOpen, setNavPickerOpen] = useState(false);
         const [locationAllowed, setLocationAllowed] = useState(false);
         const [isFullscreen, setIsFullscreen] = useState(false);
-
-        const mapHtml = useMemo(
-            () => buildMapHtml(districtMapCenter.lat, districtMapCenter.lng),
-            [],
-        );
 
         useImperativeHandle(ref, () => ({
             showPoiDetail: (poi: DistrictPoi) => {
@@ -211,79 +81,35 @@ export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
         }, []);
 
         useEffect(() => {
-            setMapReady(false);
-        }, [isFullscreen]);
+            if (pois.length === 0) return;
+            const points = pois.map((p) => ({ lat: p.lat, lon: p.lng }));
+            const timeout = setTimeout(() => {
+                mapRef.current?.fitMarkers(points);
+            }, 300);
+            return () => clearTimeout(timeout);
+        }, [pois, isFullscreen]);
 
         useEffect(() => {
-            if (!mapReady) return;
-            const payload = pois.map((p) => ({
-                id: p.id,
-                lat: p.lat,
-                lng: p.lng,
-                color: districtPoiColor(p),
-            }));
-            webViewRef.current?.postMessage(JSON.stringify({ type: "pois", pois: payload }));
-        }, [mapReady, pois]);
-
-        useEffect(() => {
-            if (!mapReady) return;
-            webViewRef.current?.postMessage(
-                JSON.stringify({
-                    type: "searchHit",
-                    hit: searchHit
-                        ? { id: searchHit.id, lat: searchHit.lat, lng: searchHit.lng }
-                        : null,
-                }),
+            if (!mapFocus) return;
+            mapRef.current?.setCenter(
+                { lat: mapFocus.latitude, lon: mapFocus.longitude },
+                16,
+                0,
+                0,
+                300,
             );
-        }, [mapReady, searchHit]);
+        }, [mapFocus]);
 
-        useEffect(() => {
-            if (!mapReady || !mapFocus) return;
-            webViewRef.current?.postMessage(
-                JSON.stringify({
-                    type: "center",
-                    lat: mapFocus.latitude,
-                    lng: mapFocus.longitude,
-                    zoom: 16,
-                }),
-            );
-        }, [mapReady, mapFocus]);
+        const handlePoiPress = useCallback((poi: DistrictPoi) => {
+            setNavPickerOpen(false);
+            setPanel({ kind: "poi", poi });
+        }, []);
 
-        const handleWebViewMessage = useCallback(
-            (event: WebViewMessageEvent) => {
-                let data: WebViewDataMessage;
-                try {
-                    data = JSON.parse(event.nativeEvent.data);
-                } catch {
-                    return;
-                }
-                if (data.type === "ready") {
-                    setMapReady(true);
-                    return;
-                }
-                if (data.type === "debug") {
-                    console.log("[DistrictMap]", data.msg);
-                    return;
-                }
-                if (data.type === "jsError") {
-                    console.error("[DistrictMap]", data.msg);
-                    return;
-                }
-                if (data.type === "poi") {
-                    const poi = pois.find((p) => p.id === data.id);
-                    if (poi) {
-                        setNavPickerOpen(false);
-                        setPanel({ kind: "poi", poi });
-                    }
-                    return;
-                }
-                if (data.type === "search" && searchHit) {
-                    setNavPickerOpen(false);
-                    setPanel({ kind: "search", hit: searchHit });
-                }
-            },
-            [pois, searchHit],
-        );
+        const handleSearchPress = useCallback(() => {
+            if (!searchHit) return;
+            setNavPickerOpen(false);
+            setPanel({ kind: "search", hit: searchHit });
+        }, [searchHit]);
 
         const destCoords = useCallback((d: DetailPanel) => {
             if (d.kind === "poi") {
@@ -322,17 +148,44 @@ export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
 
         const renderMapView = useCallback((fullscreen: boolean) => (
             <View style={fullscreen ? mapFullStyles.mapWrap : styles.mapWrap}>
-                <WebView
-                    ref={webViewRef}
-                    source={{ html: mapHtml, baseUrl: "https://localhost" }}
+                <YaMap
+                    ref={mapRef}
                     style={fullscreen ? mapFullStyles.map : styles.map}
-                    onMessage={handleWebViewMessage}
-                    originWhitelist={["*"]}
-                    javaScriptEnabled
-                    domStorageEnabled
-                    geolocationEnabled={locationAllowed}
-                    androidLayerType="software"
-                />
+                    initialRegion={{
+                        lat: districtMapCenter.lat,
+                        lon: districtMapCenter.lng,
+                        zoom: 14,
+                    }}
+                    showUserPosition={locationAllowed}
+                >
+                    {pois.map((p) => (
+                        <Marker
+                            key={p.id}
+                            point={{ lat: p.lat, lon: p.lng }}
+                            onPress={() => handlePoiPress(p)}
+                        >
+                            <View
+                                style={[
+                                    mapFullStyles.poiDot,
+                                    { backgroundColor: districtPoiColor(p) },
+                                ]}
+                            />
+                        </Marker>
+                    ))}
+                    {searchHit ? (
+                        <Marker
+                            point={{ lat: searchHit.lat, lon: searchHit.lng }}
+                            onPress={handleSearchPress}
+                        >
+                            <View
+                                style={[
+                                    mapFullStyles.poiDot,
+                                    { backgroundColor: colors.warning },
+                                ]}
+                            />
+                        </Marker>
+                    ) : null}
+                </YaMap>
                 <Pressable
                     onPress={() => setIsFullscreen((v) => !v)}
                     hitSlop={8}
@@ -349,7 +202,7 @@ export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
                     />
                 </Pressable>
             </View>
-        ), [handleWebViewMessage, insets.top, locationAllowed, mapHtml]);
+        ), [handlePoiPress, handleSearchPress, insets.top, locationAllowed, pois, searchHit]);
 
         const detailVisible = panel !== null && !navPickerOpen;
         const navVisible = navPickerOpen && panel !== null;
@@ -544,6 +397,13 @@ const mapFullStyles = StyleSheet.create({
     },
     map: {
         flex: 1,
+    },
+    poiDot: {
+        width: 18,
+        height: 18,
+        borderRadius: 9,
+        borderWidth: 2,
+        borderColor: colors.bg,
     },
     expandBtn: {
         position: "absolute",

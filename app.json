@@ -27,8 +27,15 @@
         "expo-build-properties",
         {
           "android": {
-            "usesCleartextTraffic": true
+            "usesCleartextTraffic": true,
+            "kotlinVersion": "1.9.25"
           }
+        }
+      ],
+      [
+        "./plugins/withYandexMapKit.js",
+        {
+          "apiKey": "380e6e80-b316-4896-9572-fd01f0e87a80"
         }
       ]
     ],
@@ -50,8 +57,9 @@
     },
     "extra": {
       "eas": {
-        "projectId": "9812f923-7d68-4eba-afad-cb74a1c12170"
+        "projectId": "61825a3c-45b6-47d3-aa1d-c717458892f2"
       }
-    }
+    },
+    "owner": "oownosh"
   }
 }

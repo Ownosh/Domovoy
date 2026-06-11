@@ -7,6 +7,7 @@ import React, {
     useCallback,
     useEffect,
     useImperativeHandle,
+    useMemo,
     useRef,
     useState,
 } from "react";
@@ -20,7 +21,7 @@ import {
     Text,
     View,
 } from "react-native";
-import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
+import WebView, { type WebViewMessageEvent } from "react-native-webview";
 import { districtMapCenter } from "../../data/mockData";
 import { Button } from "../ui/Button";
 import { colors, textStyles } from "../../theme";
@@ -30,7 +31,6 @@ import { openRouteInExternalNavigator } from "../../utils/openNavigatorRoute";
 import {
     districtMapStyles as styles,
     districtPoiColor,
-    districtPoiLayerIcon,
     districtPoiLayerLabel,
     type DistrictMapProps,
 } from "./districtMapConstants";
@@ -44,23 +44,112 @@ type DetailPanel =
     | { kind: "poi"; poi: DistrictPoi }
     | { kind: "search"; hit: DistrictSearchHit };
 
+const YANDEX_MAPS_API_KEY = process.env.EXPO_PUBLIC_YANDEX_MAPS_API_KEY ?? "";
+
+function buildMapHtml(centerLat: number, centerLng: number): string {
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <style>
+    html, body, #map { width: 100%; height: 100%; margin: 0; padding: 0; background: #1a2838; }
+  </style>
+  <script src="https://api-maps.yandex.ru/2.1/?apikey=${YANDEX_MAPS_API_KEY}&lang=ru_RU"></script>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    var map;
+    var poiPlacemarks = {};
+    var searchPlacemark = null;
+
+    function post(msg) {
+      window.ReactNativeWebView.postMessage(JSON.stringify(msg));
+    }
+
+    function setPois(pois) {
+      Object.keys(poiPlacemarks).forEach(function (id) {
+        map.geoObjects.remove(poiPlacemarks[id]);
+      });
+      poiPlacemarks = {};
+      pois.forEach(function (p) {
+        var pm = new ymaps.Placemark([p.lat, p.lng], {}, {
+          preset: 'islands#circleIcon',
+          iconColor: p.color
+        });
+        pm.events.add('click', function () {
+          post({ type: 'poi', id: p.id });
+        });
+        map.geoObjects.add(pm);
+        poiPlacemarks[p.id] = pm;
+      });
+      if (pois.length > 0) {
+        map.setBounds(map.geoObjects.getBounds(), { checkZoomRange: true, zoomMargin: 40 });
+      }
+    }
+
+    function setSearchHit(hit) {
+      if (searchPlacemark) {
+        map.geoObjects.remove(searchPlacemark);
+        searchPlacemark = null;
+      }
+      if (!hit) return;
+      searchPlacemark = new ymaps.Placemark([hit.lat, hit.lng], {}, {
+        preset: 'islands#circleIcon',
+        iconColor: '${colors.warning}'
+      });
+      searchPlacemark.events.add('click', function () {
+        post({ type: 'search', id: hit.id });
+      });
+      map.geoObjects.add(searchPlacemark);
+    }
+
+    function setCenter(lat, lng, zoom) {
+      map.setCenter([lat, lng], zoom || map.getZoom(), { duration: 300 });
+    }
+
+    function handleMessage(e) {
+      var data;
+      try { data = JSON.parse(e.data); } catch (err) { return; }
+      if (data.type === 'pois') setPois(data.pois);
+      if (data.type === 'searchHit') setSearchHit(data.hit);
+      if (data.type === 'center') setCenter(data.lat, data.lng, data.zoom);
+    }
+
+    document.addEventListener('message', handleMessage);
+    window.addEventListener('message', handleMessage);
+
+    ymaps.ready(function () {
+      map = new ymaps.Map('map', {
+        center: [${centerLat}, ${centerLng}],
+        zoom: 14,
+        controls: ['zoomControl']
+      });
+      post({ type: 'ready' });
+    });
+  </script>
+</body>
+</html>`;
+}
+
 export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
     function DistrictMap(
         { pois, mapFocus, searchHit }: DistrictMapProps,
         ref,
     ) {
-        const mapRef = useRef<MapView>(null);
         const insets = useSafeAreaInsets();
+        const webViewRef = useRef<WebView>(null);
+        const [mapReady, setMapReady] = useState(false);
         const [panel, setPanel] = useState<DetailPanel | null>(null);
         const [navPickerOpen, setNavPickerOpen] = useState(false);
         const [locationAllowed, setLocationAllowed] = useState(false);
         const [isFullscreen, setIsFullscreen] = useState(false);
-        const [currentRegion, setCurrentRegion] = useState(() => ({
-            latitude: districtMapCenter.lat,
-            longitude: districtMapCenter.lng,
-            latitudeDelta: 0.08,
-            longitudeDelta: 0.08,
-        }));
+
+        const mapHtml = useMemo(
+            () => buildMapHtml(districtMapCenter.lat, districtMapCenter.lng),
+            [],
+        );
 
         useImperativeHandle(ref, () => ({
             showPoiDetail: (poi: DistrictPoi) => {
@@ -88,92 +177,71 @@ export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
         }, []);
 
         useEffect(() => {
-            if (!mapFocus || Platform.OS === "web") return;
-            const t = setTimeout(() => {
-                mapRef.current?.animateToRegion(mapFocus, 450);
-            }, 50);
-            return () => clearTimeout(t);
-        }, [mapFocus]);
+            setMapReady(false);
+        }, [isFullscreen]);
 
-        const renderMapView = useCallback((fullscreen: boolean) => (
-            <View style={fullscreen ? mapFullStyles.mapWrap : styles.mapWrap}>
-                <MapView
-                    ref={mapRef}
-                    style={fullscreen ? mapFullStyles.map : styles.map}
-                    provider={PROVIDER_DEFAULT}
-                    initialRegion={currentRegion}
-                    onRegionChangeComplete={setCurrentRegion}
-                    showsUserLocation={locationAllowed && Platform.OS !== "web"}
-                    showsMyLocationButton={false}
-                >
-                    {pois.map((p) => (
-                        <Marker
-                            key={p.id}
-                            coordinate={{ latitude: p.lat, longitude: p.lng }}
-                            onPress={() => setPanel({ kind: "poi", poi: p })}
-                            tracksViewChanges={false}
-                        >
-                            <View
-                                style={[
-                                    styles.markerBubble,
-                                    { backgroundColor: districtPoiColor(p) },
-                                ]}
-                            >
-                                <Ionicons
-                                    name={districtPoiLayerIcon(p)}
-                                    size={18}
-                                    color="#fff"
-                                />
-                            </View>
-                        </Marker>
-                    ))}
-                    {searchHit ? (
-                        <Marker
-                            key={`search-${searchHit.id}`}
-                            coordinate={{
-                                latitude: searchHit.lat,
-                                longitude: searchHit.lng,
-                            }}
-                            onPress={() =>
-                                setPanel({ kind: "search", hit: searchHit })
-                            }
-                            tracksViewChanges={false}
-                        >
-                            <View
-                                style={[
-                                    styles.markerBubble,
-                                    {
-                                        backgroundColor: colors.warning,
-                                        borderColor: colors.bg,
-                                    },
-                                ]}
-                            >
-                                <Ionicons
-                                    name="location"
-                                    size={20}
-                                    color={colors.bg}
-                                />
-                            </View>
-                        </Marker>
-                    ) : null}
-                </MapView>
-                <Pressable
-                    onPress={() => setIsFullscreen((v) => !v)}
-                    hitSlop={8}
-                    style={({ pressed }) => [
-                        mapFullStyles.expandBtn,
-                        fullscreen && { top: insets.top + 12 },
-                        pressed && mapFullStyles.expandBtnPressed,
-                    ]}
-                >
-                    <Ionicons
-                        name={fullscreen ? "contract-outline" : "expand-outline"}
-                        size={20}
-                        color={colors.text}
-                    />
-                </Pressable>
-            </View>
-        ), [currentRegion, insets.top, locationAllowed, pois, searchHit]);
+        useEffect(() => {
+            if (!mapReady) return;
+            const payload = pois.map((p) => ({
+                id: p.id,
+                lat: p.lat,
+                lng: p.lng,
+                color: districtPoiColor(p),
+            }));
+            webViewRef.current?.postMessage(JSON.stringify({ type: "pois", pois: payload }));
+        }, [mapReady, pois]);
+
+        useEffect(() => {
+            if (!mapReady) return;
+            webViewRef.current?.postMessage(
+                JSON.stringify({
+                    type: "searchHit",
+                    hit: searchHit
+                        ? { id: searchHit.id, lat: searchHit.lat, lng: searchHit.lng }
+                        : null,
+                }),
+            );
+        }, [mapReady, searchHit]);
+
+        useEffect(() => {
+            if (!mapReady || !mapFocus) return;
+            webViewRef.current?.postMessage(
+                JSON.stringify({
+                    type: "center",
+                    lat: mapFocus.latitude,
+                    lng: mapFocus.longitude,
+                    zoom: 16,
+                }),
+            );
+        }, [mapReady, mapFocus]);
+
+        const handleWebViewMessage = useCallback(
+            (event: WebViewMessageEvent) => {
+                let data: { type: string; id?: string };
+                try {
+                    data = JSON.parse(event.nativeEvent.data);
+                } catch {
+                    return;
+                }
+                if (data.type === "ready") {
+                    setMapReady(true);
+                    return;
+                }
+                if (data.type === "poi") {
+                    const poi = pois.find((p) => p.id === data.id);
+                    if (poi) {
+                        setNavPickerOpen(false);
+                        setPanel({ kind: "poi", poi });
+                    }
+                    return;
+                }
+                if (data.type === "search" && searchHit) {
+                    setNavPickerOpen(false);
+                    setPanel({ kind: "search", hit: searchHit });
+                }
+            },
+            [pois, searchHit],
+        );
 
         const destCoords = useCallback((d: DetailPanel) => {
             if (d.kind === "poi") {
@@ -209,6 +277,36 @@ export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
             },
             [destCoords],
         );
+
+        const renderMapView = useCallback((fullscreen: boolean) => (
+            <View style={fullscreen ? mapFullStyles.mapWrap : styles.mapWrap}>
+                <WebView
+                    ref={webViewRef}
+                    source={{ html: mapHtml }}
+                    style={fullscreen ? mapFullStyles.map : styles.map}
+                    onMessage={handleWebViewMessage}
+                    originWhitelist={["*"]}
+                    javaScriptEnabled
+                    domStorageEnabled
+                    geolocationEnabled={locationAllowed}
+                />
+                <Pressable
+                    onPress={() => setIsFullscreen((v) => !v)}
+                    hitSlop={8}
+                    style={({ pressed }) => [
+                        mapFullStyles.expandBtn,
+                        fullscreen && { top: insets.top + 12 },
+                        pressed && mapFullStyles.expandBtnPressed,
+                    ]}
+                >
+                    <Ionicons
+                        name={fullscreen ? "contract-outline" : "expand-outline"}
+                        size={20}
+                        color={colors.text}
+                    />
+                </Pressable>
+            </View>
+        ), [handleWebViewMessage, insets.top, locationAllowed, mapHtml]);
 
         const detailVisible = panel !== null && !navPickerOpen;
         const navVisible = navPickerOpen && panel !== null;
@@ -326,7 +424,7 @@ export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
                     onRequestClose={() => setIsFullscreen(false)}
                 >
                     <View style={mapFullStyles.fullscreenRoot}>
-                        {renderMapView(true)}
+                        {isFullscreen && renderMapView(true)}
 
                         {detailVisible && (
                             <Pressable

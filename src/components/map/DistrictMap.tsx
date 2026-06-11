@@ -61,7 +61,7 @@ function buildMapHtml(centerLat: number, centerLng: number): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <style>
     html, body { width: 100%; height: 100%; margin: 0; padding: 0; }
-    #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #1a2838; }
+    #map { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #1a2838; }
   </style>
   <script>
     // Отключаем WebGL до загрузки API Яндекс.Карт: внутри WebView векторный
@@ -144,7 +144,10 @@ function buildMapHtml(centerLat: number, centerLng: number): string {
     } else {
       ymaps.ready(function () {
         var mapDiv = document.getElementById('map');
-        post({ type: 'debug', msg: 'ymaps.ready fired, #map size=' + mapDiv.offsetWidth + 'x' + mapDiv.offsetHeight });
+        post({ type: 'debug', msg: 'ymaps.ready fired, #map size=' + mapDiv.offsetWidth + 'x' + mapDiv.offsetHeight
+          + ', window=' + window.innerWidth + 'x' + window.innerHeight
+          + ', html=' + document.documentElement.clientWidth + 'x' + document.documentElement.clientHeight
+          + ', body=' + document.body.clientWidth + 'x' + document.body.clientHeight });
         try {
           map = new ymaps.Map('map', {
             center: [${centerLat}, ${centerLng}],

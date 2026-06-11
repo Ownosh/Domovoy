@@ -44,6 +44,13 @@ type DetailPanel =
     | { kind: "poi"; poi: DistrictPoi }
     | { kind: "search"; hit: DistrictSearchHit };
 
+type WebViewDataMessage =
+    | { type: "ready" }
+    | { type: "poi"; id?: string }
+    | { type: "search"; id?: string }
+    | { type: "debug"; msg: string }
+    | { type: "jsError"; msg: string };
+
 const YANDEX_MAPS_API_KEY = process.env.EXPO_PUBLIC_YANDEX_MAPS_API_KEY ?? "";
 
 function buildMapHtml(centerLat: number, centerLng: number): string {
@@ -53,8 +60,14 @@ function buildMapHtml(centerLat: number, centerLng: number): string {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <style>
-    html, body, #map { width: 100%; height: 100%; margin: 0; padding: 0; background: #1a2838; }
+    html, body { width: 100%; height: 100%; margin: 0; padding: 0; }
+    #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #1a2838; }
   </style>
+  <script>
+    // Отключаем WebGL до загрузки API Яндекс.Карт: внутри WebView векторный
+    // (WebGL) рендер часто рисует чёрный канвас, поэтому форсируем растровые тайлы.
+    try { delete window.WebGLRenderingContext; } catch (e) { window.WebGLRenderingContext = undefined; }
+  </script>
   <script src="https://api-maps.yandex.ru/2.1/?apikey=${YANDEX_MAPS_API_KEY}&lang=ru_RU"></script>
 </head>
 <body>
@@ -120,14 +133,32 @@ function buildMapHtml(centerLat: number, centerLng: number): string {
     document.addEventListener('message', handleMessage);
     window.addEventListener('message', handleMessage);
 
-    ymaps.ready(function () {
-      map = new ymaps.Map('map', {
-        center: [${centerLat}, ${centerLng}],
-        zoom: 14,
-        controls: ['zoomControl']
+    window.onerror = function (msg, src, line, col) {
+      post({ type: 'jsError', msg: String(msg) + ' @ ' + line + ':' + col });
+    };
+
+    post({ type: 'debug', msg: 'script started, ymaps=' + (typeof ymaps) });
+
+    if (typeof ymaps === 'undefined') {
+      post({ type: 'jsError', msg: 'ymaps is undefined - API script failed to load' });
+    } else {
+      ymaps.ready(function () {
+        var mapDiv = document.getElementById('map');
+        post({ type: 'debug', msg: 'ymaps.ready fired, #map size=' + mapDiv.offsetWidth + 'x' + mapDiv.offsetHeight });
+        try {
+          map = new ymaps.Map('map', {
+            center: [${centerLat}, ${centerLng}],
+            zoom: 14,
+            controls: ['zoomControl']
+          });
+          post({ type: 'debug', msg: 'map created ok' });
+        } catch (err) {
+          post({ type: 'jsError', msg: 'map creation failed: ' + (err && err.message ? err.message : String(err)) });
+          return;
+        }
+        post({ type: 'ready' });
       });
-      post({ type: 'ready' });
-    });
+    }
   </script>
 </body>
 </html>`;
@@ -217,7 +248,7 @@ export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
 
         const handleWebViewMessage = useCallback(
             (event: WebViewMessageEvent) => {
-                let data: { type: string; id?: string };
+                let data: WebViewDataMessage;
                 try {
                     data = JSON.parse(event.nativeEvent.data);
                 } catch {
@@ -225,6 +256,14 @@ export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
                 }
                 if (data.type === "ready") {
                     setMapReady(true);
+                    return;
+                }
+                if (data.type === "debug") {
+                    console.log("[DistrictMap]", data.msg);
+                    return;
+                }
+                if (data.type === "jsError") {
+                    console.error("[DistrictMap]", data.msg);
                     return;
                 }
                 if (data.type === "poi") {
@@ -282,13 +321,14 @@ export const DistrictMap = forwardRef<DistrictMapHandle, DistrictMapProps>(
             <View style={fullscreen ? mapFullStyles.mapWrap : styles.mapWrap}>
                 <WebView
                     ref={webViewRef}
-                    source={{ html: mapHtml }}
+                    source={{ html: mapHtml, baseUrl: "https://localhost" }}
                     style={fullscreen ? mapFullStyles.map : styles.map}
                     onMessage={handleWebViewMessage}
                     originWhitelist={["*"]}
                     javaScriptEnabled
                     domStorageEnabled
                     geolocationEnabled={locationAllowed}
+                    androidLayerType="software"
                 />
                 <Pressable
                     onPress={() => setIsFullscreen((v) => !v)}

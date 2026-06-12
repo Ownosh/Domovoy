@@ -14,6 +14,7 @@ import type {
     VoteCast,
 } from "../types";
 import { buildBuildingKey } from "../utils/buildingKey";
+import { OWNERS_MEETING_CATEGORY } from "../utils/appeals";
 
 export const ukContacts: UkContacts = {
     companyName: "УК «Домовой»",
@@ -391,6 +392,7 @@ export const appealCategories = [
     "Вентиляция",
     "Уборка и благоустройство",
     "Нарушение порядка",
+    OWNERS_MEETING_CATEGORY,
     "Другое",
 ];
 

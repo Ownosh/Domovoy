@@ -19,12 +19,16 @@ function makeTokens(userId: number) {
     return { accessToken, refreshToken };
 }
 
+function hashToken(token: string): string {
+    return crypto.createHash("sha256").update(token).digest("hex");
+}
+
 async function storeRefreshToken(userId: number, token: string) {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + REFRESH_TTL_DAYS);
     await pool.execute(
-        "INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)",
-        [userId, token, expiresAt],
+        "INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)",
+        [userId, hashToken(token), expiresAt],
     );
 }
 
@@ -214,9 +218,10 @@ router.post("/refresh", async (req: Request, res: Response) => {
     }
 
     try {
+        const tokenHash = hashToken(refreshToken);
         const [rows] = await pool.execute<RowDataPacket[]>(
-            "SELECT user_id, expires_at FROM refresh_tokens WHERE token = ?",
-            [refreshToken],
+            "SELECT user_id, expires_at FROM refresh_tokens WHERE token_hash = ?",
+            [tokenHash],
         );
 
         if (rows.length === 0) {
@@ -226,12 +231,12 @@ router.post("/refresh", async (req: Request, res: Response) => {
 
         const { user_id, expires_at } = rows[0];
         if (new Date() > new Date(expires_at as string)) {
-            await pool.execute("DELETE FROM refresh_tokens WHERE token = ?", [refreshToken]);
+            await pool.execute("DELETE FROM refresh_tokens WHERE token_hash = ?", [tokenHash]);
             res.status(401).json({ error: "Refresh token истёк" });
             return;
         }
 
-        await pool.execute("DELETE FROM refresh_tokens WHERE token = ?", [refreshToken]);
+        await pool.execute("DELETE FROM refresh_tokens WHERE token_hash = ?", [tokenHash]);
         const { accessToken, refreshToken: newRefresh } = makeTokens(user_id as number);
         await storeRefreshToken(user_id as number, newRefresh);
 
@@ -250,7 +255,7 @@ router.post("/logout", requireAuth, async (req: AuthRequest, res: Response) => {
     const { refreshToken } = req.body as { refreshToken?: string };
     try {
         if (refreshToken) {
-            await pool.execute("DELETE FROM refresh_tokens WHERE token = ? AND user_id = ?", [refreshToken, userId]);
+            await pool.execute("DELETE FROM refresh_tokens WHERE token_hash = ? AND user_id = ?", [hashToken(refreshToken), userId]);
         }
         res.json({ ok: true });
     } catch (err) {

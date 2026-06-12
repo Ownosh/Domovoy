@@ -4,6 +4,7 @@ import { AppealHistoryScreen } from "../screens/profile/AppealHistoryScreen";
 import { AppealDetailScreen } from "../screens/appeals/AppealDetailScreen";
 import { ChangePasswordScreen } from "../screens/profile/ChangePasswordScreen";
 import { ContactsScreen } from "../screens/profile/ContactsScreen";
+import { HouseChatScreen } from "../screens/profile/HouseChatScreen";
 import { DeleteAccountScreen } from "../screens/profile/DeleteAccountScreen";
 import { EditProfileScreen } from "../screens/profile/EditProfileScreen";
 import { NotificationSettingsScreen } from "../screens/profile/NotificationSettingsScreen";
@@ -51,6 +52,7 @@ export function ProfileNavigator() {
                 component={NotificationSettingsScreen}
             />
             <Stack.Screen name="Contacts" component={ContactsScreen} />
+            <Stack.Screen name="HouseChat" component={HouseChatScreen} />
             <Stack.Screen name="Apartments" component={ApartmentsScreen} />
             <Stack.Screen name="AddApartment" component={AddApartmentScreen} />
         </Stack.Navigator>

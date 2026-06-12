@@ -3,16 +3,18 @@ import { pool } from "../db/client";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
 import { moderateContent } from "../utils/moderation";
-import { getActiveApartment } from "../db/helpers";
+import { getActiveApartment, isApartmentOwner } from "../db/helpers";
 
 const router = Router();
 const MASS_APPEAL_THRESHOLD = 5;
+const OWNERS_MEETING_CATEGORY = "Инициатива собрания собственников";
 
-async function getProfile(userId: number): Promise<{ buildingKey: string; apartment: string; entrance: string | null } | null> {
+async function getProfile(userId: number): Promise<{ apartmentId: number; buildingKey: string; apartment: string; entrance: string | null } | null> {
     const apt = await getActiveApartment(userId);
     if (!apt) return null;
     const entranceNum = Number(apt.entrance ?? 0);
     return {
+        apartmentId: apt.apartmentId,
         buildingKey: apt.buildingKey,
         apartment: apt.apartment ?? "",
         entrance: entranceNum > 0 ? String(entranceNum) : null,
@@ -170,6 +172,13 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         const prof = await getProfile(userId);
         if (!prof) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
+        if (category?.trim() === OWNERS_MEETING_CATEGORY) {
+            if (kind !== "collective")
+                return res.status(400).json({ error: "Инициатива собрания собственников может быть только коллективной" });
+            if (!(await isApartmentOwner(prof.apartmentId)))
+                return res.status(403).json({ error: "Подавать инициативу собрания собственников могут только верифицированные собственники" });
+        }
+
         const initialStatus = kind === "collective" ? "collecting_signatures" : "new";
         const [result] = await pool.execute<ResultSetHeader>(
             `INSERT INTO appeals (user_id, building_key, title, body, category, kind, entrance, author_apartment, status)
@@ -201,7 +210,7 @@ router.post("/:id/join", requireAuth, async (req: AuthRequest, res) => {
         if (!prof) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
         const [[appeal]] = await pool.query<RowDataPacket[]>(
-            `SELECT id, building_key, kind, status, entrance, user_id, escalated_to_uk
+            `SELECT id, building_key, category, kind, status, entrance, user_id, escalated_to_uk
              FROM appeals WHERE id = ?`,
             [appealId],
         );
@@ -211,6 +220,8 @@ router.post("/:id/join", requireAuth, async (req: AuthRequest, res) => {
             return res.status(400).json({ error: "Нельзя присоединиться к своему обращению" });
         if ((appeal.building_key as string).toLowerCase() !== prof.buildingKey.toLowerCase())
             return res.status(400).json({ error: "Это обращение другого дома" });
+        if (appeal.category === OWNERS_MEETING_CATEGORY && !(await isApartmentOwner(prof.apartmentId)))
+            return res.status(403).json({ error: "Присоединиться к инициативе собрания собственников могут только верифицированные собственники" });
 
         try {
             await pool.execute(

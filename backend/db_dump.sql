@@ -15,7 +15,7 @@ CREATE TABLE `appeal_participants` (
   `appeal_id` bigint(20) unsigned NOT NULL,
   `user_id` bigint(20) unsigned NOT NULL,
   `apartment` varchar(20) NOT NULL,
-  `entrance` varchar(20) DEFAULT NULL,
+  `entrance` int(11) DEFAULT NULL,
   `display_name` varchar(255) NOT NULL DEFAULT '',
   `anonymous` tinyint(1) NOT NULL DEFAULT 0,
   `comment` text DEFAULT NULL,
@@ -49,7 +49,7 @@ CREATE TABLE `appeals` (
   `status` enum('new','collecting_signatures','in_progress','resolved','closed','rejected') NOT NULL DEFAULT 'new',
   `kind` enum('personal','collective') NOT NULL DEFAULT 'personal',
   `building_key` varchar(120) NOT NULL,
-  `entrance` varchar(20) DEFAULT NULL,
+  `entrance` int(11) DEFAULT NULL,
   `author_apartment` varchar(20) NOT NULL DEFAULT '',
   `escalated_to_uk` tinyint(1) NOT NULL DEFAULT 0,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
@@ -67,21 +67,17 @@ CREATE TABLE `appeals` (
   CONSTRAINT `fk_appeals_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=32 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-CREATE TABLE `building_contacts` (
+CREATE TABLE `management_companies` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `building_key` varchar(120) NOT NULL,
   `company_name` varchar(255) NOT NULL DEFAULT '',
   `phone` varchar(100) NOT NULL DEFAULT '',
   `email` varchar(255) NOT NULL DEFAULT '',
   `site` varchar(255) NOT NULL DEFAULT '',
   `hours` varchar(255) NOT NULL DEFAULT '',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_bc_building` (`building_key`),
-  CONSTRAINT `fk_bc_building` FOREIGN KEY (`building_key`) REFERENCES `buildings` (`building_key`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `buildings` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `building_key` varchar(120) NOT NULL,
   `address` text NOT NULL,
   `short_name` varchar(255) NOT NULL,
@@ -90,13 +86,24 @@ CREATE TABLE `buildings` (
   `year_built` int(11) DEFAULT NULL,
   `entrances` int(11) DEFAULT NULL,
   `apartments` int(11) DEFAULT NULL,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   `lat` decimal(9,6) DEFAULT NULL,
   `lng` decimal(9,6) DEFAULT NULL,
+  `management_company_id` bigint(20) unsigned DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`building_key`),
+  CONSTRAINT `fk_buildings_mc` FOREIGN KEY (`management_company_id`) REFERENCES `management_companies` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `building_chats` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `building_key` varchar(120) NOT NULL,
+  `platform` enum('telegram','vk','max') NOT NULL,
+  `url` varchar(500) NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_buildings_key` (`building_key`)
-) ENGINE=InnoDB AUTO_INCREMENT=33 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  UNIQUE KEY `uq_building_chats` (`building_key`,`platform`),
+  CONSTRAINT `fk_building_chats_building` FOREIGN KEY (`building_key`) REFERENCES `buildings` (`building_key`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `district_pois` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -206,7 +213,6 @@ CREATE TABLE `neighbor_ads` (
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `expires_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `image_urls` mediumtext DEFAULT NULL,
   `status` enum('new','under_review','published','archived','rejected','under_review_appeal') NOT NULL DEFAULT 'new',
   PRIMARY KEY (`id`),
   KEY `idx_na_building_created` (`building_key`,`created_at` DESC),
@@ -343,7 +349,6 @@ CREATE TABLE `users` (
   `notif_general` tinyint(1) NOT NULL DEFAULT 1,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `expo_push_token` varchar(500) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_users_email` (`email`)
 ) ENGINE=InnoDB AUTO_INCREMENT=24 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

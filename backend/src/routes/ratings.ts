@@ -11,10 +11,13 @@ router.get("/my", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     const monthKey = String(req.query.month ?? "");
     try {
+        const buildingKey = await getActiveBuildingKey(userId);
+        if (!buildingKey) return res.json(null);
+
         let sql = `SELECT month_key, courtyard_stars, entrance_stars, uk_stars,
                           feedback_tags, feedback_other, submitted_at
-                   FROM environment_ratings WHERE user_id = ?`;
-        const params: unknown[] = [userId];
+                   FROM environment_ratings WHERE user_id = ? AND building_key = ?`;
+        const params: unknown[] = [userId, buildingKey];
         if (monthKey) {
             sql += ` AND month_key = ?`;
             params.push(monthKey);

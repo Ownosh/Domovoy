@@ -16,7 +16,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
 
         const [voteRows] = await pool.query<RowDataPacket[]>(
             `SELECT v.id, v.building_key, v.user_id, v.created_by_label, v.sponsor, v.topic, v.description,
-                    v.visibility, v.ends_at, v.closed, v.trial, v.created_at,
+                    v.visibility, v.ends_at, v.closed, v.trial, v.status, v.created_at,
                     p.full_name AS author_name, p.profile_photo AS author_photo
              FROM votes v
              LEFT JOIN user_profiles p ON p.user_id = v.user_id
@@ -44,6 +44,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
                 visibility,
                 endsAt: (v.ends_at as Date).toISOString(),
                 closed: Boolean(v.closed),
+                status: v.status as string,
                 trial: Boolean(v.trial),
                 createdAt: (v.created_at as Date).toISOString(),
                 options: opts.map((o) => ({ id: String(o.id), label: String(o.label) })),
@@ -118,8 +119,8 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         try {
             await conn.beginTransaction();
             const [vr] = await conn.execute<ResultSetHeader>(
-                `INSERT INTO votes (building_key, user_id, created_by_label, sponsor, topic, description, visibility, ends_at)
-                 VALUES (?, ?, ?, 'residents', ?, ?, ?, ?)`,
+                `INSERT INTO votes (building_key, user_id, created_by_label, sponsor, topic, description, visibility, ends_at, status)
+                 VALUES (?, ?, ?, 'residents', ?, ?, ?, ?, 'active')`,
                 [buildingKey, userId, createdByLabel?.trim() ?? "", topic.trim(), description.trim(), visibility ?? "open", endsAt],
             );
             const voteId = vr.insertId;
@@ -142,6 +143,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
                 visibility: visibility ?? "open",
                 endsAt: endsAt.toISOString(),
                 closed: false,
+                status: "active",
                 trial: false,
                 createdAt: new Date().toISOString(),
                 options: optionLabels.map((label, i) => ({
@@ -216,7 +218,7 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
 
         const [[updated]] = await pool.query<RowDataPacket[]>(
             `SELECT id, building_key, user_id, created_by_label, sponsor, topic, description,
-                    visibility, ends_at, closed, trial, created_at
+                    visibility, ends_at, closed, trial, status, created_at
              FROM votes WHERE id=?`, [voteId],
         );
         const [opts] = await pool.query<RowDataPacket[]>(
@@ -232,12 +234,29 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
             visibility: updated.visibility as string,
             endsAt: (updated.ends_at as Date).toISOString(),
             closed: false,
+            status: updated.status as string,
             trial: Boolean(updated.trial),
             createdAt: (updated.created_at as Date).toISOString(),
             options: opts.map((o) => ({ id: String(o.id), label: String(o.label) })),
         });
     } catch (err) {
         console.error("[votes PATCH]", err);
+        return res.status(500).json({ error: "Ошибка сервера" });
+    }
+});
+
+// POST /api/votes/:id/report  — пожаловаться на голосование (отправить на проверку админу)
+router.post("/:id/report", requireAuth, async (req: AuthRequest, res) => {
+    const voteId = Number(req.params.id);
+    try {
+        await pool.execute(
+            `UPDATE votes SET status = 'under_review'
+             WHERE id = ? AND status NOT IN ('under_review', 'cancelled')`,
+            [voteId],
+        );
+        return res.json({ ok: true });
+    } catch (err) {
+        console.error("[votes/report POST]", err);
         return res.status(500).json({ error: "Ошибка сервера" });
     }
 });
@@ -264,23 +283,12 @@ router.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
 router.post("/:id/cast", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     const voteId = Number(req.params.id);
-    const { optionId, areaSqm } = req.body as { optionId?: string; areaSqm?: number };
+    const { optionId } = req.body as { optionId?: string };
     if (!optionId) return res.status(400).json({ error: "optionId обязателен" });
 
     try {
         const apt = await getActiveApartment(userId);
         if (!apt) return res.status(400).json({ error: "Профиль не привязан к дому" });
-
-        const [[verif]] = await pool.query<RowDataPacket[]>(
-            `SELECT doc_type FROM verification_requests
-             WHERE apartment_id = ? AND status = 'approved'
-             ORDER BY reviewed_at DESC LIMIT 1`,
-            [apt.apartmentId],
-        );
-        if (!verif) return res.status(403).json({ error: "Необходима верификация для голосования" });
-        if (verif.doc_type === "lease") {
-            return res.status(403).json({ error: "Голосование доступно только собственникам жилья (ЖК РФ ст. 48)" });
-        }
 
         const [[vote]] = await pool.query<RowDataPacket[]>(
             `SELECT ends_at, closed FROM votes WHERE id = ?`, [voteId],
@@ -296,7 +304,7 @@ router.post("/:id/cast", requireAuth, async (req: AuthRequest, res) => {
 
         await pool.execute(
             `INSERT INTO vote_casts (vote_id, user_id, option_id, area_sqm) VALUES (?, ?, ?, ?)`,
-            [voteId, userId, optionId, areaSqm ?? 42],
+            [voteId, userId, optionId, apt.apartmentAreaSqm ?? 0],
         );
         return res.json({ ok: true });
     } catch (err: any) {

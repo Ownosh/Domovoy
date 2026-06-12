@@ -32,3 +32,14 @@ export async function getActiveBuildingKey(userId: number): Promise<string | nul
     const apt = await getActiveApartment(userId);
     return apt?.buildingKey ?? null;
 }
+
+// Подтверждён ли пользователь как собственник квартиры (verification_requests.doc_type = 'ownership')
+export async function isApartmentOwner(apartmentId: number): Promise<boolean> {
+    const [[verif]] = await pool.query<RowDataPacket[]>(
+        `SELECT doc_type FROM verification_requests
+         WHERE apartment_id = ? AND status = 'approved'
+         ORDER BY reviewed_at DESC LIMIT 1`,
+        [apartmentId],
+    );
+    return !!verif && verif.doc_type === "ownership";
+}

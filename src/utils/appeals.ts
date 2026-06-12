@@ -20,6 +20,9 @@ export function adEffectiveStatus(ad: NeighborAd): NeighborAdStatus {
 /** Порог квартир в подъезде для массовой жалобы. */
 export const MASS_APPEAL_THRESHOLD = 5;
 
+/** Категория обращений, доступная только собственникам (инициатива ОСС). */
+export const OWNERS_MEETING_CATEGORY = "Инициатива собрания собственников";
+
 export function isArchivedAppeal(appeal: Appeal): boolean {
     if (appeal.manuallyArchived) return true;
     if (!archivedStatuses.has(appeal.status)) return false;

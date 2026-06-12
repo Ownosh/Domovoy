@@ -188,6 +188,11 @@ export type UkContacts = {
     hours: string;
 };
 
+export type BuildingChat = {
+    platform: "telegram" | "vk" | "max";
+    url: string;
+};
+
 export type NeighborAdCategory =
     | "sell"
     | "buy"

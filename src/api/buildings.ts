@@ -42,6 +42,10 @@ export async function apiFetchBuildingContacts(): Promise<import("../types").UkC
     return apiRequest<import("../types").UkContacts | null>("/buildings/contacts");
 }
 
+export async function apiFetchBuildingChats(): Promise<import("../types").BuildingChat[]> {
+    return apiRequest<import("../types").BuildingChat[]>("/buildings/chats");
+}
+
 export type BuildingSuggestion = {
     building_key: string;
     short_name: string;

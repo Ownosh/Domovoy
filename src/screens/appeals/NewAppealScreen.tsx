@@ -6,7 +6,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { Button, Card, CollapsibleHint, Input, ScreenLayout, VerificationWall } from "../../components/ui";
 import { uploadFile } from "../../api/files";
 import { appealCategories } from "../../data/mockData";
-import { useApp, isVerifiedResident } from "../../context/AppContext";
+import { useApp, isVerifiedResident, isVerifiedOwner } from "../../context/AppContext";
+import { OWNERS_MEETING_CATEGORY } from "../../utils/appeals";
 import type { ModerationData } from "../../api/client";
 import type { AppealKind } from "../../types";
 import { colors, radius, spacing, textStyles } from "../../theme";
@@ -44,6 +45,23 @@ export function NewAppealScreen({ navigation, route }: Props) {
     const [err, setErr] = useState("");
     const [moderation, setModeration] = useState<ModerationData | null>(null);
     const [submitting, setSubmitting] = useState(false);
+
+    const isOwner = isVerifiedOwner(verification);
+    const isOwnersMeeting = category === OWNERS_MEETING_CATEGORY;
+
+    const selectCategory = (c: string) => {
+        if (c === OWNERS_MEETING_CATEGORY) {
+            if (!isOwner) {
+                Alert.alert(
+                    "Только для собственников",
+                    "Подавать инициативу собрания собственников могут только верифицированные собственники жилья.",
+                );
+                return;
+            }
+            setKind("collective");
+        }
+        setCategory(c);
+    };
 
     const pickPhoto = async () => {
         if (photos.length >= MAX_PHOTOS) {
@@ -129,8 +147,9 @@ export function NewAppealScreen({ navigation, route }: Props) {
                     <Text style={[textStyles.label, styles.sectionLabel]}>Тип обращения</Text>
                     <View style={[styles.kindRow, styles.rowGap]}>
                         <Pressable
-                            onPress={() => setKind("personal")}
-                            style={[styles.kindChip, kind === "personal" && styles.kindChipOn]}
+                            onPress={() => !isOwnersMeeting && setKind("personal")}
+                            disabled={isOwnersMeeting}
+                            style={[styles.kindChip, kind === "personal" && styles.kindChipOn, isOwnersMeeting && styles.kindChipDisabled]}
                         >
                             <Text style={[textStyles.caption, kind === "personal" ? styles.kindChipTextOn : styles.kindChipText]}>
                                 Личное
@@ -150,7 +169,7 @@ export function NewAppealScreen({ navigation, route }: Props) {
                         {appealCategories.map((c) => (
                             <Pressable
                                 key={c}
-                                onPress={() => setCategory(c)}
+                                onPress={() => selectCategory(c)}
                                 style={[styles.chip, category === c && styles.chipActive]}
                             >
                                 <Text style={[textStyles.caption, category === c ? styles.chipTextActive : styles.chipText]} numberOfLines={1}>
@@ -159,6 +178,11 @@ export function NewAppealScreen({ navigation, route }: Props) {
                             </Pressable>
                         ))}
                     </View>
+                    {isOwnersMeeting && (
+                        <Text style={[textStyles.caption, styles.ownersMeetingHint]}>
+                            Эта категория доступна только собственникам и всегда оформляется как коллективное обращение.
+                        </Text>
+                    )}
                     <View style={styles.divider} />
                     <Input
                         label="Тема"
@@ -253,6 +277,7 @@ const styles = StyleSheet.create({
         borderColor: colors.border, backgroundColor: colors.bgElevated,
     },
     kindChipOn: { borderColor: colors.info, backgroundColor: `${colors.info}15` },
+    kindChipDisabled: { opacity: 0.4 },
     kindChipText: { color: colors.textMuted },
     kindChipTextOn: { color: colors.info, fontWeight: "600" },
     chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
@@ -264,6 +289,7 @@ const styles = StyleSheet.create({
     chipActive: { borderColor: colors.info, backgroundColor: `${colors.info}15` },
     chipText: { color: colors.textMuted },
     chipTextActive: { color: colors.info },
+    ownersMeetingHint: { color: colors.textDim, marginTop: -spacing.xs, marginBottom: spacing.sm },
     gap: { height: spacing.md },
     gapSm: { height: spacing.sm },
     gapLg: { height: spacing.lg },

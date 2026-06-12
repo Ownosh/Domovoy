@@ -30,12 +30,13 @@ import {
 } from "../../components/ui";
 import { appealLabels, appealStatusColor } from "../../components/ui/StatusBadge";
 import type { TimelineStep } from "../../components/ui/StatusTimeline";
-import { useApp, isVerifiedResident } from "../../context/AppContext";
+import { useApp, isVerifiedResident, isVerifiedOwner } from "../../context/AppContext";
 import { buildBuildingKey } from "../../utils/buildingKey";
 import {
     collectiveUniqueApartmentCount,
     isArchivedAppeal,
     MASS_APPEAL_THRESHOLD,
+    OWNERS_MEETING_CATEGORY,
 } from "../../utils/appeals";
 import { colors, radius, spacing, textStyles } from "../../theme";
 import type { AppealKind, AppealStatus } from "../../types";
@@ -101,7 +102,10 @@ export function AppealDetailScreen({ route, navigation }: Props) {
     const sameHouseAsAppeal = item.buildingKey.toLowerCase() === myBuildingKey.toLowerCase();
     const alreadyJoined = !!user && item.participants.some((p) => String(p.userId) === String(user.id));
     const verified = isVerifiedResident(verification);
-    const canJoin = item.kind === "collective" && !isAuthor && user && !alreadyJoined && verified && sameHouseAsAppeal;
+    const isOwnersMeeting = item.category === OWNERS_MEETING_CATEGORY;
+    const isOwner = isVerifiedOwner(verification);
+    const canJoin = item.kind === "collective" && !isAuthor && user && !alreadyJoined && verified && sameHouseAsAppeal
+        && (!isOwnersMeeting || isOwner);
 
     const statusColor = appealStatusColor[item.status] ?? colors.textMuted;
     const steps = getAppealSteps(item.kind, item.status);
@@ -273,6 +277,9 @@ export function AppealDetailScreen({ route, navigation }: Props) {
             )}
             {item.kind === "collective" && !isAuthor && user && !verified && (
                 <VerificationWall message="Присоединиться могут только верифицированные жильцы." />
+            )}
+            {item.kind === "collective" && !isAuthor && user && verified && !alreadyJoined && isOwnersMeeting && !isOwner && (
+                <VerificationWall message="Присоединиться к инициативе собрания собственников могут только верифицированные собственники." />
             )}
 
             {/* ── Комментарий от УК ── */}

@@ -50,7 +50,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
 
         const [rows] = await pool.query<RowDataPacket[]>(
             `SELECT n.id, n.author_user_id, n.building_key, n.title, n.body, n.category,
-                    n.show_phone, n.author_phone, n.pending_moderation, n.archived,
+                    n.show_phone, n.author_phone, n.status,
                     n.created_at, n.expires_at,
                     p.full_name AS author_name, p.profile_photo AS author_photo
              FROM neighbor_ads n
@@ -73,8 +73,9 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
             imageUrls: photosMap[r.id as number] ?? [],
             showPhone: Boolean(r.show_phone),
             authorPhone: (r.author_phone as string | null) ?? undefined,
-            pendingModeration: Boolean(r.pending_moderation),
-            archived: Boolean(r.archived),
+            status: r.status as string,
+            pendingModeration: r.status === "under_review" || r.status === "under_review_appeal",
+            archived: r.status === "archived",
             createdAt: (r.created_at as Date).toISOString(),
             expiresAt: (r.expires_at as Date).toISOString(),
             authorName: (r.author_name as string | null) ?? undefined,
@@ -120,8 +121,8 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         const expiresAt = new Date(Date.now() + AD_TTL_MS);
         const [result] = await pool.execute<ResultSetHeader>(
             `INSERT INTO neighbor_ads
-                (author_user_id, building_key, title, body, category, show_phone, author_phone, expires_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                (author_user_id, building_key, title, body, category, show_phone, author_phone, expires_at, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'published')`,
             [
                 userId, buildingKey, title.trim(), body.trim(), category,
                 showPhone ? 1 : 0,
@@ -144,6 +145,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
             imageUrls: urls,
             showPhone: Boolean(showPhone),
             authorPhone: showPhone && authorPhone ? authorPhone.trim() : undefined,
+            status: "published",
             pendingModeration: false,
             archived: false,
             createdAt: new Date().toISOString(),
@@ -185,7 +187,8 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
 
         const [result] = await pool.execute<ResultSetHeader>(
             `UPDATE neighbor_ads SET title=?, body=?, category=COALESCE(?,category),
-             show_phone=?, author_phone=?
+             show_phone=?, author_phone=?,
+             status=IF(status='rejected','under_review_appeal',status)
              WHERE id=? AND author_user_id=?`,
             [
                 title.trim(), body.trim(), category ?? null,
@@ -204,7 +207,7 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
 
         const [rows] = await pool.query<RowDataPacket[]>(
             `SELECT id, author_user_id, building_key, title, body, category,
-                    show_phone, author_phone, pending_moderation, archived, created_at, expires_at
+                    show_phone, author_phone, status, created_at, expires_at
              FROM neighbor_ads WHERE id=?`, [adId],
         );
         const photosMap = await getPhotos([adId]);
@@ -215,7 +218,9 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
             category: r.category as string,
             imageUrls: photosMap[adId] ?? [],
             showPhone: Boolean(r.show_phone), authorPhone: r.author_phone ?? undefined,
-            pendingModeration: Boolean(r.pending_moderation), archived: Boolean(r.archived),
+            status: r.status as string,
+            pendingModeration: r.status === "under_review" || r.status === "under_review_appeal",
+            archived: r.status === "archived",
             createdAt: (r.created_at as Date).toISOString(), expiresAt: (r.expires_at as Date).toISOString(),
         });
     } catch (err) {
@@ -249,7 +254,8 @@ router.patch("/:id/extend", requireAuth, async (req: AuthRequest, res) => {
     try {
         const newExpiry = new Date(Date.now() + AD_TTL_MS);
         const [result] = await pool.execute<ResultSetHeader>(
-            `UPDATE neighbor_ads SET expires_at = ?, archived = 0 WHERE id = ? AND author_user_id = ?`,
+            `UPDATE neighbor_ads SET expires_at = ?, status = IF(status='archived','published',status)
+             WHERE id = ? AND author_user_id = ?`,
             [newExpiry, adId, userId],
         );
         if (result.affectedRows === 0)
@@ -265,7 +271,11 @@ router.patch("/:id/extend", requireAuth, async (req: AuthRequest, res) => {
 router.post("/:id/report", requireAuth, async (_req: AuthRequest, res) => {
     const adId = Number(_req.params.id);
     try {
-        await pool.execute(`UPDATE neighbor_ads SET pending_moderation = 1 WHERE id = ?`, [adId]);
+        await pool.execute(
+            `UPDATE neighbor_ads SET status = 'under_review'
+             WHERE id = ? AND status NOT IN ('under_review', 'under_review_appeal', 'rejected')`,
+            [adId],
+        );
         return res.json({ ok: true });
     } catch (err) {
         console.error("[neighbor-ads report]", err);

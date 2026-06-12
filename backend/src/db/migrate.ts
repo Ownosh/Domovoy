@@ -31,7 +31,6 @@ export async function migrate(): Promise<void> {
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS buildings (
-            id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             building_key VARCHAR(120)    NOT NULL,
             address      TEXT            NOT NULL,
             short_name   VARCHAR(255)    NOT NULL,
@@ -44,12 +43,23 @@ export async function migrate(): Promise<void> {
             lng          DECIMAL(9,6)    DEFAULT NULL,
             created_at   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
-            UNIQUE KEY uq_buildings_key (building_key)
+            PRIMARY KEY (building_key)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
     await exec(`ALTER TABLE buildings ADD COLUMN IF NOT EXISTS lat DECIMAL(9,6) DEFAULT NULL`);
     await exec(`ALTER TABLE buildings ADD COLUMN IF NOT EXISTS lng DECIMAL(9,6) DEFAULT NULL`);
+
+    // Старые установки: buildings.id — избыточный суррогатный ключ, все FK уже ссылаются на building_key
+    if (await columnExists("buildings", "id")) {
+        await exec(`
+            ALTER TABLE buildings
+                MODIFY id BIGINT UNSIGNED NOT NULL,
+                DROP PRIMARY KEY,
+                ADD PRIMARY KEY (building_key),
+                DROP COLUMN id
+        `);
+        await exec(`ALTER TABLE buildings DROP INDEX uq_buildings_key`);
+    }
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS users (
@@ -62,14 +72,12 @@ export async function migrate(): Promise<void> {
             notif_meetings      TINYINT(1) NOT NULL DEFAULT 1,
             notif_announcements TINYINT(1) NOT NULL DEFAULT 1,
             notif_general       TINYINT(1) NOT NULL DEFAULT 1,
-            expo_push_token     VARCHAR(500) DEFAULT NULL,
             created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             UNIQUE KEY email (email)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    await exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS expo_push_token VARCHAR(500) DEFAULT NULL`);
 
     // ============================================================
     //  КВАРТИРЫ ПОЛЬЗОВАТЕЛЯ + ПРОФИЛЬ
@@ -148,14 +156,24 @@ export async function migrate(): Promise<void> {
         CREATE TABLE IF NOT EXISTS refresh_tokens (
             id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             user_id     BIGINT UNSIGNED NOT NULL,
-            token       VARCHAR(100) NOT NULL,
+            token_hash  CHAR(64) NOT NULL,
             expires_at  DATETIME NOT NULL,
             created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
-            UNIQUE KEY token (token),
+            UNIQUE KEY uq_rt_token_hash (token_hash),
             CONSTRAINT fk_rt_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+
+    // Старые установки хранили refresh-токен в открытом виде — переходим на SHA-256 хеш
+    if (await columnExists("refresh_tokens", "token")) {
+        await exec(`ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS token_hash CHAR(64) DEFAULT NULL`);
+        await exec(`UPDATE refresh_tokens SET token_hash = SHA2(token, 256) WHERE token_hash IS NULL`);
+        await exec(`ALTER TABLE refresh_tokens DROP INDEX token`);
+        await exec(`ALTER TABLE refresh_tokens DROP COLUMN token`);
+        await exec(`ALTER TABLE refresh_tokens MODIFY COLUMN token_hash CHAR(64) NOT NULL`);
+        await exec(`ALTER TABLE refresh_tokens ADD UNIQUE KEY uq_rt_token_hash (token_hash)`);
+    }
 
     // ============================================================
     //  ВЕРИФИКАЦИЯ КВАРТИРЫ
@@ -219,26 +237,60 @@ export async function migrate(): Promise<void> {
         await exec(`ALTER TABLE verification_requests DROP COLUMN IF EXISTS building_key`);
         await exec(`ALTER TABLE verification_requests ADD CONSTRAINT fk_vr_apartment FOREIGN KEY (apartment_id) REFERENCES user_apartments(id) ON DELETE CASCADE`);
         await exec(`ALTER TABLE verification_requests ADD INDEX idx_vr_apartment_submitted (apartment_id, submitted_at DESC)`);
+        await exec(`ALTER TABLE verification_requests ADD INDEX idx_vr_status (status)`);
     }
 
     // ============================================================
     //  УК — КОНТАКТЫ ДОМА
     // ============================================================
 
+    // management_companies — одна УК может обслуживать несколько домов (buildings.management_company_id)
     await pool.query(`
-        CREATE TABLE IF NOT EXISTS building_contacts (
+        CREATE TABLE IF NOT EXISTS management_companies (
             id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-            building_key VARCHAR(120)    NOT NULL,
             company_name VARCHAR(255)    NOT NULL DEFAULT '',
             phone        VARCHAR(100)    NOT NULL DEFAULT '',
             email        VARCHAR(255)    NOT NULL DEFAULT '',
             site         VARCHAR(255)    NOT NULL DEFAULT '',
             hours        VARCHAR(255)    NOT NULL DEFAULT '',
-            PRIMARY KEY (id),
-            UNIQUE KEY uq_bc_building (building_key)
+            PRIMARY KEY (id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    await exec(`ALTER TABLE building_contacts ADD CONSTRAINT fk_bc_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON DELETE CASCADE ON UPDATE CASCADE`);
+    await exec(`ALTER TABLE buildings ADD COLUMN IF NOT EXISTS management_company_id BIGINT UNSIGNED DEFAULT NULL`);
+
+    // Перенос старых building_contacts (1:1 с домом) в management_companies (1:N)
+    if (await tableExists("building_contacts")) {
+        await exec(`
+            INSERT INTO management_companies (company_name, phone, email, site, hours)
+            SELECT DISTINCT company_name, phone, email, site, hours FROM building_contacts
+        `);
+        await exec(`
+            UPDATE buildings b
+            JOIN building_contacts bc ON bc.building_key = b.building_key
+            JOIN management_companies mc
+                ON mc.company_name = bc.company_name AND mc.phone = bc.phone
+               AND mc.email = bc.email AND mc.site = bc.site AND mc.hours = bc.hours
+            SET b.management_company_id = mc.id
+        `);
+        await exec(`DROP TABLE building_contacts`);
+    }
+
+    await exec(`ALTER TABLE buildings ADD CONSTRAINT fk_buildings_mc FOREIGN KEY (management_company_id) REFERENCES management_companies(id) ON DELETE SET NULL`);
+
+    // building_chats — официальные чаты дома (Telegram/VK/Max)
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS building_chats (
+            id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            building_key VARCHAR(120)    NOT NULL,
+            platform     ENUM('telegram','vk','max') NOT NULL,
+            url          VARCHAR(500)    NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_building_chats (building_key, platform)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    // Удаление дома не должно молча сносить контент — building_key FK везде RESTRICT (только ON UPDATE CASCADE)
+    await exec(`ALTER TABLE building_chats DROP FOREIGN KEY fk_building_chats_building`);
+    await exec(`ALTER TABLE building_chats ADD CONSTRAINT fk_building_chats_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
 
     // ============================================================
     //  НОВОСТИ
@@ -258,7 +310,8 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
     await exec(`ALTER TABLE news ADD COLUMN IF NOT EXISTS is_published TINYINT(1) NOT NULL DEFAULT 1`);
-    await exec(`ALTER TABLE news ADD CONSTRAINT fk_news_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE ON DELETE CASCADE`);
+    await exec(`ALTER TABLE news DROP FOREIGN KEY fk_news_building`);
+    await exec(`ALTER TABLE news ADD CONSTRAINT fk_news_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS news_photos (
@@ -290,7 +343,8 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
     await exec(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS building_key VARCHAR(120) NULL COMMENT 'NULL = всем домам'`);
-    await exec(`ALTER TABLE notifications ADD CONSTRAINT fk_notif_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE ON DELETE CASCADE`);
+    await exec(`ALTER TABLE notifications DROP FOREIGN KEY fk_notif_building`);
+    await exec(`ALTER TABLE notifications ADD CONSTRAINT fk_notif_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS user_notification_reads (
@@ -319,7 +373,7 @@ export async function migrate(): Promise<void> {
             category              VARCHAR(100)    NOT NULL,
             kind                  ENUM('personal','collective') NOT NULL DEFAULT 'personal',
             status                ENUM('new','collecting_signatures','in_progress','resolved','closed','rejected') NOT NULL DEFAULT 'new',
-            entrance              VARCHAR(20)     DEFAULT NULL,
+            entrance              INT             DEFAULT NULL,
             author_apartment      VARCHAR(20)     NOT NULL DEFAULT '',
             escalated_to_uk       BOOLEAN         NOT NULL DEFAULT FALSE,
             manually_archived     TINYINT(1)      NOT NULL DEFAULT 0,
@@ -342,6 +396,8 @@ export async function migrate(): Promise<void> {
     await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_comment_at DATETIME DEFAULT NULL`);
     await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_comment_read_at DATETIME DEFAULT NULL`);
     await exec(`ALTER TABLE appeals ADD CONSTRAINT fk_appeals_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
+    // Старые установки хранили entrance как VARCHAR(20) — приводим к INT, как в user_apartments.entrance
+    await exec(`ALTER TABLE appeals MODIFY COLUMN entrance INT DEFAULT NULL`);
     // Старые статусы -> новые, затем сужаем ENUM
     await exec(`UPDATE appeals SET status = 'in_progress' WHERE status = 'accepted'`);
     await exec(`UPDATE appeals SET status = 'collecting_signatures' WHERE status = 'mass_appeal'`);
@@ -372,7 +428,7 @@ export async function migrate(): Promise<void> {
             appeal_id    BIGINT UNSIGNED NOT NULL,
             user_id      BIGINT UNSIGNED NOT NULL,
             apartment    VARCHAR(20)     NOT NULL,
-            entrance     VARCHAR(20)     DEFAULT NULL,
+            entrance     INT             DEFAULT NULL,
             display_name VARCHAR(255)    NOT NULL DEFAULT '',
             anonymous    BOOLEAN         NOT NULL DEFAULT FALSE,
             comment      TEXT            DEFAULT NULL,
@@ -386,6 +442,7 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
     await exec(`ALTER TABLE appeal_participants MODIFY COLUMN photo_uri TEXT DEFAULT NULL`);
+    await exec(`ALTER TABLE appeal_participants MODIFY COLUMN entrance INT DEFAULT NULL`);
 
     // ============================================================
     //  ДОМ — ХАРАКТЕРИСТИКИ, ФОТО, СТАТУС, КАЛЕНДАРЬ, МУСОР
@@ -402,7 +459,8 @@ export async function migrate(): Promise<void> {
             INDEX idx_hs_building_position (building_key, position)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    await exec(`ALTER TABLE house_specs ADD CONSTRAINT fk_hs_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON DELETE CASCADE ON UPDATE CASCADE`);
+    await exec(`ALTER TABLE house_specs DROP FOREIGN KEY fk_hs_building`);
+    await exec(`ALTER TABLE house_specs ADD CONSTRAINT fk_hs_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS house_photos (
@@ -415,7 +473,8 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
     await exec(`ALTER TABLE house_photos MODIFY COLUMN image_url TEXT NOT NULL`);
-    await exec(`ALTER TABLE house_photos ADD CONSTRAINT fk_hph_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON DELETE CASCADE ON UPDATE CASCADE`);
+    await exec(`ALTER TABLE house_photos DROP FOREIGN KEY fk_hph_building`);
+    await exec(`ALTER TABLE house_photos ADD CONSTRAINT fk_hph_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS house_status (
@@ -429,7 +488,8 @@ export async function migrate(): Promise<void> {
             INDEX idx_hst_building_position (building_key, position)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    await exec(`ALTER TABLE house_status ADD CONSTRAINT fk_hst_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON DELETE CASCADE ON UPDATE CASCADE`);
+    await exec(`ALTER TABLE house_status DROP FOREIGN KEY fk_hst_building`);
+    await exec(`ALTER TABLE house_status ADD CONSTRAINT fk_hst_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS house_calendar_activities (
@@ -443,7 +503,8 @@ export async function migrate(): Promise<void> {
             INDEX idx_hca_building_date (building_key, activity_date)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    await exec(`ALTER TABLE house_calendar_activities ADD CONSTRAINT fk_hca_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON DELETE CASCADE ON UPDATE CASCADE`);
+    await exec(`ALTER TABLE house_calendar_activities DROP FOREIGN KEY fk_hca_building`);
+    await exec(`ALTER TABLE house_calendar_activities ADD CONSTRAINT fk_hca_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS trash_pickup_schedule (
@@ -457,7 +518,8 @@ export async function migrate(): Promise<void> {
             INDEX idx_tps_building_position (building_key, position)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    await exec(`ALTER TABLE trash_pickup_schedule ADD CONSTRAINT fk_tps_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON DELETE CASCADE ON UPDATE CASCADE`);
+    await exec(`ALTER TABLE trash_pickup_schedule DROP FOREIGN KEY fk_tps_building`);
+    await exec(`ALTER TABLE trash_pickup_schedule ADD CONSTRAINT fk_tps_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
 
     // ============================================================
     //  ОБЪЯВЛЕНИЯ СОСЕДЕЙ
@@ -495,6 +557,21 @@ export async function migrate(): Promise<void> {
     `);
     await exec(`ALTER TABLE neighbor_ads ADD CONSTRAINT fk_na_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
 
+    // pending_moderation/archived заменены единым полем status (single source of truth)
+    if (await columnExists("neighbor_ads", "pending_moderation")) {
+        await exec(`UPDATE neighbor_ads SET status = 'under_review' WHERE pending_moderation = 1 AND status = 'new'`);
+        await exec(`UPDATE neighbor_ads SET status = 'archived' WHERE archived = 1 AND status = 'new'`);
+        await exec(`UPDATE neighbor_ads SET status = 'published' WHERE status = 'new'`);
+        await exec(`ALTER TABLE neighbor_ads DROP COLUMN pending_moderation`);
+        await exec(`ALTER TABLE neighbor_ads DROP COLUMN archived`);
+    }
+    await exec(`
+        ALTER TABLE neighbor_ads MODIFY COLUMN status
+        ENUM('new','under_review','published','archived','rejected','under_review_appeal')
+        NOT NULL DEFAULT 'published'
+    `);
+    await exec(`ALTER TABLE neighbor_ads ADD INDEX idx_na_status (status)`);
+
     await pool.query(`
         CREATE TABLE IF NOT EXISTS neighbor_ad_photos (
             id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -529,12 +606,14 @@ export async function migrate(): Promise<void> {
             closed           TINYINT(1)             NOT NULL DEFAULT 0,
             trial            TINYINT(1)             NOT NULL DEFAULT 0,
             created_at       DATETIME               NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at       DATETIME               NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             CONSTRAINT fk_votes_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
             INDEX idx_votes_building_key (building_key, created_at DESC),
             INDEX idx_votes_ends_at      (ends_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+    await exec(`ALTER TABLE votes ADD COLUMN IF NOT EXISTS updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`);
     await exec(`ALTER TABLE votes ADD COLUMN IF NOT EXISTS user_id BIGINT UNSIGNED NULL`);
     await exec(`
         ALTER TABLE votes ADD COLUMN IF NOT EXISTS status
@@ -542,6 +621,16 @@ export async function migrate(): Promise<void> {
         NOT NULL DEFAULT 'new'
     `);
     await exec(`ALTER TABLE votes ADD CONSTRAINT fk_votes_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
+
+    // Существующие голосования создавались до появления status — переносим их в active/completed
+    await exec(`UPDATE votes SET status = 'completed' WHERE status = 'new' AND (closed = 1 OR ends_at <= NOW())`);
+    await exec(`UPDATE votes SET status = 'active' WHERE status = 'new'`);
+    await exec(`
+        ALTER TABLE votes MODIFY COLUMN status
+        ENUM('new','under_review','active','completed','cancelled')
+        NOT NULL DEFAULT 'active'
+    `);
+    await exec(`ALTER TABLE votes ADD INDEX idx_votes_status (status)`);
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS vote_options (
@@ -588,12 +677,18 @@ export async function migrate(): Promise<void> {
             feedback_other  TEXT            DEFAULT NULL,
             submitted_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
-            UNIQUE KEY uq_er_user_month (user_id, month_key),
+            UNIQUE KEY uq_er_user_building_month (user_id, building_key, month_key),
             CONSTRAINT fk_er_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             INDEX idx_er_building_month (building_key, month_key DESC)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
     await exec(`ALTER TABLE environment_ratings ADD CONSTRAINT fk_er_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
+
+    // Старые установки: одна оценка в месяц на пользователя суммарно — расширяем до «на дом»
+    if (await columnExists("environment_ratings", "month_key")) {
+        await exec(`ALTER TABLE environment_ratings DROP INDEX uq_er_user_month`);
+        await exec(`ALTER TABLE environment_ratings ADD UNIQUE KEY uq_er_user_building_month (user_id, building_key, month_key)`);
+    }
 
     // ============================================================
     //  РАЙОН (КАРТА)
@@ -608,7 +703,6 @@ export async function migrate(): Promise<void> {
                           'bus_stops_city','parking_city','waste_yard',
                           'bus_stops_house','parking_house'
                          )              NOT NULL,
-            scope        ENUM('city','house') NOT NULL DEFAULT 'city',
             address      VARCHAR(500)    NOT NULL DEFAULT '',
             lat          DOUBLE          NOT NULL,
             lng          DOUBLE          NOT NULL,
@@ -624,6 +718,8 @@ export async function migrate(): Promise<void> {
     `);
     await exec(`ALTER TABLE district_pois MODIFY COLUMN photo_url TEXT DEFAULT NULL`);
     await exec(`ALTER TABLE district_pois ADD COLUMN IF NOT EXISTS created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`);
+    // scope полностью определялся building_key (NULL -> city, иначе -> house) — избыточная колонка
+    await exec(`ALTER TABLE district_pois DROP COLUMN IF EXISTS scope`);
     await exec(`ALTER TABLE district_pois ADD CONSTRAINT fk_dp_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
 
     // ============================================================
@@ -636,6 +732,8 @@ export async function migrate(): Promise<void> {
             email         VARCHAR(255)    NOT NULL,
             password_hash TEXT            NOT NULL,
             full_name     VARCHAR(255)    NOT NULL DEFAULT '',
+            role          ENUM('admin','moderator') NOT NULL DEFAULT 'admin',
+            permissions   JSON            DEFAULT NULL,
             is_active     TINYINT(1)      NOT NULL DEFAULT 1,
             created_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -643,6 +741,8 @@ export async function migrate(): Promise<void> {
             UNIQUE KEY uq_admin_users_email (email)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+    await exec(`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS role ENUM('admin','moderator') NOT NULL DEFAULT 'admin'`);
+    await exec(`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS permissions JSON DEFAULT NULL`);
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS push_tokens (
@@ -652,10 +752,32 @@ export async function migrate(): Promise<void> {
             platform   VARCHAR(20)     NOT NULL DEFAULT 'expo',
             created_at DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
-            UNIQUE KEY uq_pt_user_token (user_id, token),
+            UNIQUE KEY uq_pt_token (token),
             CONSTRAINT fk_pt_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+
+    // Старые установки: один токен мог быть привязан к нескольким пользователям — токен уникален глобально
+    if (await columnExists("push_tokens", "user_id")) {
+        // Оставляем самую свежую запись на токен, остальные удаляем
+        await exec(`
+            DELETE pt1 FROM push_tokens pt1
+            JOIN push_tokens pt2 ON pt1.token = pt2.token AND pt1.id < pt2.id
+        `);
+        await exec(`ALTER TABLE push_tokens DROP INDEX uq_pt_user_token`);
+        await exec(`ALTER TABLE push_tokens ADD UNIQUE KEY uq_pt_token (token)`);
+    }
+
+    // Перенос токенов из устаревшей users.expo_push_token в push_tokens
+    if (await columnExists("users", "expo_push_token")) {
+        await exec(`
+            INSERT INTO push_tokens (user_id, token, platform)
+            SELECT id, expo_push_token, 'expo' FROM users
+            WHERE expo_push_token IS NOT NULL AND expo_push_token != ''
+            ON DUPLICATE KEY UPDATE token = token
+        `);
+        await exec(`ALTER TABLE users DROP COLUMN expo_push_token`);
+    }
 
     // ============================================================
     //  УДАЛЕНИЕ НЕИСПОЛЬЗУЕМЫХ ОБЪЕКТОВ

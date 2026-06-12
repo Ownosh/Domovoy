@@ -69,6 +69,7 @@ export type ProfileStackParamList = {
     AppealHistoryDetail: { id: string };
     NotificationSettings: undefined;
     Contacts: undefined;
+    HouseChat: undefined;
     Apartments: undefined;
     AddApartment: undefined;
 };

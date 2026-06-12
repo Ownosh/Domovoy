@@ -22,6 +22,7 @@ type RowDef = {
         | "AppealHistory"
         | "NotificationSettings"
         | "Contacts"
+        | "HouseChat"
         | "DeleteAccount"
         | "Apartments";
     danger?: boolean;
@@ -101,6 +102,14 @@ export function ProfileScreen({ navigation }: Props) {
                     iconColor: colors.info,
                     iconBg: "rgba(91, 159, 212, 0.12)",
                     target: "Contacts",
+                },
+                {
+                    icon: "chatbubbles-outline",
+                    title: "Домовой чат",
+                    subtitle: "Официальный чат жителей дома",
+                    iconColor: colors.primary,
+                    iconBg: colors.primarySoft,
+                    target: "HouseChat",
                 },
             ],
         },

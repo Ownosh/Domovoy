@@ -39,7 +39,7 @@ router.get("/pois", requireAuth, async (req: AuthRequest, res) => {
         const anchorLng = building?.lng != null ? Number(building.lng) : null;
 
         const [rows] = await pool.query<RowDataPacket[]>(
-            `SELECT id, building_key, layer_id, scope, name, address,
+            `SELECT id, building_key, layer_id, name, address,
                     lat, lng, photo_url, schedule, rating
              FROM district_pois
              WHERE building_key IS NULL
@@ -54,7 +54,7 @@ router.get("/pois", requireAuth, async (req: AuthRequest, res) => {
                 id: String(r.id),
                 buildingKey: (r.building_key as string | null) ?? null,
                 layerId: r.layer_id as string,
-                scope: (r.scope as string) === "house" ? "house" : "city",
+                scope: r.building_key == null ? "city" : "house",
                 name: r.name as string,
                 address: r.address as string,
                 lat: Number(r.lat),

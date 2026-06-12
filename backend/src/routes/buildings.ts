@@ -173,8 +173,10 @@ router.get("/contacts", requireAuth, async (req: AuthRequest, res) => {
     if (!key) return res.status(404).json({ error: "Дом не найден" });
     try {
         const [[row]] = await pool.query<RowDataPacket[]>(
-            `SELECT company_name, phone, email, site, hours
-             FROM building_contacts WHERE LOWER(building_key) = LOWER(?)`,
+            `SELECT mc.company_name, mc.phone, mc.email, mc.site, mc.hours
+             FROM buildings b
+             JOIN management_companies mc ON mc.id = b.management_company_id
+             WHERE LOWER(b.building_key) = LOWER(?)`,
             [key],
         );
         if (!row) return res.json(null);
@@ -187,6 +189,25 @@ router.get("/contacts", requireAuth, async (req: AuthRequest, res) => {
         });
     } catch (err) {
         console.error("buildings/contacts error:", err);
+        return res.status(500).json({ error: "Ошибка сервера" });
+    }
+});
+
+// GET /api/buildings/chats
+router.get("/chats", requireAuth, async (req: AuthRequest, res) => {
+    const key = await getActiveBuildingKey(req.userId!);
+    if (!key) return res.status(404).json({ error: "Дом не найден" });
+    try {
+        const [rows] = await pool.query<RowDataPacket[]>(
+            `SELECT platform, url FROM building_chats WHERE LOWER(building_key) = LOWER(?)`,
+            [key],
+        );
+        return res.json(rows.map((r) => ({
+            platform: r.platform as "telegram" | "vk" | "max",
+            url: r.url as string,
+        })));
+    } catch (err) {
+        console.error("buildings/chats error:", err);
         return res.status(500).json({ error: "Ошибка сервера" });
     }
 });

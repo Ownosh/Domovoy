@@ -89,8 +89,9 @@ router.post("/push-token", requireAuth, async (req: AuthRequest, res) => {
     if (!token) return res.status(400).json({ error: "token обязателен" });
     try {
         await pool.execute(
-            `UPDATE users SET expo_push_token = ? WHERE id = ?`,
-            [token, req.userId!],
+            `INSERT INTO push_tokens (user_id, token, platform) VALUES (?, ?, 'expo')
+             ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), created_at = CURRENT_TIMESTAMP`,
+            [req.userId!, token],
         );
         return res.json({ ok: true });
     } catch (err) {

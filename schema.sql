@@ -7,11 +7,26 @@ SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- ============================================================
+--  УК (управляющие компании)
+--  Определена до buildings, т.к. buildings ссылается на неё.
+-- ============================================================
+
+-- management_companies — одна УК может обслуживать несколько домов (buildings.management_company_id)
+CREATE TABLE IF NOT EXISTS management_companies (
+  id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  company_name VARCHAR(255)    NOT NULL DEFAULT '',
+  phone        VARCHAR(100)    NOT NULL DEFAULT '',
+  email        VARCHAR(255)    NOT NULL DEFAULT '',
+  site         VARCHAR(255)    NOT NULL DEFAULT '',
+  hours        VARCHAR(255)    NOT NULL DEFAULT '',
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
 --  СПРАВОЧНИК ДОМОВ (+ паспорт дома)
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS buildings (
-  id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   building_key VARCHAR(120)    NOT NULL,
   address      TEXT            NOT NULL,
   short_name   VARCHAR(255)    NOT NULL,
@@ -22,10 +37,11 @@ CREATE TABLE IF NOT EXISTS buildings (
   apartments   INT             DEFAULT NULL,
   lat          DECIMAL(9,6)    DEFAULT NULL,
   lng          DECIMAL(9,6)    DEFAULT NULL,
+  management_company_id BIGINT UNSIGNED DEFAULT NULL,
   created_at   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  UNIQUE KEY uq_buildings_key (building_key)
+  PRIMARY KEY (building_key),
+  CONSTRAINT fk_buildings_mc FOREIGN KEY (management_company_id) REFERENCES management_companies(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
@@ -42,7 +58,6 @@ CREATE TABLE IF NOT EXISTS users (
   notif_meetings      BOOLEAN         NOT NULL DEFAULT TRUE,
   notif_announcements BOOLEAN         NOT NULL DEFAULT TRUE,
   notif_general       BOOLEAN         NOT NULL DEFAULT TRUE,
-  expo_push_token     VARCHAR(500)    DEFAULT NULL,
   created_at          DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at          DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -98,11 +113,11 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 CREATE TABLE IF NOT EXISTS refresh_tokens (
   id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id    BIGINT UNSIGNED NOT NULL,
-  token      VARCHAR(100)    NOT NULL,
+  token_hash CHAR(64)        NOT NULL COMMENT 'SHA-256 от refresh-токена',
   expires_at DATETIME        NOT NULL,
   created_at DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_rt_token (token),
+  UNIQUE KEY uq_rt_token_hash (token_hash),
   CONSTRAINT fk_rt_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   INDEX idx_rt_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -126,24 +141,23 @@ CREATE TABLE IF NOT EXISTS verification_requests (
   updated_at   DATETIME                                      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   CONSTRAINT fk_vr_apartment FOREIGN KEY (apartment_id) REFERENCES user_apartments(id) ON DELETE CASCADE,
-  INDEX idx_vr_apartment_submitted (apartment_id, submitted_at DESC)
+  INDEX idx_vr_apartment_submitted (apartment_id, submitted_at DESC),
+  INDEX idx_vr_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
 --  УК — КОНТАКТЫ ДОМА
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS building_contacts (
+-- building_chats — официальные чаты дома (Telegram/VK/Max)
+CREATE TABLE IF NOT EXISTS building_chats (
   id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   building_key VARCHAR(120)    NOT NULL,
-  company_name VARCHAR(255)    NOT NULL DEFAULT '',
-  phone        VARCHAR(100)    NOT NULL DEFAULT '',
-  email        VARCHAR(255)    NOT NULL DEFAULT '',
-  site         VARCHAR(255)    NOT NULL DEFAULT '',
-  hours        VARCHAR(255)    NOT NULL DEFAULT '',
+  platform     ENUM('telegram','vk','max') NOT NULL,
+  url          VARCHAR(500)    NOT NULL,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_bc_building (building_key),
-  CONSTRAINT fk_bc_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON DELETE CASCADE ON UPDATE CASCADE
+  UNIQUE KEY uq_building_chats (building_key, platform),
+  CONSTRAINT fk_building_chats_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
@@ -159,7 +173,7 @@ CREATE TABLE IF NOT EXISTS news (
   is_published BOOLEAN         NOT NULL DEFAULT TRUE,
   created_at   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  CONSTRAINT fk_news_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT fk_news_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE,
   INDEX idx_news_building_published (building_key, published_at DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -186,7 +200,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   body         TEXT                                                NOT NULL,
   created_at   DATETIME                                            NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  CONSTRAINT fk_notif_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT fk_notif_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE,
   INDEX idx_notif_building_created (building_key, created_at DESC),
   INDEX idx_notif_type_created     (type, created_at DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -215,7 +229,7 @@ CREATE TABLE IF NOT EXISTS appeals (
   category               VARCHAR(100)                                                                             NOT NULL,
   kind                   ENUM('personal','collective')                                                            NOT NULL DEFAULT 'personal',
   status                 ENUM('new','collecting_signatures','in_progress','resolved','closed','rejected')        NOT NULL DEFAULT 'new',
-  entrance               VARCHAR(20)                                                                              DEFAULT NULL,
+  entrance               INT                                                                                      DEFAULT NULL,
   author_apartment       VARCHAR(20)                                                                              NOT NULL DEFAULT '',
   escalated_to_uk        BOOLEAN                                                                                  NOT NULL DEFAULT FALSE,
   manually_archived      BOOLEAN                                                                                  NOT NULL DEFAULT FALSE,
@@ -249,7 +263,7 @@ CREATE TABLE IF NOT EXISTS appeal_participants (
   appeal_id    BIGINT UNSIGNED NOT NULL,
   user_id      BIGINT UNSIGNED NOT NULL,
   apartment    VARCHAR(20)     NOT NULL,
-  entrance     VARCHAR(20)     DEFAULT NULL,
+  entrance     INT             DEFAULT NULL,
   display_name VARCHAR(255)    NOT NULL DEFAULT '',
   anonymous    BOOLEAN         NOT NULL DEFAULT FALSE,
   comment      TEXT            DEFAULT NULL,
@@ -273,7 +287,7 @@ CREATE TABLE IF NOT EXISTS house_specs (
   value        TEXT            NOT NULL,
   position     INT             NOT NULL DEFAULT 0,
   PRIMARY KEY (id),
-  CONSTRAINT fk_hs_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_hs_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE,
   INDEX idx_hs_building_position (building_key, position)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -283,7 +297,7 @@ CREATE TABLE IF NOT EXISTS house_photos (
   image_url    TEXT            NOT NULL,
   position     INT             NOT NULL DEFAULT 0,
   PRIMARY KEY (id),
-  CONSTRAINT fk_hph_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_hph_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE,
   INDEX idx_hph_building_position (building_key, position)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -295,7 +309,7 @@ CREATE TABLE IF NOT EXISTS house_status (
   position     INT                            NOT NULL DEFAULT 0,
   is_active    BOOLEAN                        NOT NULL DEFAULT TRUE,
   PRIMARY KEY (id),
-  CONSTRAINT fk_hst_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_hst_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE,
   INDEX idx_hst_building_position (building_key, position)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -307,7 +321,7 @@ CREATE TABLE IF NOT EXISTS house_calendar_activities (
   kind          ENUM('yard','pipes','meeting','heating','garbage','other') NOT NULL DEFAULT 'other',
   created_at    DATETIME                                                   NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  CONSTRAINT fk_hca_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_hca_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE,
   INDEX idx_hca_building_date (building_key, activity_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -319,7 +333,7 @@ CREATE TABLE IF NOT EXISTS trash_pickup_schedule (
   note         TEXT            DEFAULT NULL,
   position     INT             NOT NULL DEFAULT 0,
   PRIMARY KEY (id),
-  CONSTRAINT fk_tps_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_tps_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE,
   INDEX idx_tps_building_position (building_key, position)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -327,6 +341,9 @@ CREATE TABLE IF NOT EXISTS trash_pickup_schedule (
 --  ОБЪЯВЛЕНИЯ СОСЕДЕЙ
 -- ============================================================
 
+-- status: published -> видно соседям; under_review -> пожаловались, ждёт проверки админом;
+--         archived -> срок истёк / автор снял с публикации; rejected -> админ отклонил;
+--         under_review_appeal -> автор отредактировал отклонённое объявление, повторная проверка
 CREATE TABLE IF NOT EXISTS neighbor_ads (
   id                 BIGINT UNSIGNED                                                                            NOT NULL AUTO_INCREMENT,
   author_user_id     BIGINT UNSIGNED                                                                            NOT NULL,
@@ -334,11 +351,9 @@ CREATE TABLE IF NOT EXISTS neighbor_ads (
   title              VARCHAR(500)                                                                               NOT NULL,
   body               TEXT                                                                                       NOT NULL,
   category           ENUM('sell','buy','service','invite','lost','found','other')                              NOT NULL DEFAULT 'other',
-  status             ENUM('new','under_review','published','archived','rejected','under_review_appeal')        NOT NULL DEFAULT 'new',
+  status             ENUM('new','under_review','published','archived','rejected','under_review_appeal')        NOT NULL DEFAULT 'published',
   show_phone         BOOLEAN                                                                                    NOT NULL DEFAULT FALSE,
   author_phone       VARCHAR(50)                                                                                DEFAULT NULL,
-  pending_moderation BOOLEAN                                                                                    NOT NULL DEFAULT FALSE,
-  archived           BOOLEAN                                                                                    NOT NULL DEFAULT FALSE,
   created_at         DATETIME                                                                                   NOT NULL DEFAULT CURRENT_TIMESTAMP,
   expires_at         DATETIME                                                                                   NOT NULL,
   updated_at         DATETIME                                                                                   NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -347,7 +362,8 @@ CREATE TABLE IF NOT EXISTS neighbor_ads (
   CONSTRAINT fk_na_building FOREIGN KEY (building_key)   REFERENCES buildings(building_key) ON UPDATE CASCADE,
   INDEX idx_na_building_created (building_key, created_at DESC),
   INDEX idx_na_author_created   (author_user_id, created_at DESC),
-  INDEX idx_na_expires          (expires_at)
+  INDEX idx_na_expires          (expires_at),
+  INDEX idx_na_status           (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS neighbor_ad_photos (
@@ -366,13 +382,16 @@ CREATE TABLE IF NOT EXISTS neighbor_ad_photos (
 --  ГОЛОСОВАНИЯ
 -- ============================================================
 
+-- status: active -> идёт голосование; under_review -> пожаловались, ждёт проверки админом;
+--         completed -> завершено (closed=1 или истёк ends_at); cancelled -> отменено админом.
+-- closed — отдельная характеристика: автор закрыл голосование вручную до истечения срока.
 CREATE TABLE IF NOT EXISTS votes (
   id               BIGINT UNSIGNED                                              NOT NULL AUTO_INCREMENT,
   building_key     VARCHAR(120)                                                 NOT NULL,
   user_id          BIGINT UNSIGNED                                              DEFAULT NULL,
   created_by_label VARCHAR(255)                                                 NOT NULL DEFAULT '',
   sponsor          ENUM('uk','residents')                                       NOT NULL DEFAULT 'residents',
-  status           ENUM('new','under_review','active','completed','cancelled')  NOT NULL DEFAULT 'new',
+  status           ENUM('new','under_review','active','completed','cancelled')  NOT NULL DEFAULT 'active',
   topic            TEXT                                                         NOT NULL,
   description      TEXT                                                        NOT NULL DEFAULT '',
   visibility       ENUM('open','secret')                                        NOT NULL DEFAULT 'open',
@@ -380,11 +399,13 @@ CREATE TABLE IF NOT EXISTS votes (
   closed           BOOLEAN                                                      NOT NULL DEFAULT FALSE,
   trial            BOOLEAN                                                      NOT NULL DEFAULT FALSE,
   created_at       DATETIME                                                     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at       DATETIME                                                     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   CONSTRAINT fk_votes_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE,
   CONSTRAINT fk_votes_user     FOREIGN KEY (user_id)       REFERENCES users(id)               ON DELETE SET NULL,
   INDEX idx_votes_building_key (building_key, created_at DESC),
-  INDEX idx_votes_ends_at      (ends_at)
+  INDEX idx_votes_ends_at      (ends_at),
+  INDEX idx_votes_status       (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS vote_options (
@@ -428,7 +449,7 @@ CREATE TABLE IF NOT EXISTS environment_ratings (
   feedback_other  TEXT            DEFAULT NULL,
   submitted_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_er_user_month (user_id, month_key),
+  UNIQUE KEY uq_er_user_building_month (user_id, building_key, month_key),
   CONSTRAINT fk_er_user     FOREIGN KEY (user_id)      REFERENCES users(id)               ON DELETE CASCADE,
   CONSTRAINT fk_er_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE,
   INDEX idx_er_building_month (building_key, month_key DESC)
@@ -448,7 +469,6 @@ CREATE TABLE IF NOT EXISTS district_pois (
                  'bus_stops_city','parking_city','waste_yard',
                  'bus_stops_house','parking_house'
                )                     NOT NULL,
-  scope        ENUM('city','house')  NOT NULL DEFAULT 'city',
   address      VARCHAR(500)          NOT NULL DEFAULT '',
   lat          DOUBLE                NOT NULL,
   lng          DOUBLE                NOT NULL,
@@ -467,11 +487,17 @@ CREATE TABLE IF NOT EXISTS district_pois (
 --  АДМИНКА И PUSH-ТОКЕНЫ
 -- ============================================================
 
+-- role = 'admin'     -> полный доступ, permissions игнорируются
+-- role = 'moderator' -> доступ только к разделам, включённым в permissions, например:
+--   {"news": true, "notifications": true, "appeals": false, "votes": false,
+--    "neighbor_ads": true, "verification_requests": false, "house_content": true, "buildings": false}
 CREATE TABLE IF NOT EXISTS admin_users (
   id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   email         VARCHAR(255)    NOT NULL,
   password_hash TEXT            NOT NULL,
   full_name     VARCHAR(255)    NOT NULL DEFAULT '',
+  role          ENUM('admin','moderator') NOT NULL DEFAULT 'admin',
+  permissions   JSON            DEFAULT NULL,
   is_active     TINYINT(1)      NOT NULL DEFAULT 1,
   created_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -486,7 +512,7 @@ CREATE TABLE IF NOT EXISTS push_tokens (
   platform   VARCHAR(20)     NOT NULL DEFAULT 'expo',
   created_at DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_pt_user_token (user_id, token),
+  UNIQUE KEY uq_pt_token (token),
   CONSTRAINT fk_pt_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

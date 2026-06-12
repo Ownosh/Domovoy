@@ -2,7 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/client";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
-import { moderateContent, APPEAL_CATEGORIES_LIST, APPEAL_CATEGORIES_DICT } from "../utils/moderation";
+import { moderateContent } from "../utils/moderation";
 
 const router = Router();
 const MASS_APPEAL_THRESHOLD = 5;
@@ -159,12 +159,9 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         return res.status(400).json({ error: "Некорректный тип обращения" });
 
     try {
-        const mod = await moderateContent(
-            { title: title.trim(), body: body.trim() },
-            category?.trim()
-                ? { current: category.trim(), list: APPEAL_CATEGORIES_LIST, dict: APPEAL_CATEGORIES_DICT }
-                : undefined,
-        );
+        const mod = await moderateContent("appeal", {
+            title: title.trim(), body: body.trim(), category: category?.trim(),
+        });
         if (!mod.ok) {
             return res.status(422).json({
                 error: mod.issue,
@@ -268,12 +265,9 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     if (!title?.trim() || !body?.trim())
         return res.status(400).json({ error: "Тема и описание обязательны" });
     try {
-        const mod = await moderateContent(
-            { title: title.trim(), body: body.trim() },
-            category?.trim()
-                ? { current: category.trim(), list: APPEAL_CATEGORIES_LIST, dict: APPEAL_CATEGORIES_DICT }
-                : undefined,
-        );
+        const mod = await moderateContent("appeal", {
+            title: title.trim(), body: body.trim(), category: category?.trim(),
+        });
         if (!mod.ok) {
             return res.status(422).json({
                 error: mod.issue,

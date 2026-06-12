@@ -2,18 +2,13 @@ import { Router } from "express";
 import { pool } from "../db/client";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
-import { moderateContent, AD_CATEGORIES_LIST, AD_CATEGORIES_DICT } from "../utils/moderation";
+import { moderateContent } from "../utils/moderation";
 
 const router = Router();
 
 const AD_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 const VALID_CATEGORIES = ["sell", "buy", "service", "invite", "lost", "found", "other"];
-
-const AD_CATEGORY_RU: Record<string, string> = {
-    sell: "Продаю", buy: "Ищу", service: "Услуга",
-    invite: "Приглашаю", lost: "Потеряно", found: "Найдено", other: "Другое",
-};
 
 async function getBuildingKey(userId: number): Promise<string | null> {
     const [[row]] = await pool.query<RowDataPacket[]>(
@@ -113,10 +108,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         return res.status(400).json({ error: "Некорректная категория" });
 
     try {
-        const mod = await moderateContent(
-            { title: title.trim(), body: body.trim() },
-            { current: AD_CATEGORY_RU[category] ?? category, list: AD_CATEGORIES_LIST, dict: AD_CATEGORIES_DICT },
-        );
+        const mod = await moderateContent("ad", { title: title.trim(), body: body.trim() });
         if (!mod.ok) {
             return res.status(422).json({
                 error: mod.issue,
@@ -177,12 +169,7 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     if (category && !VALID_CATEGORIES.includes(category))
         return res.status(400).json({ error: "Некорректная категория" });
     try {
-        const mod = await moderateContent(
-            { title: title.trim(), body: body.trim() },
-            category
-                ? { current: AD_CATEGORY_RU[category] ?? category, list: AD_CATEGORIES_LIST, dict: AD_CATEGORIES_DICT }
-                : undefined,
-        );
+        const mod = await moderateContent("ad", { title: title.trim(), body: body.trim() });
         if (!mod.ok) {
             return res.status(422).json({
                 error: mod.issue,

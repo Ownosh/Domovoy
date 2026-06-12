@@ -16,9 +16,7 @@ function getClient(): OpenAI | null {
     return _client;
 }
 
-export const APPEAL_CATEGORIES_LIST = "Аварийная ситуация, Сантехника, Электрика, Отопление, Вентиляция, Уборка и благоустройство, Нарушение порядка, Другое";
-
-export const APPEAL_CATEGORIES_DICT = `Аварийная ситуация — прорыв трубы, потоп, отключение воды/тепла/света во всём доме, угроза безопасности, срочное реагирование.
+const APPEAL_CATEGORIES_DICT = `Аварийная ситуация — прорыв трубы, потоп, отключение воды/тепла/света во всём доме, угроза безопасности, срочное реагирование.
 Сантехника — трубы, краны, смесители, унитаз, смыв, бачок, протечки, засоры, канализация, вода.
 Электрика — проводка, розетки, выключатели, освещение, лампочки, щиток, отсутствие электричества (не аварийное).
 Отопление — батареи, радиаторы, тепло в квартире, температура, стояки отопления.
@@ -27,64 +25,107 @@ export const APPEAL_CATEGORIES_DICT = `Аварийная ситуация — �
 Нарушение порядка — шум, конфликты между жильцами, нарушение правил проживания, порча имущества, парковка.
 Другое — всё, что не относится ни к одной категории выше.`;
 
-export const AD_CATEGORIES_LIST = "Продаю, Ищу, Услуга, Приглашаю, Потеряно, Найдено, Другое";
+const APPEAL_SYSTEM_PROMPT = `Ты — ассистент модерации обращений. Каждое обращение состоит из трёх полей:
 
-export const AD_CATEGORIES_DICT = `Продаю — пользователь продаёт, отдаёт или предлагает взять вещь, мебель, технику, одежду и т.п.
-Ищу — пользователь хочет купить, взять, найти вещь, человека, помощь, попутчика и т.п.
-Услуга — пользователь предлагает услугу: ремонт, репетиторство, уход за животными, перевозки и т.п.
-Приглашаю — приглашение на событие, встречу, в группу, совместное занятие.
-Потеряно — у пользователя потерялась вещь, документ или животное.
-Найдено — пользователь нашёл вещь, документ или животное и ищет владельца.
-Другое — всё, что не относится ни к одной категории выше.`;
-
-const BASE_PROMPT = `Ты — ассистент модерации пользовательского контента в приложении для жителей многоквартирных домов. Тебе передаются поля «Тема» (короткий заголовок), «Описание» (основной текст) и, опционально, «Варианты ответов» (для голосований).
+Категория — раздел, выбранный пользователем из списка: Аварийная ситуация, Сантехника, Электрика, Отопление, Вентиляция, Уборка и благоустройство, Нарушение порядка, Другое.
+Тема — короткий заголовок обращения.
+Описание — подробный текст проблемы.
 
 Вход:
+Категория: {КАТЕГОРИЯ}
 Тема: {ТЕМА}
 Описание: {ОПИСАНИЕ}
-{ВАРИАНТЫ}
+
+Справочник категорий:
+
+${APPEAL_CATEGORIES_DICT}
 
 Задача 1 — нежелательное содержание.
-Проверь «Тему», «Описание» и «Варианты ответов» (если есть). Анализируй слова и выражения целиком. Помечай:
+Проверь «Тему» и «Описание». Анализируй слова и выражения целиком. Помечай:
 
 нецензурную лексику и мат (в т.ч. с опечатками, звёздочками, заменой букв);
 оскорбления и унижающие выражения, даже без мата (например: «пухлый индюк», «бестолочь»);
 грубость, переход на личности, угрозы.
 
 Для каждого фрагмента предложи корректную замену.
-Что НЕ помечать: обычную негативную оценку и критику. Слова «плохой», «ужасный», «некачественно», «медленно», «не работает», «никто не реагирует» — это законная жалоба или мнение, а не нарушение. Сомневаешься между нарушением и резкой критикой — НЕ помечай.
+Что НЕ помечать: обычную негативную оценку и критику. Слова «плохой», «ужасный», «некачественно», «медленно», «не работает», «никто не реагирует» — это законная жалоба, а не нарушение. Сомневаешься между нарушением и резкой критикой — НЕ помечай.
 
 Задача 2 — орфография.
-Найди слова с явными опечатками и ошибками, которые мешают понять смысл или выглядят как набор букв (например: «лиргв» вместо «лифт»). Проверяй все переданные поля, включая варианты ответов. Для каждого предложи правильное написание. Не придирайся к регистру, пунктуации и мелким стилистическим неточностям — отмечай только заметные ошибки в словах.`;
-
-const CATEGORY_TASK = `
+Найди слова с явными опечатками и ошибками, которые мешают понять смысл или выглядят как набор букв (например: «лиргв» вместо «лифт»). Для каждого предложи правильное написание. Не придирайся к регистру, пунктуации и мелким стилистическим неточностям — отмечай только заметные ошибки в словах.
 
 Задача 3 — соответствие категории.
-Категория — раздел, выбранный пользователем из списка: {КАТЕГОРИИ}.
-Справочник категорий:
-
-{СПРАВОЧНИК}
-
-Вход дополнительно содержит:
-Категория: {КАТЕГОРИЯ}
-
-Определи по смыслу темы и описания, к какой категории из справочника относится текст, и сравни с выбранной «{КАТЕГОРИЯ}». Ориентируйся прежде всего на суть описания. Если реальная тема не совпадает с выбранной — ставь категория_совпадает: false и укажи правильную категорию в комментарии. Если выбрана «Другое» — категория_совпадает: true всегда, категорию не переназначай.`;
-
-const FORMAT_WITH_CATEGORY = `
+Определи по смыслу темы и описания, к какой категории из справочника относится обращение, и сравни с выбранной «{КАТЕГОРИЯ}». Ориентируйся прежде всего на суть описания. Если реальная тема не совпадает с выбранной — ставь категория_совпадает: false и укажи правильную категорию. Если выбрана «Другое» — категория_совпадает: true всегда, тему не переназначай.
 
 Формат ответа. Отвечай строго в формате JSON, без пояснений и текста вне JSON:
-{"найдено": true, "проблемы": [{"фрагмент": "<слово или выражение>", "тип": "<оскорбление / мат / грубость / угроза>", "замена": "<корректная формулировка>"}], "опечатки": [{"слово": "<как написано>", "правильно": "<правильное написание>"}], "категория_совпадает": false, "комментарий_категории": "Текст относится к категории «Сантехника», а не «Отопление»"}
+
+{
+  "найдено": true,
+  "проблемы": [
+    {"фрагмент": "<слово или выражение>", "тип": "<оскорбление / мат / грубость / угроза>", "замена": "<корректная формулировка>"}
+  ],
+  "опечатки": [
+    {"слово": "<как написано>", "правильно": "<правильное написание>"}
+  ],
+  "категория_совпадает": false,
+  "комментарий_категории": "Обращение относится к категории «Сантехника», а не «Отопление»"
+}
+
 Если нарушений и опечаток нет и категория совпадает:
-{"найдено": false, "проблемы": [], "опечатки": [], "категория_совпадает": true, "комментарий_категории": ""}
 
-Правила. Оценивай смысл фразы целиком. Негативную оценку и критику не помечай. В опечатках отмечай только заметные ошибки, а не стиль. Если суть текста не относится к выбранной категории — ставь false. Для категории «Другое» всегда true. Не добавляй ничего вне JSON.`;
+{
+  "найдено": false,
+  "проблемы": [],
+  "опечатки": [],
+  "категория_совпадает": true,
+  "комментарий_категории": ""
+}
 
-const FORMAT_WITHOUT_CATEGORY = `
+Правила. Оценивай смысл фразы целиком. Негативную оценку и критику не помечай. В опечатках отмечай только заметные ошибки, а не стиль. Если суть обращения не относится к выбранной категории — ставь false. Для категории «Другое» всегда true. Не добавляй ничего вне JSON.`;
+
+const GENERIC_SYSTEM_PROMPT = `Ты — ассистент модерации. На вход поступают поля «Тема», «Описание» и, при наличии, «Варианты ответа» (от 2 до 4).
+
+Вход:
+Тема: {ТЕМА}
+Описание: {ОПИСАНИЕ}
+Вариант 1: {ВАРИАНТ_1}
+Вариант 2: {ВАРИАНТ_2}
+Вариант 3: {ВАРИАНТ_3}
+Вариант 4: {ВАРИАНТ_4}
+
+Пустые или незаполненные варианты не проверяй и не отмечай.
+
+Задача 1 — нежелательное содержание.
+Проверь «Тему», «Описание» и все заполненные «Варианты ответа». Анализируй слова и выражения целиком. Помечай:
+
+нецензурную лексику и мат (в т.ч. с опечатками, звёздочками, заменой букв);
+оскорбления и унижающие выражения, даже без мата (например: «пухлый индюк», «бестолочь»);
+грубость, переход на личности, угрозы.
+
+Для каждого фрагмента предложи корректную замену.
+Что НЕ помечать: обычную негативную оценку и критику. Слова «плохой», «ужасный», «некачественно», «медленно», «не работает», «никто не реагирует» — это законная жалоба, а не нарушение. Сомневаешься между нарушением и резкой критикой — НЕ помечай.
+
+Задача 2 — орфография.
+Найди слова с явными опечатками и ошибками, которые мешают понять смысл или выглядят как набор букв (например: «лиргв» вместо «лифт»). Проверяй «Тему», «Описание» и все заполненные «Варианты ответа». Для каждого предложи правильное написание. Не придирайся к регистру, пунктуации и мелким стилистическим неточностям — отмечай только заметные ошибки в словах.
 
 Формат ответа. Отвечай строго в формате JSON, без пояснений и текста вне JSON:
-{"найдено": true, "проблемы": [{"фрагмент": "<слово или выражение>", "тип": "<оскорбление / мат / грубость / угроза>", "замена": "<корректная формулировка>"}], "опечатки": [{"слово": "<как написано>", "правильно": "<правильное написание>"}]}
+
+{
+  "найдено": true,
+  "проблемы": [
+    {"источник": "<тема / описание / вариант 1 / вариант 2 / вариант 3 / вариант 4>", "фрагмент": "<слово или выражение>", "тип": "<оскорбление / мат / грубость / угроза>", "замена": "<корректная формулировка>"}
+  ],
+  "опечатки": [
+    {"источник": "<тема / описание / вариант 1 / вариант 2 / вариант 3 / вариант 4>", "слово": "<как написано>", "правильно": "<правильное написание>"}
+  ]
+}
+
 Если нарушений и опечаток нет:
-{"найдено": false, "проблемы": [], "опечатки": []}
+
+{
+  "найдено": false,
+  "проблемы": [],
+  "опечатки": []
+}
 
 Правила. Оценивай смысл фразы целиком. Негативную оценку и критику не помечай. В опечатках отмечай только заметные ошибки, а не стиль. Не добавляй ничего вне JSON.`;
 
@@ -94,146 +135,203 @@ export type ModerationResult =
     | { ok: true }
     | { ok: false; field: string; issue: string; suggestion: string };
 
-type ModerationProblem = {
-    фрагмент: string;
-    тип: "оскорбление" | "мат" | "грубость" | "угроза";
-    замена: string;
-};
+type ModerationProblemType = "оскорбление" | "мат" | "грубость" | "угроза";
 
-type TypoRaw = {
-    слово: string;
-    правильно: string;
-};
+type AppealProblem = { фрагмент: string; тип: ModerationProblemType; замена: string };
+type AppealTypo = { слово: string; правильно: string };
 
-type ModerationResponse = {
+type AppealResponse = {
     найдено: boolean;
-    проблемы: ModerationProblem[];
-    опечатки: TypoRaw[];
-    категория_совпадает?: boolean;
-    комментарий_категории?: string;
+    проблемы: AppealProblem[];
+    опечатки: AppealTypo[];
+    категория_совпадает: boolean;
+    комментарий_категории: string;
 };
 
-const TYPE_LABELS: Record<ModerationProblem["тип"], string> = {
+type GenericProblem = { источник: string; фрагмент: string; тип: ModerationProblemType; замена: string };
+type GenericTypo = { источник: string; слово: string; правильно: string };
+
+type GenericResponse = {
+    найдено: boolean;
+    проблемы: GenericProblem[];
+    опечатки: GenericTypo[];
+};
+
+const TYPE_LABELS: Record<ModerationProblemType, string> = {
     мат:         "нецензурная лексика",
     оскорбление: "оскорбление",
     грубость:    "грубость",
     угроза:      "угроза",
 };
 
-export type CategoryOptions = {
-    /** Текущая категория, выбранная пользователем */
-    current: string;
-    /** Список допустимых категорий через запятую */
-    list: string;
-    /** Справочник категорий с описаниями (по одной на строку: "Название — описание") */
-    dict: string;
-};
+const MODEL_APPEAL = process.env.YANDEX_MODEL_APPEAL
+    ?? `gpt://${process.env.YANDEX_PROJECT_ID}/yandexgpt-5-pro/latest`;
+
+const MODEL_GENERIC = process.env.YANDEX_MODEL_GENERIC
+    ?? `gpt://${process.env.YANDEX_PROJECT_ID}/yandexgpt-5-lite/latest`;
+
+function extractJson<T>(raw: string): T {
+    const match = raw.trim().match(/\{[\s\S]*\}/);
+    return JSON.parse(match ? match[0] : raw);
+}
+
+async function callModel(model: string, systemPrompt: string, userMessage: string): Promise<string> {
+    const client = getClient();
+    if (!client) throw new Error("no client");
+
+    const response = await client.chat.completions.create({
+        model,
+        messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user",   content: userMessage },
+        ],
+        temperature: 0,
+    });
+
+    return (response.choices[0]?.message?.content ?? "").trim();
+}
+
+async function moderateAppeal(fields: {
+    title: string;
+    body: string;
+    category?: string;
+}): Promise<ModerationResult> {
+    const systemPrompt = APPEAL_SYSTEM_PROMPT.replace(/\{КАТЕГОРИЯ\}/g, fields.category ?? "");
+    const userMessage = `Категория: ${fields.category ?? ""}\nТема: ${fields.title}\nОписание: ${fields.body}`;
+
+    const raw    = await callModel(MODEL_APPEAL, systemPrompt, userMessage);
+    const parsed = extractJson<AppealResponse>(raw);
+
+    const typos: TypoCorrection[] = (parsed.опечатки ?? []).map((t) => ({
+        word:    t.слово,
+        correct: t.правильно,
+    }));
+
+    const entries = [
+        { key: "title", text: fields.title },
+        { key: "body",  text: fields.body },
+    ].filter((e) => e.text);
+
+    const fieldFor = (fragment: string): string => {
+        let field = entries[0]?.key ?? "title";
+        for (const entry of entries) {
+            if (entry.text.toLowerCase().includes(fragment.toLowerCase())) {
+                field = entry.key;
+                break;
+            }
+        }
+        return field;
+    };
+
+    // Приоритет 1 — нежелательное содержание
+    if (parsed.найдено && parsed.проблемы?.length) {
+        const field = fieldFor(parsed.проблемы[0].фрагмент);
+
+        const issueList    = parsed.проблемы.map((p) => `«${p.фрагмент}» (${TYPE_LABELS[p.тип] ?? p.тип})`).join(", ");
+        const replacements = parsed.проблемы.map((p) => `«${p.фрагмент}» → «${p.замена}»`).join("; ");
+
+        return { ok: false, field, issue: `Обнаружено нежелательное содержание: ${issueList}`, suggestion: replacements };
+    }
+
+    // Приоритет 2 — несоответствие категории
+    if (parsed.категория_совпадает === false) {
+        return {
+            ok: false,
+            field:      "category",
+            issue:      parsed.комментарий_категории || "Тема обращения не соответствует выбранной категории",
+            suggestion: "Пожалуйста, выберите подходящую категорию",
+        };
+    }
+
+    // Приоритет 3 — опечатки
+    if (typos.length) {
+        const field = fieldFor(parsed.опечатки[0].слово);
+        const replacements = typos.map((t) => `«${t.word}» → «${t.correct}»`).join("; ");
+
+        return { ok: false, field, issue: "Возможные опечатки в тексте", suggestion: replacements };
+    }
+
+    return { ok: true };
+}
+
+async function moderateGeneric(fields: {
+    title: string;
+    body: string;
+    options?: string[];
+}): Promise<ModerationResult> {
+    const options = (fields.options ?? []).map((o) => o.trim());
+
+    const userMessage = [
+        `Тема: ${fields.title}`,
+        `Описание: ${fields.body}`,
+        `Вариант 1: ${options[0] ?? ""}`,
+        `Вариант 2: ${options[1] ?? ""}`,
+        `Вариант 3: ${options[2] ?? ""}`,
+        `Вариант 4: ${options[3] ?? ""}`,
+    ].join("\n");
+
+    const raw    = await callModel(MODEL_GENERIC, GENERIC_SYSTEM_PROMPT, userMessage);
+    const parsed = extractJson<GenericResponse>(raw);
+
+    const typos: TypoCorrection[] = (parsed.опечатки ?? []).map((t) => ({
+        word:    t.слово,
+        correct: t.правильно,
+    }));
+
+    const fieldFor = (source: string): string => {
+        const s = source.trim().toLowerCase();
+        if (s === "тема") return "title";
+        if (s === "описание") return "body";
+        const m = s.match(/вариант\s*(\d)/);
+        if (m) return `option${m[1]}`;
+        return "title";
+    };
+
+    // Приоритет 1 — нежелательное содержание
+    if (parsed.найдено && parsed.проблемы?.length) {
+        const field = fieldFor(parsed.проблемы[0].источник);
+
+        const issueList    = parsed.проблемы.map((p) => `«${p.фрагмент}» (${TYPE_LABELS[p.тип] ?? p.тип})`).join(", ");
+        const replacements = parsed.проблемы.map((p) => `«${p.фрагмент}» → «${p.замена}»`).join("; ");
+
+        return { ok: false, field, issue: `Обнаружено нежелательное содержание: ${issueList}`, suggestion: replacements };
+    }
+
+    // Приоритет 2 — опечатки
+    if (typos.length) {
+        const field = fieldFor(parsed.опечатки[0].источник);
+        const replacements = typos.map((t) => `«${t.word}» → «${t.correct}»`).join("; ");
+
+        return { ok: false, field, issue: "Возможные опечатки в тексте", suggestion: replacements };
+    }
+
+    return { ok: true };
+}
 
 export async function moderateContent(
+    kind: "appeal" | "vote" | "ad",
     fields: {
         title?: string;
         body?: string;
         topic?: string;
         description?: string;
+        category?: string;
         options?: string[];
     },
-    categories?: CategoryOptions,
 ): Promise<ModerationResult> {
     const client = getClient();
     if (!client) return { ok: true };
 
-    const topic       = fields.title ?? fields.topic ?? "";
-    const description = fields.body  ?? fields.description ?? "";
-    const options     = (fields.options ?? []).filter((o) => o.trim());
-    if (!topic && !description && !options.length) return { ok: true };
-
-    const model = process.env.YANDEX_MODEL
-        ?? `gpt://${process.env.YANDEX_PROJECT_ID}/yandexgpt/latest`;
-
-    const optionsBlock = options.length
-        ? `Варианты ответов:\n${options.map((o, i) => `${i + 1}. ${o}`).join("\n")}`
-        : "";
-
-    const systemPrompt = (categories
-        ? BASE_PROMPT
-            + CATEGORY_TASK
-                .replace("{КАТЕГОРИИ}", categories.list)
-                .replace("{СПРАВОЧНИК}", categories.dict)
-                .replace(/\{КАТЕГОРИЯ\}/g, categories.current)
-            + FORMAT_WITH_CATEGORY
-        : BASE_PROMPT + FORMAT_WITHOUT_CATEGORY
-    ).replace("{ВАРИАНТЫ}", optionsBlock);
-
-    const userMessage = (categories ? `Категория: ${categories.current}\n` : "")
-        + `Тема: ${topic}\nОписание: ${description}`
-        + (optionsBlock ? `\n${optionsBlock}` : "");
+    const title = fields.title ?? fields.topic ?? "";
+    const body  = fields.body  ?? fields.description ?? "";
+    const options = (fields.options ?? []).map((o) => o.trim());
+    if (!title && !body && !options.some(Boolean)) return { ok: true };
 
     try {
-        const response = await client.chat.completions.create({
-            model,
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user",   content: userMessage },
-            ],
-            temperature: 0,
-        });
-
-        const raw   = (response.choices[0]?.message?.content ?? "").trim();
-        const match = raw.match(/\{[\s\S]*\}/);
-        const parsed: ModerationResponse = JSON.parse(match ? match[0] : raw);
-
-        const typos: TypoCorrection[] = (parsed.опечатки ?? []).map((t) => ({
-            word:    t.слово,
-            correct: t.правильно,
-        }));
-
-        const entries = [
-            { key: "title",       text: fields.title       ?? "" },
-            { key: "body",        text: fields.body        ?? "" },
-            { key: "topic",       text: fields.topic       ?? "" },
-            { key: "description", text: fields.description ?? "" },
-        ].filter((e) => e.text);
-
-        const fieldFor = (fragment: string): string => {
-            let field = entries[0]?.key ?? "title";
-            for (const entry of entries) {
-                if (entry.text.toLowerCase().includes(fragment.toLowerCase())) {
-                    field = entry.key;
-                    break;
-                }
-            }
-            return field;
-        };
-
-        // Приоритет 1 — нежелательное содержание
-        if (parsed.найдено && parsed.проблемы?.length) {
-            const field = fieldFor(parsed.проблемы[0].фрагмент);
-
-            const issueList    = parsed.проблемы.map((p) => `«${p.фрагмент}» (${TYPE_LABELS[p.тип] ?? p.тип})`).join(", ");
-            const replacements = parsed.проблемы.map((p) => `«${p.фрагмент}» → «${p.замена}»`).join("; ");
-
-            return { ok: false, field, issue: `Обнаружено нежелательное содержание: ${issueList}`, suggestion: replacements };
+        if (kind === "appeal") {
+            return await moderateAppeal({ title, body, category: fields.category });
         }
-
-        // Приоритет 2 — несоответствие категории
-        if (categories && parsed.категория_совпадает === false) {
-            return {
-                ok: false,
-                field:      "category",
-                issue:      parsed.комментарий_категории || "Тема не соответствует выбранной категории",
-                suggestion: "Пожалуйста, выберите подходящую категорию",
-            };
-        }
-
-        // Приоритет 3 — опечатки
-        if (typos.length) {
-            const field = fieldFor(typos[0].word);
-            const replacements = typos.map((t) => `«${t.word}» → «${t.correct}»`).join("; ");
-
-            return { ok: false, field, issue: "Возможные опечатки в тексте", suggestion: replacements };
-        }
-
-        return { ok: true };
+        return await moderateGeneric({ title, body, options });
     } catch (err) {
         console.error("[moderation]", err);
         return { ok: true };

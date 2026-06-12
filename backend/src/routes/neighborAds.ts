@@ -10,6 +10,11 @@ const AD_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 const VALID_CATEGORIES = ["sell", "buy", "service", "invite", "lost", "found", "other"];
 
+const AD_CATEGORY_RU: Record<string, string> = {
+    sell: "Продаю", buy: "Ищу", service: "Услуга",
+    invite: "Приглашаю", lost: "Потеряно", found: "Найдено", other: "Другое",
+};
+
 async function getBuildingKey(userId: number): Promise<string | null> {
     const [[row]] = await pool.query<RowDataPacket[]>(
         `SELECT building_key FROM user_profiles WHERE user_id = ?`,
@@ -108,7 +113,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         return res.status(400).json({ error: "Некорректная категория" });
 
     try {
-        const mod = await moderateContent("ad", { title: title.trim(), body: body.trim() });
+        const mod = await moderateContent("ad", { title: title.trim(), body: body.trim(), category: AD_CATEGORY_RU[category] });
         if (!mod.ok) {
             return res.status(422).json({
                 error: mod.issue,
@@ -169,7 +174,15 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     if (category && !VALID_CATEGORIES.includes(category))
         return res.status(400).json({ error: "Некорректная категория" });
     try {
-        const mod = await moderateContent("ad", { title: title.trim(), body: body.trim() });
+        let categoryCode = category;
+        if (!categoryCode) {
+            const [[existing]] = await pool.query<RowDataPacket[]>(
+                `SELECT category FROM neighbor_ads WHERE id = ?`, [adId],
+            );
+            categoryCode = existing?.category as string | undefined;
+        }
+
+        const mod = await moderateContent("ad", { title: title.trim(), body: body.trim(), category: AD_CATEGORY_RU[categoryCode ?? ""] });
         if (!mod.ok) {
             return res.status(422).json({
                 error: mod.issue,

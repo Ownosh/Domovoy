@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/client";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import type { RowDataPacket } from "mysql2";
+import { getActiveBuildingKey } from "../db/helpers";
 
 const router = Router();
 
@@ -27,17 +28,15 @@ router.get("/pois", requireAuth, async (req: AuthRequest, res) => {
     }
 
     try {
-        const [[profile]] = await pool.query<RowDataPacket[]>(
-            `SELECT p.building_key, b.lat, b.lng
-             FROM user_profiles p
-             LEFT JOIN buildings b ON b.building_key = p.building_key
-             WHERE p.user_id = ?`,
-            [userId],
+        const buildingKey = await getActiveBuildingKey(userId);
+
+        const [[building]] = await pool.query<RowDataPacket[]>(
+            `SELECT lat, lng FROM buildings WHERE building_key = ?`,
+            [buildingKey ?? ""],
         );
 
-        const buildingKey = (profile?.building_key as string | null) ?? null;
-        const anchorLat = profile?.lat != null ? Number(profile.lat) : null;
-        const anchorLng = profile?.lng != null ? Number(profile.lng) : null;
+        const anchorLat = building?.lat != null ? Number(building.lat) : null;
+        const anchorLng = building?.lng != null ? Number(building.lng) : null;
 
         const [rows] = await pool.query<RowDataPacket[]>(
             `SELECT id, building_key, layer_id, scope, name, address,

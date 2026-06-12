@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/client";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { RowDataPacket } from "mysql2";
+import { getActiveBuildingKey } from "../db/helpers";
 
 const router = Router();
 
@@ -11,11 +12,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
         return res.status(401).json({ error: "Unauthorized" });
     }
     try {
-        const [[profile]] = await pool.query<RowDataPacket[]>(
-            `SELECT building_key FROM user_profiles WHERE user_id = ?`,
-            [userId],
-        );
-        const buildingKey = (profile?.building_key as string | null) ?? null;
+        const buildingKey = await getActiveBuildingKey(userId);
         if (!buildingKey) {
             return res.status(400).json({ error: "Профиль не привязан к дому" });
         }

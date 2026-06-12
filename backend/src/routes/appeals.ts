@@ -3,20 +3,18 @@ import { pool } from "../db/client";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
 import { moderateContent } from "../utils/moderation";
+import { getActiveApartment } from "../db/helpers";
 
 const router = Router();
 const MASS_APPEAL_THRESHOLD = 5;
 
 async function getProfile(userId: number): Promise<{ buildingKey: string; apartment: string; entrance: string | null } | null> {
-    const [[row]] = await pool.query<RowDataPacket[]>(
-        `SELECT building_key, apartment, entrances FROM user_profiles WHERE user_id = ?`,
-        [userId],
-    );
-    if (!row?.building_key) return null;
-    const entranceNum = Number(row.entrances ?? 0);
+    const apt = await getActiveApartment(userId);
+    if (!apt) return null;
+    const entranceNum = Number(apt.entrance ?? 0);
     return {
-        buildingKey: row.building_key as string,
-        apartment: (row.apartment as string) ?? "",
+        buildingKey: apt.buildingKey,
+        apartment: apt.apartment ?? "",
         entrance: entranceNum > 0 ? String(entranceNum) : null,
     };
 }

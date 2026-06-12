@@ -115,8 +115,16 @@ router.post("/register", async (req: Request, res: Response) => {
             [buildingKey, buildingLabel, buildingLabel],
         );
         await conn.execute(
-            "INSERT INTO user_profiles (user_id, full_name, phone, building_key, apartment, entrances) VALUES (?, ?, ?, ?, ?, ?)",
-            [userId, name, phone, buildingKey, apartment, entrance],
+            "INSERT INTO user_profiles (user_id, full_name, phone) VALUES (?, ?, ?)",
+            [userId, name, phone],
+        );
+        const [aptResult] = await conn.execute(
+            "INSERT INTO user_apartments (user_id, building_key, apartment, entrance) VALUES (?, ?, ?, ?)",
+            [userId, buildingKey, apartment, entrance],
+        ) as [ResultSetHeader, unknown];
+        await conn.execute(
+            "UPDATE user_profiles SET active_apartment_id = ? WHERE user_id = ?",
+            [aptResult.insertId, userId],
         );
 
         await conn.commit();
@@ -150,12 +158,13 @@ router.post("/login", async (req: Request, res: Response) => {
     try {
         const [rows] = await pool.execute<RowDataPacket[]>(
             `SELECT u.id, u.email, u.password_hash,
-                    p.full_name, p.phone, p.building_key, p.apartment, p.entrances, p.apartment_area_sqm,
-                    p.profile_photo,
-                    COALESCE(b.short_name, p.building_key) AS building_name
+                    p.full_name, p.phone, p.profile_photo,
+                    ua.building_key, ua.apartment, ua.entrance, ua.apartment_area_sqm,
+                    COALESCE(b.short_name, ua.building_key) AS building_name
              FROM users u
              LEFT JOIN user_profiles p ON p.user_id = u.id
-             LEFT JOIN buildings b ON b.building_key = p.building_key
+             LEFT JOIN user_apartments ua ON ua.id = p.active_apartment_id
+             LEFT JOIN buildings b ON b.building_key = ua.building_key
              WHERE u.email = ? AND u.is_active = 1`,
             [email.toLowerCase()],
         );
@@ -185,7 +194,7 @@ router.post("/login", async (req: Request, res: Response) => {
                 building: (user.building_key as string) ?? "",
                 buildingName: (user.building_name as string) || undefined,
                 apartment: (user.apartment as string) ?? "",
-                entrance: Number(user.entrances ?? 0) || undefined,
+                entrance: Number(user.entrance ?? 0) || undefined,
                 apartmentAreaSqm: (user.apartment_area_sqm as number) ?? undefined,
                 profilePhoto: (user.profile_photo as string | null) ?? undefined,
             },
@@ -308,25 +317,36 @@ router.patch("/profile", requireAuth, async (req: AuthRequest, res: Response) =>
 
         await pool.execute(
             `UPDATE user_profiles
-             SET full_name          = COALESCE(?, full_name),
-                 phone              = COALESCE(?, phone),
-                 building_key       = COALESCE(?, building_key),
-                 apartment          = COALESCE(?, apartment),
-                 entrances          = COALESCE(?, entrances),
-                 apartment_area_sqm = ?,
-                 profile_photo      = COALESCE(?, profile_photo)
+             SET full_name     = COALESCE(?, full_name),
+                 phone         = COALESCE(?, phone),
+                 profile_photo = COALESCE(?, profile_photo)
              WHERE user_id = ?`,
             [
                 name?.trim() ?? null,
                 phone?.trim() ?? null,
-                buildingKey ?? null,
-                apartment?.trim() ?? null,
-                entrance != null ? Number(entrance) : null,
-                apartmentAreaSqm ?? null,
                 profilePhoto !== undefined ? profilePhoto : null,
                 userId,
             ],
         );
+
+        if (buildingKey != null || apartment != null || entrance != null || apartmentAreaSqm !== undefined) {
+            await pool.execute(
+                `UPDATE user_apartments ua
+                 JOIN user_profiles p ON p.active_apartment_id = ua.id
+                 SET ua.building_key       = COALESCE(?, ua.building_key),
+                     ua.apartment          = COALESCE(?, ua.apartment),
+                     ua.entrance           = COALESCE(?, ua.entrance),
+                     ua.apartment_area_sqm = COALESCE(?, ua.apartment_area_sqm)
+                 WHERE p.user_id = ?`,
+                [
+                    buildingKey ?? null,
+                    apartment?.trim() ?? null,
+                    entrance != null ? Number(entrance) : null,
+                    apartmentAreaSqm ?? null,
+                    userId,
+                ],
+            );
+        }
         res.json({ ok: true });
     } catch (err) {
         console.error("[profile patch]", err);

@@ -3,22 +3,15 @@ import { pool } from "../db/client";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
 import { moderateContent } from "../utils/moderation";
+import { getActiveApartment, getActiveBuildingKey } from "../db/helpers";
 
 const router = Router();
-
-async function getBuildingKey(userId: number): Promise<string | null> {
-    const [[row]] = await pool.query<RowDataPacket[]>(
-        `SELECT building_key FROM user_profiles WHERE user_id = ?`,
-        [userId],
-    );
-    return (row?.building_key as string | null) ?? null;
-}
 
 // GET /api/votes  — голосования дома + голоса текущего пользователя
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     try {
-        const buildingKey = await getBuildingKey(userId);
+        const buildingKey = await getActiveBuildingKey(userId);
         if (!buildingKey) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
         const [voteRows] = await pool.query<RowDataPacket[]>(
@@ -117,7 +110,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
             });
         }
 
-        const buildingKey = await getBuildingKey(userId);
+        const buildingKey = await getActiveBuildingKey(userId);
         if (!buildingKey) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
         const endsAt = new Date(Date.now() + Number(durationDays) * 86400_000);
@@ -275,11 +268,14 @@ router.post("/:id/cast", requireAuth, async (req: AuthRequest, res) => {
     if (!optionId) return res.status(400).json({ error: "optionId обязателен" });
 
     try {
+        const apt = await getActiveApartment(userId);
+        if (!apt) return res.status(400).json({ error: "Профиль не привязан к дому" });
+
         const [[verif]] = await pool.query<RowDataPacket[]>(
             `SELECT doc_type FROM verification_requests
-             WHERE user_id = ? AND status = 'approved'
+             WHERE apartment_id = ? AND status = 'approved'
              ORDER BY reviewed_at DESC LIMIT 1`,
-            [userId],
+            [apt.apartmentId],
         );
         if (!verif) return res.status(403).json({ error: "Необходима верификация для голосования" });
         if (verif.doc_type === "lease") {

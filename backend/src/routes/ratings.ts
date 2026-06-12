@@ -2,15 +2,9 @@ import { Router } from "express";
 import { pool } from "../db/client";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
+import { getActiveBuildingKey } from "../db/helpers";
 
 const router = Router();
-
-async function getBuildingKey(userId: number): Promise<string | null> {
-    const [[row]] = await pool.query<RowDataPacket[]>(
-        `SELECT building_key FROM user_profiles WHERE user_id = ?`, [userId],
-    );
-    return (row?.building_key as string) ?? null;
-}
 
 // GET /api/ratings/my — оценка текущего пользователя за указанный или текущий месяц
 router.get("/my", requireAuth, async (req: AuthRequest, res) => {
@@ -65,7 +59,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         return res.status(400).json({ error: "Оценки должны быть от 1 до 5" });
 
     try {
-        const buildingKey = await getBuildingKey(userId);
+        const buildingKey = await getActiveBuildingKey(userId);
         if (!buildingKey) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
         await pool.execute<ResultSetHeader>(
@@ -99,7 +93,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 router.get("/stats", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     try {
-        const buildingKey = await getBuildingKey(userId);
+        const buildingKey = await getActiveBuildingKey(userId);
         if (!buildingKey) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
         const [[row]] = await pool.query<RowDataPacket[]>(

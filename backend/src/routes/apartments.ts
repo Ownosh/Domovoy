@@ -116,9 +116,9 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
             // 2. Создаём заявку на верификацию в той же таблице, что и основная верификация
             await conn.execute(
                 `INSERT INTO verification_requests
-                     (user_id, apartment_id, building_key, doc_type, photo_url, status, submitted_at)
-                 VALUES (?, ?, ?, ?, ?, 'pending', NOW())`,
-                [userId, newAptId, buildingKey, docType, docUrl],
+                     (apartment_id, doc_type, photo_url, status, submitted_at)
+                 VALUES (?, ?, ?, 'pending', NOW())`,
+                [newAptId, docType, docUrl],
             );
 
             await conn.commit();
@@ -159,9 +159,7 @@ router.patch("/:id/activate", requireAuth, async (req: AuthRequest, res) => {
 
     try {
         const [[apt]] = await pool.query<RowDataPacket[]>(
-            `SELECT id, building_key, apartment, entrance, apartment_area_sqm
-             FROM user_apartments
-             WHERE id = ? AND user_id = ?`,
+            `SELECT id FROM user_apartments WHERE id = ? AND user_id = ?`,
             [aptId, userId],
         );
         if (!apt) {
@@ -169,14 +167,8 @@ router.patch("/:id/activate", requireAuth, async (req: AuthRequest, res) => {
         }
 
         await pool.execute(
-            `UPDATE user_profiles
-             SET active_apartment_id = ?,
-                 building_key        = ?,
-                 apartment           = ?,
-                 entrances           = ?,
-                 apartment_area_sqm  = ?
-             WHERE user_id = ?`,
-            [aptId, apt.building_key, apt.apartment, apt.entrance ?? 0, apt.apartment_area_sqm ?? null, userId],
+            `UPDATE user_profiles SET active_apartment_id = ? WHERE user_id = ?`,
+            [aptId, userId],
         );
 
         return res.json({ ok: true });
@@ -219,20 +211,13 @@ router.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
         );
         if (String(profile?.active_apartment_id) === String(aptId)) {
             const [[other]] = await pool.query<RowDataPacket[]>(
-                `SELECT id, building_key, apartment, entrance, apartment_area_sqm
-                 FROM user_apartments WHERE user_id = ? AND id != ? LIMIT 1`,
+                `SELECT id FROM user_apartments WHERE user_id = ? AND id != ? LIMIT 1`,
                 [userId, aptId],
             );
             if (other) {
                 await pool.execute(
-                    `UPDATE user_profiles
-                     SET active_apartment_id = ?,
-                         building_key        = ?,
-                         apartment           = ?,
-                         entrances           = ?,
-                         apartment_area_sqm  = ?
-                     WHERE user_id = ?`,
-                    [other.id, other.building_key, other.apartment, other.entrance ?? 0, other.apartment_area_sqm ?? null, userId],
+                    `UPDATE user_profiles SET active_apartment_id = ? WHERE user_id = ?`,
+                    [other.id, userId],
                 );
             }
         }

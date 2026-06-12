@@ -3,6 +3,7 @@ import { pool } from "../db/client";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
 import { moderateContent } from "../utils/moderation";
+import { getActiveBuildingKey } from "../db/helpers";
 
 const router = Router();
 
@@ -14,14 +15,6 @@ const AD_CATEGORY_RU: Record<string, string> = {
     sell: "Продаю", buy: "Ищу", service: "Услуга",
     invite: "Приглашаю", lost: "Потеряно", found: "Найдено", other: "Другое",
 };
-
-async function getBuildingKey(userId: number): Promise<string | null> {
-    const [[row]] = await pool.query<RowDataPacket[]>(
-        `SELECT building_key FROM user_profiles WHERE user_id = ?`,
-        [userId],
-    );
-    return (row?.building_key as string | null) ?? null;
-}
 
 async function getPhotos(adIds: number[]): Promise<Record<number, string[]>> {
     if (!adIds.length) return {};
@@ -52,7 +45,7 @@ async function insertPhotos(adId: number, imageUrls: string[]): Promise<void> {
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     try {
-        const buildingKey = await getBuildingKey(userId);
+        const buildingKey = await getActiveBuildingKey(userId);
         if (!buildingKey) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
         const [rows] = await pool.query<RowDataPacket[]>(
@@ -121,7 +114,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
             });
         }
 
-        const buildingKey = await getBuildingKey(userId);
+        const buildingKey = await getActiveBuildingKey(userId);
         if (!buildingKey) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
         const expiresAt = new Date(Date.now() + AD_TTL_MS);

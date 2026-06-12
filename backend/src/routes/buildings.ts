@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/client";
 import { RowDataPacket } from "mysql2";
 import { requireAuth, AuthRequest } from "../middleware/auth";
+import { getActiveBuildingKey } from "../db/helpers";
 
 const router = Router();
 
@@ -30,25 +31,17 @@ router.get("/search", async (req, res) => {
     }
 });
 
-async function getUserBuildingKey(userId: number): Promise<string | null> {
-    const [[row]] = await pool.query<RowDataPacket[]>(
-        `SELECT building_key FROM user_profiles WHERE user_id = ?`, [userId],
-    );
-    return (row?.building_key as string) ?? null;
-}
-
 // GET /api/buildings/info — данные дома текущего пользователя
 router.get("/info", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     try {
-        const profile_key = await getUserBuildingKey(userId);
-        if (!profile_key) return res.status(404).json({ error: "Дом не найден" });
-        const profile = { building_key: profile_key };
+        const buildingKey = await getActiveBuildingKey(userId);
+        if (!buildingKey) return res.status(404).json({ error: "Дом не найден" });
 
         const [[b]] = await pool.query<RowDataPacket[]>(
             `SELECT building_key, address, short_name, city, year_built, entrances, apartments
              FROM buildings WHERE LOWER(building_key) = LOWER(?)`,
-            [profile.building_key],
+            [buildingKey],
         );
         if (!b) return res.status(404).json({ error: "Дом не найден в базе" });
 
@@ -69,7 +62,7 @@ router.get("/info", requireAuth, async (req: AuthRequest, res) => {
 
 // GET /api/buildings/photos
 router.get("/photos", requireAuth, async (req: AuthRequest, res) => {
-    const key = await getUserBuildingKey(req.userId!);
+    const key = await getActiveBuildingKey(req.userId!);
     if (!key) return res.status(404).json({ error: "Дом не найден" });
     try {
         const [rows] = await pool.query<RowDataPacket[]>(
@@ -84,7 +77,7 @@ router.get("/photos", requireAuth, async (req: AuthRequest, res) => {
 
 // GET /api/buildings/specs
 router.get("/specs", requireAuth, async (req: AuthRequest, res) => {
-    const key = await getUserBuildingKey(req.userId!);
+    const key = await getActiveBuildingKey(req.userId!);
     if (!key) return res.status(404).json({ error: "Дом не найден" });
     try {
         const [rows] = await pool.query<RowDataPacket[]>(
@@ -109,7 +102,7 @@ function toDateString(raw: unknown): string {
 
 // GET /api/buildings/calendar?from=YYYY-MM&to=YYYY-MM
 router.get("/calendar", requireAuth, async (req: AuthRequest, res) => {
-    const key = await getUserBuildingKey(req.userId!);
+    const key = await getActiveBuildingKey(req.userId!);
     if (!key) return res.status(404).json({ error: "Дом не найден" });
 
     try {
@@ -134,7 +127,7 @@ router.get("/calendar", requireAuth, async (req: AuthRequest, res) => {
 
 // GET /api/buildings/schedule
 router.get("/schedule", requireAuth, async (req: AuthRequest, res) => {
-    const key = await getUserBuildingKey(req.userId!);
+    const key = await getActiveBuildingKey(req.userId!);
     if (!key) return res.status(404).json({ error: "Дом не найден" });
     try {
         const [rows] = await pool.query<RowDataPacket[]>(
@@ -154,7 +147,7 @@ router.get("/schedule", requireAuth, async (req: AuthRequest, res) => {
 
 // GET /api/buildings/status
 router.get("/status", requireAuth, async (req: AuthRequest, res) => {
-    const key = await getUserBuildingKey(req.userId!);
+    const key = await getActiveBuildingKey(req.userId!);
     if (!key) return res.status(404).json({ error: "Дом не найден" });
     try {
         const [rows] = await pool.query<RowDataPacket[]>(
@@ -176,7 +169,7 @@ router.get("/status", requireAuth, async (req: AuthRequest, res) => {
 
 // GET /api/buildings/contacts
 router.get("/contacts", requireAuth, async (req: AuthRequest, res) => {
-    const key = await getUserBuildingKey(req.userId!);
+    const key = await getActiveBuildingKey(req.userId!);
     if (!key) return res.status(404).json({ error: "Дом не найден" });
     try {
         const [[row]] = await pool.query<RowDataPacket[]>(

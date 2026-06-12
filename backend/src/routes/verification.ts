@@ -2,29 +2,26 @@ import { Router } from "express";
 import { pool } from "../db/client";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
+import { getActiveApartment } from "../db/helpers";
 
 const router = Router();
 
 const VALID_DOC_TYPES = ["lease", "ownership"];
 
-async function getBuildingKey(userId: number): Promise<string | null> {
-    const [[row]] = await pool.query<RowDataPacket[]>(
-        `SELECT building_key FROM user_profiles WHERE user_id = ?`, [userId],
-    );
-    return (row?.building_key as string | null) ?? null;
-}
-
-// GET /api/verification/status — текущий статус заявки
+// GET /api/verification/status — текущий статус заявки для активной квартиры
 router.get("/status", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     try {
+        const apt = await getActiveApartment(userId);
+        if (!apt) return res.json({ status: "none" });
+
         const [[row]] = await pool.query<RowDataPacket[]>(
             `SELECT id, doc_type, status, comment, submitted_at, reviewed_at
              FROM verification_requests
-             WHERE user_id = ?
+             WHERE apartment_id = ?
              ORDER BY submitted_at DESC
              LIMIT 1`,
-            [userId],
+            [apt.apartmentId],
         );
 
         if (!row) return res.json({ status: "none" });
@@ -55,23 +52,24 @@ router.post("/submit", requireAuth, async (req: AuthRequest, res) => {
     }
 
     try {
-        const buildingKey = await getBuildingKey(userId);
+        const apt = await getActiveApartment(userId);
+        if (!apt) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
         // Проверяем — нет ли активной заявки
         const [[existing]] = await pool.query<RowDataPacket[]>(
             `SELECT id, status FROM verification_requests
-             WHERE user_id = ? AND status = 'pending'
+             WHERE apartment_id = ? AND status = 'pending'
              LIMIT 1`,
-            [userId],
+            [apt.apartmentId],
         );
         if (existing) {
             return res.status(409).json({ error: "Заявка уже на рассмотрении" });
         }
 
         await pool.execute<ResultSetHeader>(
-            `INSERT INTO verification_requests (user_id, doc_type, status, photo_url, building_key, submitted_at)
-             VALUES (?, ?, 'pending', ?, ?, NOW())`,
-            [userId, docType, photoUrl, buildingKey ?? null],
+            `INSERT INTO verification_requests (apartment_id, doc_type, status, photo_url, submitted_at)
+             VALUES (?, ?, 'pending', ?, NOW())`,
+            [apt.apartmentId, docType, photoUrl],
         );
 
         return res.status(201).json({

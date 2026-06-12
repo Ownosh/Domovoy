@@ -11,7 +11,7 @@ export async function apiAddApartment(data: {
     entrance?: number;
     apartmentAreaSqm?: number;
     docType: "lease" | "ownership";
-    docUrl: string;
+    docUrls: string[];
 }): Promise<UserApartment> {
     return apiRequest<UserApartment>("/apartments", {
         method: "POST",

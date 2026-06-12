@@ -187,7 +187,6 @@ export async function migrate(): Promise<void> {
             apartment_id BIGINT UNSIGNED NOT NULL,
             doc_type     ENUM('lease','ownership') NOT NULL,
             status       ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
-            photo_url    TEXT NOT NULL,
             comment      TEXT DEFAULT NULL,
             submitted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             reviewed_at  DATETIME DEFAULT NULL,
@@ -198,6 +197,29 @@ export async function migrate(): Promise<void> {
             INDEX idx_vr_apartment_submitted (apartment_id, submitted_at DESC)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS verification_photos (
+            id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            request_id BIGINT UNSIGNED NOT NULL,
+            image_url  TEXT            NOT NULL,
+            position   INT             NOT NULL DEFAULT 0,
+            created_at DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            CONSTRAINT fk_vp_request FOREIGN KEY (request_id) REFERENCES verification_requests(id) ON DELETE CASCADE,
+            INDEX idx_vp_request (request_id, position)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    // --- Перенос старого единственного photo_url в verification_photos (для старых установок) ---
+    if (await columnExists("verification_requests", "photo_url")) {
+        await exec(`
+            INSERT INTO verification_photos (request_id, image_url, position)
+            SELECT id, photo_url, 0 FROM verification_requests
+            WHERE photo_url IS NOT NULL AND photo_url <> ''
+        `);
+        await exec(`ALTER TABLE verification_requests DROP COLUMN photo_url`);
+    }
 
     // --- Миграция старых установок verification_requests (user_id/building_key -> apartment_id) ---
     if (await tableExists("verification_requests") && await columnExists("verification_requests", "user_id")) {
@@ -225,10 +247,8 @@ export async function migrate(): Promise<void> {
         await exec(`DELETE FROM verification_requests WHERE apartment_id IS NULL`);
 
         await exec(`UPDATE verification_requests SET status = 'pending' WHERE status = 'none'`);
-        await exec(`UPDATE verification_requests SET photo_url = '' WHERE photo_url IS NULL`);
 
         await exec(`ALTER TABLE verification_requests MODIFY COLUMN status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending'`);
-        await exec(`ALTER TABLE verification_requests MODIFY COLUMN photo_url TEXT NOT NULL`);
         await exec(`ALTER TABLE verification_requests MODIFY COLUMN apartment_id BIGINT UNSIGNED NOT NULL`);
 
         await exec(`ALTER TABLE verification_requests DROP FOREIGN KEY fk_vr_user`);
@@ -317,13 +337,14 @@ export async function migrate(): Promise<void> {
         CREATE TABLE IF NOT EXISTS news_photos (
             id        BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             news_id   BIGINT UNSIGNED NOT NULL,
-            image_url VARCHAR(500)    NOT NULL,
+            image_url TEXT            NOT NULL,
             position  INT             NOT NULL DEFAULT 0,
             PRIMARY KEY (id),
             CONSTRAINT fk_np_news FOREIGN KEY (news_id) REFERENCES news(id) ON DELETE CASCADE,
             INDEX idx_np_news (news_id, position)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+    await exec(`ALTER TABLE news_photos MODIFY COLUMN image_url TEXT NOT NULL`);
 
     // ============================================================
     //  УВЕДОМЛЕНИЯ
@@ -375,6 +396,7 @@ export async function migrate(): Promise<void> {
             status                ENUM('new','collecting_signatures','in_progress','resolved','closed','rejected') NOT NULL DEFAULT 'new',
             entrance              INT             DEFAULT NULL,
             author_apartment      VARCHAR(20)     NOT NULL DEFAULT '',
+            author_apartment_id   BIGINT UNSIGNED DEFAULT NULL,
             escalated_to_uk       BOOLEAN         NOT NULL DEFAULT FALSE,
             manually_archived     TINYINT(1)      NOT NULL DEFAULT 0,
             admin_comment         TEXT            DEFAULT NULL,
@@ -396,6 +418,15 @@ export async function migrate(): Promise<void> {
     await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_comment_at DATETIME DEFAULT NULL`);
     await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_comment_read_at DATETIME DEFAULT NULL`);
     await exec(`ALTER TABLE appeals ADD CONSTRAINT fk_appeals_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
+    await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS author_apartment_id BIGINT UNSIGNED DEFAULT NULL`);
+    await exec(`
+        UPDATE appeals a
+        JOIN user_apartments ua ON ua.user_id = a.user_id AND ua.building_key = a.building_key AND ua.apartment = a.author_apartment
+        SET a.author_apartment_id = ua.id
+        WHERE a.author_apartment_id IS NULL
+    `);
+    await exec(`ALTER TABLE appeals ADD CONSTRAINT fk_appeals_apartment FOREIGN KEY (author_apartment_id) REFERENCES user_apartments(id) ON DELETE SET NULL`);
+    await exec(`ALTER TABLE appeals ADD INDEX idx_appeals_apartment (author_apartment_id)`);
     // Старые установки хранили entrance как VARCHAR(20) — приводим к INT, как в user_apartments.entrance
     await exec(`ALTER TABLE appeals MODIFY COLUMN entrance INT DEFAULT NULL`);
     // Старые статусы -> новые, затем сужаем ENUM
@@ -428,6 +459,7 @@ export async function migrate(): Promise<void> {
             appeal_id    BIGINT UNSIGNED NOT NULL,
             user_id      BIGINT UNSIGNED NOT NULL,
             apartment    VARCHAR(20)     NOT NULL,
+            apartment_id BIGINT UNSIGNED DEFAULT NULL,
             entrance     INT             DEFAULT NULL,
             display_name VARCHAR(255)    NOT NULL DEFAULT '',
             anonymous    BOOLEAN         NOT NULL DEFAULT FALSE,
@@ -443,6 +475,16 @@ export async function migrate(): Promise<void> {
     `);
     await exec(`ALTER TABLE appeal_participants MODIFY COLUMN photo_uri TEXT DEFAULT NULL`);
     await exec(`ALTER TABLE appeal_participants MODIFY COLUMN entrance INT DEFAULT NULL`);
+    await exec(`ALTER TABLE appeal_participants ADD COLUMN IF NOT EXISTS apartment_id BIGINT UNSIGNED DEFAULT NULL`);
+    await exec(`
+        UPDATE appeal_participants ap
+        JOIN appeals a ON a.id = ap.appeal_id
+        JOIN user_apartments ua ON ua.user_id = ap.user_id AND ua.building_key = a.building_key AND ua.apartment = ap.apartment
+        SET ap.apartment_id = ua.id
+        WHERE ap.apartment_id IS NULL
+    `);
+    await exec(`ALTER TABLE appeal_participants ADD CONSTRAINT fk_ap_apartment FOREIGN KEY (apartment_id) REFERENCES user_apartments(id) ON DELETE SET NULL`);
+    await exec(`ALTER TABLE appeal_participants ADD INDEX idx_ap_apartment (apartment_id)`);
 
     // ============================================================
     //  ДОМ — ХАРАКТЕРИСТИКИ, ФОТО, СТАТУС, КАЛЕНДАРЬ, МУСОР
@@ -650,6 +692,7 @@ export async function migrate(): Promise<void> {
             vote_id   BIGINT UNSIGNED NOT NULL,
             user_id   BIGINT UNSIGNED NOT NULL,
             option_id BIGINT UNSIGNED NOT NULL,
+            apartment_id BIGINT UNSIGNED DEFAULT NULL,
             area_sqm  DECIMAL(6,2)    NOT NULL DEFAULT 0,
             voted_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
@@ -659,6 +702,20 @@ export async function migrate(): Promise<void> {
             CONSTRAINT fk_vc_option FOREIGN KEY (option_id) REFERENCES vote_options(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+    await exec(`ALTER TABLE vote_casts ADD COLUMN IF NOT EXISTS apartment_id BIGINT UNSIGNED DEFAULT NULL`);
+    await exec(`
+        UPDATE vote_casts vc
+        JOIN votes v ON v.id = vc.vote_id
+        SET vc.apartment_id = (
+            SELECT ua.id FROM user_apartments ua
+            WHERE ua.user_id = vc.user_id AND ua.building_key = v.building_key
+            LIMIT 1
+        )
+        WHERE vc.apartment_id IS NULL
+          AND (SELECT COUNT(*) FROM user_apartments ua WHERE ua.user_id = vc.user_id AND ua.building_key = v.building_key) = 1
+    `);
+    await exec(`ALTER TABLE vote_casts ADD CONSTRAINT fk_vc_apartment FOREIGN KEY (apartment_id) REFERENCES user_apartments(id) ON DELETE SET NULL`);
+    await exec(`ALTER TABLE vote_casts ADD INDEX idx_vc_apartment (apartment_id)`);
 
     // ============================================================
     //  ОЦЕНКИ СРЕДЫ

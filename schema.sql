@@ -133,7 +133,6 @@ CREATE TABLE IF NOT EXISTS verification_requests (
   apartment_id BIGINT UNSIGNED                              NOT NULL,
   doc_type     ENUM('lease','ownership')                    NOT NULL,
   status       ENUM('pending','approved','rejected')        NOT NULL DEFAULT 'pending',
-  photo_url    TEXT                                          NOT NULL,
   comment      TEXT                                          DEFAULT NULL,
   submitted_at DATETIME                                      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   reviewed_at  DATETIME                                      DEFAULT NULL,
@@ -143,6 +142,17 @@ CREATE TABLE IF NOT EXISTS verification_requests (
   CONSTRAINT fk_vr_apartment FOREIGN KEY (apartment_id) REFERENCES user_apartments(id) ON DELETE CASCADE,
   INDEX idx_vr_apartment_submitted (apartment_id, submitted_at DESC),
   INDEX idx_vr_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS verification_photos (
+  id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  request_id   BIGINT UNSIGNED NOT NULL,
+  image_url    TEXT            NOT NULL,
+  position     INT             NOT NULL DEFAULT 0,
+  created_at   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT fk_vp_request FOREIGN KEY (request_id) REFERENCES verification_requests(id) ON DELETE CASCADE,
+  INDEX idx_vp_request (request_id, position)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
@@ -180,7 +190,7 @@ CREATE TABLE IF NOT EXISTS news (
 CREATE TABLE IF NOT EXISTS news_photos (
   id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   news_id    BIGINT UNSIGNED NOT NULL,
-  image_url  VARCHAR(500)    NOT NULL,
+  image_url  TEXT            NOT NULL,
   position   INT             NOT NULL DEFAULT 0,
   PRIMARY KEY (id),
   CONSTRAINT fk_np_news FOREIGN KEY (news_id) REFERENCES news(id) ON DELETE CASCADE,
@@ -231,6 +241,7 @@ CREATE TABLE IF NOT EXISTS appeals (
   status                 ENUM('new','collecting_signatures','in_progress','resolved','closed','rejected')        NOT NULL DEFAULT 'new',
   entrance               INT                                                                                      DEFAULT NULL,
   author_apartment       VARCHAR(20)                                                                              NOT NULL DEFAULT '',
+  author_apartment_id    BIGINT UNSIGNED                                                                          DEFAULT NULL,
   escalated_to_uk        BOOLEAN                                                                                  NOT NULL DEFAULT FALSE,
   manually_archived      BOOLEAN                                                                                  NOT NULL DEFAULT FALSE,
   admin_comment          TEXT                                                                                     DEFAULT NULL,
@@ -240,11 +251,13 @@ CREATE TABLE IF NOT EXISTS appeals (
   updated_at             DATETIME                                                                                 NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   resolved_at            DATETIME                                                                                 DEFAULT NULL,
   PRIMARY KEY (id),
-  CONSTRAINT fk_appeals_user     FOREIGN KEY (user_id)      REFERENCES users(id)               ON DELETE CASCADE,
-  CONSTRAINT fk_appeals_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE,
+  CONSTRAINT fk_appeals_user      FOREIGN KEY (user_id)             REFERENCES users(id)               ON DELETE CASCADE,
+  CONSTRAINT fk_appeals_building  FOREIGN KEY (building_key)        REFERENCES buildings(building_key) ON UPDATE CASCADE,
+  CONSTRAINT fk_appeals_apartment FOREIGN KEY (author_apartment_id) REFERENCES user_apartments(id)     ON DELETE SET NULL,
   INDEX idx_appeals_user_created   (user_id, created_at DESC),
   INDEX idx_appeals_status_created (status, created_at DESC),
-  INDEX idx_appeals_building_key   (building_key, created_at DESC)
+  INDEX idx_appeals_building_key   (building_key, created_at DESC),
+  INDEX idx_appeals_apartment      (author_apartment_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS appeal_photos (
@@ -263,6 +276,7 @@ CREATE TABLE IF NOT EXISTS appeal_participants (
   appeal_id    BIGINT UNSIGNED NOT NULL,
   user_id      BIGINT UNSIGNED NOT NULL,
   apartment    VARCHAR(20)     NOT NULL,
+  apartment_id BIGINT UNSIGNED DEFAULT NULL,
   entrance     INT             DEFAULT NULL,
   display_name VARCHAR(255)    NOT NULL DEFAULT '',
   anonymous    BOOLEAN         NOT NULL DEFAULT FALSE,
@@ -271,9 +285,11 @@ CREATE TABLE IF NOT EXISTS appeal_participants (
   joined_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_ap_appeal_user (appeal_id, user_id),
-  CONSTRAINT fk_ap_appeal FOREIGN KEY (appeal_id) REFERENCES appeals(id) ON DELETE CASCADE,
-  CONSTRAINT fk_ap_user   FOREIGN KEY (user_id)   REFERENCES users(id)   ON DELETE CASCADE,
-  INDEX idx_ap_appeal (appeal_id)
+  CONSTRAINT fk_ap_appeal    FOREIGN KEY (appeal_id)    REFERENCES appeals(id)         ON DELETE CASCADE,
+  CONSTRAINT fk_ap_user      FOREIGN KEY (user_id)      REFERENCES users(id)           ON DELETE CASCADE,
+  CONSTRAINT fk_ap_apartment FOREIGN KEY (apartment_id) REFERENCES user_apartments(id) ON DELETE SET NULL,
+  INDEX idx_ap_appeal (appeal_id),
+  INDEX idx_ap_apartment (apartment_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
@@ -423,14 +439,17 @@ CREATE TABLE IF NOT EXISTS vote_casts (
   vote_id   BIGINT UNSIGNED NOT NULL,
   user_id   BIGINT UNSIGNED NOT NULL,
   option_id BIGINT UNSIGNED NOT NULL,
+  apartment_id BIGINT UNSIGNED DEFAULT NULL,
   area_sqm  DECIMAL(6,2)    NOT NULL DEFAULT 0,
   voted_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_vc_vote_user (vote_id, user_id),
-  CONSTRAINT fk_vc_vote   FOREIGN KEY (vote_id)   REFERENCES votes(id)        ON DELETE CASCADE,
-  CONSTRAINT fk_vc_user   FOREIGN KEY (user_id)   REFERENCES users(id)        ON DELETE CASCADE,
-  CONSTRAINT fk_vc_option FOREIGN KEY (option_id) REFERENCES vote_options(id) ON DELETE CASCADE,
-  INDEX idx_vc_vote (vote_id)
+  CONSTRAINT fk_vc_vote      FOREIGN KEY (vote_id)      REFERENCES votes(id)        ON DELETE CASCADE,
+  CONSTRAINT fk_vc_user      FOREIGN KEY (user_id)      REFERENCES users(id)        ON DELETE CASCADE,
+  CONSTRAINT fk_vc_option    FOREIGN KEY (option_id)    REFERENCES vote_options(id) ON DELETE CASCADE,
+  CONSTRAINT fk_vc_apartment FOREIGN KEY (apartment_id) REFERENCES user_apartments(id) ON DELETE SET NULL,
+  INDEX idx_vc_vote (vote_id),
+  INDEX idx_vc_apartment (apartment_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================

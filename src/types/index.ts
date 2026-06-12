@@ -63,6 +63,7 @@ export type VerificationState = {
     docType?: "lease" | "ownership";
     submittedAt?: string;
     comment?: string;
+    photoUrls?: string[];
 };
 
 export type Appeal = {

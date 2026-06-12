@@ -62,14 +62,14 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
 // POST /api/apartments — добавить квартиру + создать заявку на верификацию
 router.post("/", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
-    const { buildingKey, apartment, entrance, apartmentAreaSqm, docType, docUrl } =
+    const { buildingKey, apartment, entrance, apartmentAreaSqm, docType, docUrls } =
         req.body as {
             buildingKey?: string;
             apartment?: string;
             entrance?: number;
             apartmentAreaSqm?: number;
             docType?: string;
-            docUrl?: string;
+            docUrls?: string[];
         };
 
     if (!buildingKey || !apartment?.trim()) {
@@ -78,7 +78,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     if (!docType || !VALID_DOC_TYPES.includes(docType)) {
         return res.status(400).json({ error: "Некорректный тип документа" });
     }
-    if (!docUrl) {
+    if (!docUrls?.length) {
         return res.status(400).json({ error: "Фото документа обязательно" });
     }
 
@@ -114,12 +114,18 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
             const newAptId = aptResult.insertId;
 
             // 2. Создаём заявку на верификацию в той же таблице, что и основная верификация
-            await conn.execute(
+            const [vrResult] = await conn.execute<ResultSetHeader>(
                 `INSERT INTO verification_requests
-                     (apartment_id, doc_type, photo_url, status, submitted_at)
-                 VALUES (?, ?, ?, 'pending', NOW())`,
-                [newAptId, docType, docUrl],
+                     (apartment_id, doc_type, status, submitted_at)
+                 VALUES (?, ?, 'pending', NOW())`,
+                [newAptId, docType],
             );
+            for (let i = 0; i < docUrls.length; i++) {
+                await conn.execute(
+                    `INSERT INTO verification_photos (request_id, image_url, position) VALUES (?, ?, ?)`,
+                    [vrResult.insertId, docUrls[i], i],
+                );
+            }
 
             await conn.commit();
 

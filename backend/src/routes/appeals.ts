@@ -181,9 +181,9 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 
         const initialStatus = kind === "collective" ? "collecting_signatures" : "new";
         const [result] = await pool.execute<ResultSetHeader>(
-            `INSERT INTO appeals (user_id, building_key, title, body, category, kind, entrance, author_apartment, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [userId, prof.buildingKey, title.trim(), body.trim(), category?.trim() ?? "", kind!, entrance?.trim() || null, prof.apartment, initialStatus],
+            `INSERT INTO appeals (user_id, building_key, title, body, category, kind, entrance, author_apartment, author_apartment_id, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [userId, prof.buildingKey, title.trim(), body.trim(), category?.trim() ?? "", kind!, entrance?.trim() || null, prof.apartment, prof.apartmentId, initialStatus],
         );
 
         const urls = Array.isArray(imageUrls) ? imageUrls : [];
@@ -225,9 +225,9 @@ router.post("/:id/join", requireAuth, async (req: AuthRequest, res) => {
 
         try {
             await pool.execute(
-                `INSERT INTO appeal_participants (appeal_id, user_id, apartment, entrance, display_name, anonymous, comment, photo_uri)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [appealId, userId, prof.apartment, prof.entrance ?? null,
+                `INSERT INTO appeal_participants (appeal_id, user_id, apartment, apartment_id, entrance, display_name, anonymous, comment, photo_uri)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [appealId, userId, prof.apartment, prof.apartmentId, prof.entrance ?? null,
                  displayName?.trim() ?? "", anonymous ? 1 : 0, comment?.trim() || null, photoUri || null],
             );
         } catch (e: any) {

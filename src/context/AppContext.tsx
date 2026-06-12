@@ -769,7 +769,7 @@ type AppContextValue = {
     logout: () => Promise<void>;
     updateProfile: (p: Partial<Profile>) => void;
     changePassword: (current: string, next: string) => Promise<boolean>;
-    submitVerification: (docType: "lease" | "ownership", photoUrl: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
+    submitVerification: (docType: "lease" | "ownership", photoUrls: string[]) => Promise<{ ok: true } | { ok: false; reason: string }>;
     addAppeal: (input: {
         title: string;
         body: string;
@@ -831,7 +831,7 @@ type AppContextValue = {
         entrance?: number;
         apartmentAreaSqm?: number;
         docType: "lease" | "ownership";
-        docUrl: string;
+        docUrls: string[];
     }) => Promise<{ ok: true } | { ok: false; reason: string }>;
     activateApartment: (id: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
     removeApartment: (id: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
@@ -1042,11 +1042,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
 
     const submitVerification = useCallback(
-        async (docType: "lease" | "ownership", photoUrl: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
+        async (docType: "lease" | "ownership", photoUrls: string[]): Promise<{ ok: true } | { ok: false; reason: string }> => {
             // оптимистично выставляем pending
             dispatch({ type: "SUBMIT_VERIFICATION", payload: { docType } });
             try {
-                const result = await apiSubmitVerification({ docType, photoUrl });
+                const result = await apiSubmitVerification({ docType, photoUrls });
                 dispatch({ type: "SET_VERIFICATION_STATUS", payload: result });
                 return { ok: true };
             } catch (e: any) {
@@ -1462,7 +1462,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             entrance?: number;
             apartmentAreaSqm?: number;
             docType: "lease" | "ownership";
-            docUrl: string;
+            docUrls: string[];
         }): Promise<{ ok: true } | { ok: false; reason: string }> => {
             try {
                 const apt = await apiAddApartment(data);

@@ -7,7 +7,7 @@ export async function apiFetchVerificationStatus(): Promise<VerificationState> {
 
 export async function apiSubmitVerification(data: {
     docType: "lease" | "ownership";
-    photoUrl: string;
+    photoUrls: string[];
 }): Promise<VerificationState> {
     return apiRequest<VerificationState>("/verification/submit", {
         method: "POST",

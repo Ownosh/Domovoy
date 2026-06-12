@@ -303,8 +303,8 @@ router.post("/:id/cast", requireAuth, async (req: AuthRequest, res) => {
         if (!opt) return res.status(400).json({ error: "Некорректный вариант" });
 
         await pool.execute(
-            `INSERT INTO vote_casts (vote_id, user_id, option_id, area_sqm) VALUES (?, ?, ?, ?)`,
-            [voteId, userId, optionId, apt.apartmentAreaSqm ?? 0],
+            `INSERT INTO vote_casts (vote_id, user_id, option_id, apartment_id, area_sqm) VALUES (?, ?, ?, ?, ?)`,
+            [voteId, userId, optionId, apt.apartmentId, apt.apartmentAreaSqm ?? 0],
         );
         return res.json({ ok: true });
     } catch (err: any) {

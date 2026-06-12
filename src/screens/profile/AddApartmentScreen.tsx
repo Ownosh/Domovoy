@@ -1,6 +1,6 @@
 import type { ProfileScreenProps } from "../../navigation/types";
 import React, { useState } from "react";
-import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { Button, Card, Input, ScreenLayout, AddressAutocomplete } from "../../components/ui";
@@ -12,6 +12,8 @@ import { colors, radius, spacing, textStyles } from "../../theme";
 type Props = ProfileScreenProps<"AddApartment">;
 
 type DocType = "lease" | "ownership";
+
+const MAX_PHOTOS = 5;
 
 const docTypes: { key: DocType; icon: keyof typeof Ionicons.glyphMap; title: string; hint: string }[] = [
     {
@@ -62,7 +64,7 @@ export function AddApartmentScreen({ navigation }: Props) {
     const [apartment, setApartment] = useState("");
     const [entranceStr, setEntranceStr] = useState("");
     const [docType, setDocType] = useState<DocType>("lease");
-    const [photoUri, setPhotoUri] = useState<string | null>(null);
+    const [photos, setPhotos] = useState<string[]>([]);
     const [pdConsent, setPdConsent] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
@@ -75,6 +77,10 @@ export function AddApartmentScreen({ navigation }: Props) {
     };
 
     const pickPhoto = async () => {
+        if (photos.length >= MAX_PHOTOS) {
+            Alert.alert("Максимум фото", `Можно добавить не более ${MAX_PHOTOS} фото`);
+            return;
+        }
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) {
             Alert.alert("Нет доступа", "Разрешите доступ к галерее в настройках.");
@@ -82,12 +88,19 @@ export function AddApartmentScreen({ navigation }: Props) {
         }
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ["images"],
-            allowsEditing: true,
+            allowsMultipleSelection: true,
+            selectionLimit: MAX_PHOTOS - photos.length,
+            allowsEditing: false,
             quality: 0.8,
         });
-        if (!result.canceled && result.assets[0]) {
-            setPhotoUri(result.assets[0].uri);
+        if (!result.canceled) {
+            const uris = result.assets.map((a) => a.uri);
+            setPhotos((prev) => [...prev, ...uris].slice(0, MAX_PHOTOS));
         }
+    };
+
+    const removePhoto = (index: number) => {
+        setPhotos((prev) => prev.filter((_, i) => i !== index));
     };
 
     const validate = () => {
@@ -104,15 +117,15 @@ export function AddApartmentScreen({ navigation }: Props) {
             Alert.alert("Согласие нужно", "Отметьте согласие на обработку персональных данных.");
             return;
         }
-        if (!photoUri) {
+        if (!photos.length) {
             Alert.alert("Фото нужно", "Прикрепите фото документа.");
             return;
         }
 
         setSubmitting(true);
-        let docUrl: string;
+        let docUrls: string[];
         try {
-            docUrl = await uploadFile(photoUri);
+            docUrls = await Promise.all(photos.map((uri) => uploadFile(uri)));
         } catch {
             setSubmitting(false);
             Alert.alert("Ошибка", "Не удалось загрузить фото. Проверьте соединение.");
@@ -125,7 +138,7 @@ export function AddApartmentScreen({ navigation }: Props) {
             apartment: apartment.trim(),
             entrance: entrance && !isNaN(entrance) ? entrance : undefined,
             docType,
-            docUrl,
+            docUrls,
         });
         setSubmitting(false);
 
@@ -242,15 +255,25 @@ export function AddApartmentScreen({ navigation }: Props) {
             {/* Фото документа */}
             <SectionHeader icon="camera-outline" title="Фото документа" />
             <Card>
-                {photoUri ? (
-                    <View style={styles.photoWrap}>
-                        <Image source={{ uri: photoUri }} style={styles.photoPreview} resizeMode="cover" />
-                        <Pressable onPress={() => setPhotoUri(null)} style={styles.photoRemoveBtn}>
-                            <Ionicons name="trash-outline" size={16} color={colors.danger} />
-                            <Text style={styles.photoRemoveText}>Удалить и выбрать другое</Text>
-                        </Pressable>
-                    </View>
-                ) : (
+                {photos.length > 0 && (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoRow}>
+                        {photos.map((uri, i) => (
+                            <View key={i} style={styles.thumbWrap}>
+                                <Image source={{ uri }} style={styles.thumb} />
+                                <Pressable onPress={() => removePhoto(i)} style={styles.removeBtn} hitSlop={6}>
+                                    <Text style={styles.removeBtnText}>×</Text>
+                                </Pressable>
+                            </View>
+                        ))}
+                        {photos.length < MAX_PHOTOS && (
+                            <Pressable onPress={() => { void pickPhoto(); }} style={styles.addBtn}>
+                                <Text style={styles.addBtnText}>+</Text>
+                            </Pressable>
+                        )}
+                    </ScrollView>
+                )}
+
+                {photos.length === 0 && (
                     <Pressable
                         onPress={() => { void pickPhoto(); }}
                         style={({ pressed }) => [styles.uploadArea, pressed && styles.uploadAreaPressed]}
@@ -259,7 +282,7 @@ export function AddApartmentScreen({ navigation }: Props) {
                             <Ionicons name="cloud-upload-outline" size={28} color={colors.info} />
                         </View>
                         <Text style={styles.uploadTitle}>Прикрепить фото</Text>
-                        <Text style={styles.uploadHint}>JPEG или PNG · Разборчивый скан или фото</Text>
+                        <Text style={styles.uploadHint}>JPEG или PNG · до {MAX_PHOTOS} фото · разборчивый скан или фото</Text>
                     </Pressable>
                 )}
 
@@ -268,13 +291,15 @@ export function AddApartmentScreen({ navigation }: Props) {
                 <Button
                     title={submitting ? "Отправка..." : "Отправить заявку"}
                     onPress={() => { void onSubmit(); }}
-                    disabled={submitting || !pdConsent || !photoUri}
+                    disabled={submitting || !pdConsent || !photos.length}
                     variant="primary"
                 />
             </Card>
         </ScreenLayout>
     );
 }
+
+const THUMB_SIZE = 90;
 
 const styles = StyleSheet.create({
     row: { flexDirection: "row", gap: spacing.md },
@@ -314,10 +339,21 @@ const styles = StyleSheet.create({
     checkboxOn: { borderColor: colors.primary, backgroundColor: colors.primary },
     consentText: { flex: 1, color: colors.textMuted, lineHeight: 20 },
 
-    photoWrap: { gap: spacing.md },
-    photoPreview: { width: "100%", height: 200, borderRadius: radius.md, backgroundColor: colors.border },
-    photoRemoveBtn: { flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start" },
-    photoRemoveText: { color: colors.danger, fontSize: 13 },
+    photoRow: { flexDirection: "row", marginBottom: spacing.xs },
+    thumbWrap: { width: THUMB_SIZE, height: THUMB_SIZE, marginRight: spacing.sm, position: "relative" },
+    thumb: { width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: radius.md, backgroundColor: colors.border },
+    removeBtn: {
+        position: "absolute", top: -6, right: -6,
+        width: 22, height: 22, borderRadius: 11,
+        backgroundColor: colors.danger, alignItems: "center", justifyContent: "center",
+    },
+    removeBtnText: { color: "#fff", fontSize: 16, lineHeight: 20, fontWeight: "700" },
+    addBtn: {
+        width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: radius.md,
+        borderWidth: 1, borderColor: colors.border, borderStyle: "dashed",
+        alignItems: "center", justifyContent: "center", backgroundColor: colors.surface,
+    },
+    addBtnText: { color: colors.text, fontSize: 32, lineHeight: 36 },
     uploadArea: {
         borderWidth: 1, borderColor: colors.border, borderStyle: "dashed",
         borderRadius: radius.lg, paddingVertical: spacing.xl + 4,

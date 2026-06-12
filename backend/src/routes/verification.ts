@@ -26,12 +26,18 @@ router.get("/status", requireAuth, async (req: AuthRequest, res) => {
 
         if (!row) return res.json({ status: "none" });
 
+        const [photoRows] = await pool.query<RowDataPacket[]>(
+            `SELECT image_url FROM verification_photos WHERE request_id = ? ORDER BY position`,
+            [row.id],
+        );
+
         return res.json({
             status: row.status as string,
             docType: row.doc_type as string,
             comment: (row.comment as string | null) ?? undefined,
             submittedAt: (row.submitted_at as Date).toISOString(),
             reviewedAt: row.reviewed_at ? (row.reviewed_at as Date).toISOString() : undefined,
+            photoUrls: photoRows.map((p) => p.image_url as string),
         });
     } catch (err) {
         console.error("[verification GET]", err);
@@ -42,12 +48,12 @@ router.get("/status", requireAuth, async (req: AuthRequest, res) => {
 // POST /api/verification/submit — подать заявку
 router.post("/submit", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
-    const { docType, photoUrl } = req.body as { docType?: string; photoUrl?: string };
+    const { docType, photoUrls } = req.body as { docType?: string; photoUrls?: string[] };
 
     if (!docType || !VALID_DOC_TYPES.includes(docType)) {
         return res.status(400).json({ error: "Некорректный тип документа" });
     }
-    if (!photoUrl) {
+    if (!photoUrls?.length) {
         return res.status(400).json({ error: "Фото документа обязательно" });
     }
 
@@ -66,11 +72,18 @@ router.post("/submit", requireAuth, async (req: AuthRequest, res) => {
             return res.status(409).json({ error: "Заявка уже на рассмотрении" });
         }
 
-        await pool.execute<ResultSetHeader>(
-            `INSERT INTO verification_requests (apartment_id, doc_type, status, photo_url, submitted_at)
-             VALUES (?, ?, 'pending', ?, NOW())`,
-            [apt.apartmentId, docType, photoUrl],
+        const [result] = await pool.execute<ResultSetHeader>(
+            `INSERT INTO verification_requests (apartment_id, doc_type, status, submitted_at)
+             VALUES (?, ?, 'pending', NOW())`,
+            [apt.apartmentId, docType],
         );
+
+        for (let i = 0; i < photoUrls.length; i++) {
+            await pool.execute(
+                `INSERT INTO verification_photos (request_id, image_url, position) VALUES (?, ?, ?)`,
+                [result.insertId, photoUrls[i], i],
+            );
+        }
 
         return res.status(201).json({
             status: "pending",

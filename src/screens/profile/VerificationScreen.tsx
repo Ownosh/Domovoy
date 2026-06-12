@@ -1,6 +1,6 @@
 import type { ProfileScreenProps } from "../../navigation/types";
 import React, { useState } from "react";
-import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { Button, Card, ScreenLayout } from "../../components/ui";
@@ -12,6 +12,8 @@ import type { VerificationStatus } from "../../types";
 type Props = ProfileScreenProps<"Verification">;
 
 type DocType = "lease" | "ownership";
+
+const MAX_PHOTOS = 5;
 
 const statusConfig: Record<VerificationStatus, {
     icon: keyof typeof Ionicons.glyphMap;
@@ -64,13 +66,17 @@ export function VerificationScreen({ navigation }: Props) {
     const { verification, submitVerification } = useApp();
     const [docType, setDocType] = useState<DocType>("lease");
     const [pdConsent, setPdConsent] = useState(false);
-    const [photoUri, setPhotoUri] = useState<string | null>(null);
+    const [photos, setPhotos] = useState<string[]>([]);
     const [submitting, setSubmitting] = useState(false);
 
     const canSubmit = verification.status === "none" || verification.status === "rejected";
     const cfg = statusConfig[verification.status];
 
     const pickPhoto = async () => {
+        if (photos.length >= MAX_PHOTOS) {
+            Alert.alert("Максимум фото", `Можно добавить не более ${MAX_PHOTOS} фото`);
+            return;
+        }
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) {
             Alert.alert("Нет доступа", "Разрешите доступ к галерее в настройках.");
@@ -78,12 +84,19 @@ export function VerificationScreen({ navigation }: Props) {
         }
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ["images"],
-            allowsEditing: true,
+            allowsMultipleSelection: true,
+            selectionLimit: MAX_PHOTOS - photos.length,
+            allowsEditing: false,
             quality: 0.8,
         });
-        if (!result.canceled && result.assets[0]) {
-            setPhotoUri(result.assets[0].uri);
+        if (!result.canceled) {
+            const uris = result.assets.map((a) => a.uri);
+            setPhotos((prev) => [...prev, ...uris].slice(0, MAX_PHOTOS));
         }
+    };
+
+    const removePhoto = (index: number) => {
+        setPhotos((prev) => prev.filter((_, i) => i !== index));
     };
 
     const onSubmit = async () => {
@@ -91,20 +104,20 @@ export function VerificationScreen({ navigation }: Props) {
             Alert.alert("Согласие нужно", "Отметьте согласие на обработку персональных данных.");
             return;
         }
-        if (!photoUri) {
+        if (!photos.length) {
             Alert.alert("Фото нужно", "Прикрепите фото документа.");
             return;
         }
         setSubmitting(true);
-        let photoUrl: string;
+        let photoUrls: string[];
         try {
-            photoUrl = await uploadFile(photoUri);
+            photoUrls = await Promise.all(photos.map((uri) => uploadFile(uri)));
         } catch {
             setSubmitting(false);
             Alert.alert("Ошибка", "Не удалось загрузить фото. Проверьте соединение.");
             return;
         }
-        const r = await submitVerification(docType, photoUrl);
+        const r = await submitVerification(docType, photoUrls);
         setSubmitting(false);
         if (!r.ok) {
             Alert.alert("Ошибка", "reason" in r ? r.reason : "Не удалось отправить заявку");
@@ -250,22 +263,25 @@ export function VerificationScreen({ navigation }: Props) {
                     </View>
 
                     <Card>
-                        {photoUri ? (
-                            <View style={styles.photoWrap}>
-                                <Image
-                                    source={{ uri: photoUri }}
-                                    style={styles.photoPreview}
-                                    resizeMode="cover"
-                                />
-                                <Pressable
-                                    onPress={() => setPhotoUri(null)}
-                                    style={styles.photoRemoveBtn}
-                                >
-                                    <Ionicons name="trash-outline" size={16} color={colors.danger} />
-                                    <Text style={styles.photoRemoveText}>Удалить и выбрать другое</Text>
-                                </Pressable>
-                            </View>
-                        ) : (
+                        {photos.length > 0 && (
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoRow}>
+                                {photos.map((uri, i) => (
+                                    <View key={i} style={styles.thumbWrap}>
+                                        <Image source={{ uri }} style={styles.thumb} />
+                                        <Pressable onPress={() => removePhoto(i)} style={styles.removeBtn} hitSlop={6}>
+                                            <Text style={styles.removeBtnText}>×</Text>
+                                        </Pressable>
+                                    </View>
+                                ))}
+                                {photos.length < MAX_PHOTOS && (
+                                    <Pressable onPress={() => { void pickPhoto(); }} style={styles.addBtn}>
+                                        <Text style={styles.addBtnText}>+</Text>
+                                    </Pressable>
+                                )}
+                            </ScrollView>
+                        )}
+
+                        {photos.length === 0 && (
                             <Pressable
                                 onPress={() => { void pickPhoto(); }}
                                 style={({ pressed }) => [styles.uploadArea, pressed && styles.uploadAreaPressed]}
@@ -275,7 +291,7 @@ export function VerificationScreen({ navigation }: Props) {
                                 </View>
                                 <Text style={styles.uploadTitle}>Прикрепить фото</Text>
                                 <Text style={styles.uploadHint}>
-                                    JPEG или PNG · Качество на камеру достаточно
+                                    JPEG или PNG · до {MAX_PHOTOS} фото · качество на камеру достаточно
                                 </Text>
                             </Pressable>
                         )}
@@ -285,7 +301,7 @@ export function VerificationScreen({ navigation }: Props) {
                         <Button
                             title={submitting ? "Отправка..." : "Отправить на верификацию"}
                             onPress={() => { void onSubmit(); }}
-                            disabled={submitting || !pdConsent || !photoUri}
+                            disabled={submitting || !pdConsent || !photos.length}
                             variant="info"
                         />
                     </Card>
@@ -294,6 +310,8 @@ export function VerificationScreen({ navigation }: Props) {
         </ScreenLayout>
     );
 }
+
+const THUMB_SIZE = 90;
 
 const styles = StyleSheet.create({
     /* Статус */
@@ -445,20 +463,21 @@ const styles = StyleSheet.create({
     },
 
     /* Фото */
-    photoWrap: { gap: spacing.md },
-    photoPreview: {
-        width: "100%",
-        height: 200,
-        borderRadius: radius.md,
-        backgroundColor: colors.border,
+    photoRow: { flexDirection: "row", marginBottom: spacing.xs },
+    thumbWrap: { width: THUMB_SIZE, height: THUMB_SIZE, marginRight: spacing.sm, position: "relative" },
+    thumb: { width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: radius.md, backgroundColor: colors.border },
+    removeBtn: {
+        position: "absolute", top: -6, right: -6,
+        width: 22, height: 22, borderRadius: 11,
+        backgroundColor: colors.danger, alignItems: "center", justifyContent: "center",
     },
-    photoRemoveBtn: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: spacing.sm,
-        alignSelf: "flex-start",
+    removeBtnText: { color: "#fff", fontSize: 16, lineHeight: 20, fontWeight: "700" },
+    addBtn: {
+        width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: radius.md,
+        borderWidth: 1, borderColor: colors.border, borderStyle: "dashed",
+        alignItems: "center", justifyContent: "center", backgroundColor: colors.surface,
     },
-    photoRemoveText: { color: colors.danger, fontSize: 13 },
+    addBtnText: { color: colors.text, fontSize: 32, lineHeight: 36 },
     uploadArea: {
         borderWidth: 1,
         borderColor: colors.border,

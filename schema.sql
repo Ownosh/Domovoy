@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS buildings (
 CREATE TABLE IF NOT EXISTS users (
   id                  BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   email               VARCHAR(255)    NOT NULL,
-  password_hash       TEXT            NOT NULL,
+  password_hash       VARCHAR(255)    NOT NULL,
   data_consent_at     DATETIME        DEFAULT NULL,
   is_active           BOOLEAN         NOT NULL DEFAULT TRUE,
   notif_outages       BOOLEAN         NOT NULL DEFAULT TRUE,
@@ -236,11 +236,11 @@ CREATE TABLE IF NOT EXISTS appeals (
   building_key           VARCHAR(120)                                                                             NOT NULL,
   title                  VARCHAR(500)                                                                             NOT NULL,
   body                   TEXT                                                                                     NOT NULL,
-  category               VARCHAR(100)                                                                             NOT NULL,
+  category               ENUM('Аварийная ситуация','Сантехника','Электрика','Отопление','Вентиляция','Уборка и благоустройство','Нарушение порядка','Инициатива собрания собственников','Другое') NOT NULL DEFAULT 'Другое',
   kind                   ENUM('personal','collective')                                                            NOT NULL DEFAULT 'personal',
   status                 ENUM('new','collecting_signatures','in_progress','resolved','closed','rejected')        NOT NULL DEFAULT 'new',
   entrance               INT                                                                                      DEFAULT NULL,
-  author_apartment       VARCHAR(20)                                                                              NOT NULL DEFAULT '',
+  author_apartment       VARCHAR(20)                                                                              NOT NULL DEFAULT '' COMMENT 'снепшот на момент подачи, не синхронизируется с user_apartments.apartment',
   author_apartment_id    BIGINT UNSIGNED                                                                          DEFAULT NULL,
   escalated_to_uk        BOOLEAN                                                                                  NOT NULL DEFAULT FALSE,
   manually_archived      BOOLEAN                                                                                  NOT NULL DEFAULT FALSE,
@@ -275,10 +275,10 @@ CREATE TABLE IF NOT EXISTS appeal_participants (
   id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   appeal_id    BIGINT UNSIGNED NOT NULL,
   user_id      BIGINT UNSIGNED NOT NULL,
-  apartment    VARCHAR(20)     NOT NULL,
+  apartment    VARCHAR(20)     NOT NULL COMMENT 'снепшот на момент присоединения, не синхронизируется с user_apartments.apartment',
   apartment_id BIGINT UNSIGNED DEFAULT NULL,
   entrance     INT             DEFAULT NULL,
-  display_name VARCHAR(255)    NOT NULL DEFAULT '',
+  display_name VARCHAR(255)    NOT NULL DEFAULT '' COMMENT 'снепшот имени на момент присоединения, не синхронизируется с user_profiles.full_name',
   anonymous    BOOLEAN         NOT NULL DEFAULT FALSE,
   comment      TEXT            DEFAULT NULL,
   photo_uri    TEXT            DEFAULT NULL,
@@ -405,7 +405,7 @@ CREATE TABLE IF NOT EXISTS votes (
   id               BIGINT UNSIGNED                                              NOT NULL AUTO_INCREMENT,
   building_key     VARCHAR(120)                                                 NOT NULL,
   user_id          BIGINT UNSIGNED                                              DEFAULT NULL,
-  created_by_label VARCHAR(255)                                                 NOT NULL DEFAULT '',
+  created_by_label VARCHAR(255)                                                 NOT NULL DEFAULT '' COMMENT 'снепшот имени автора на момент создания, не синхронизируется с user_profiles.full_name',
   sponsor          ENUM('uk','residents')                                       NOT NULL DEFAULT 'residents',
   status           ENUM('new','under_review','active','completed','cancelled')  NOT NULL DEFAULT 'active',
   topic            TEXT                                                         NOT NULL,
@@ -440,7 +440,7 @@ CREATE TABLE IF NOT EXISTS vote_casts (
   user_id   BIGINT UNSIGNED NOT NULL,
   option_id BIGINT UNSIGNED NOT NULL,
   apartment_id BIGINT UNSIGNED DEFAULT NULL,
-  area_sqm  DECIMAL(6,2)    NOT NULL DEFAULT 0,
+  area_sqm  DECIMAL(6,2)    NOT NULL DEFAULT 0 COMMENT 'снепшот площади на момент голосования, не синхронизируется с user_apartments.apartment_area_sqm',
   voted_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_vc_vote_user (vote_id, user_id),
@@ -480,24 +480,39 @@ CREATE TABLE IF NOT EXISTS environment_ratings (
 --  иначе — точка, привязанная к конкретному дому.
 -- ============================================================
 
+CREATE TABLE IF NOT EXISTS district_layers (
+  id       VARCHAR(40)  NOT NULL,
+  label    VARCHAR(255) NOT NULL,
+  position INT          NOT NULL DEFAULT 0,
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT IGNORE INTO district_layers (id, label, position) VALUES
+  ('schools_daycare','Школы и детские сады',0),
+  ('clinic_pharmacy','Поликлиники',1),
+  ('grocery','Продуктовые магазины',2),
+  ('parks','Парки и скверы',3),
+  ('bus_stops_city','Остановки (город)',4),
+  ('parking_city','Парковки (город)',5),
+  ('waste_yard','Контейнеры у дома',6),
+  ('bus_stops_house','Остановки у дома',7),
+  ('parking_house','Парковка жильцов',8);
+
 CREATE TABLE IF NOT EXISTS district_pois (
   id           BIGINT UNSIGNED       NOT NULL AUTO_INCREMENT,
   name         VARCHAR(255)          NOT NULL,
-  layer_id     ENUM(
-                 'schools_daycare','clinic_pharmacy','grocery','parks',
-                 'bus_stops_city','parking_city','waste_yard',
-                 'bus_stops_house','parking_house'
-               )                     NOT NULL,
+  layer_id     VARCHAR(40)           NOT NULL,
   address      VARCHAR(500)          NOT NULL DEFAULT '',
   lat          DOUBLE                NOT NULL,
   lng          DOUBLE                NOT NULL,
   rating       DECIMAL(3,2)          DEFAULT NULL,
   schedule     VARCHAR(500)          DEFAULT NULL,
   photo_url    TEXT                  DEFAULT NULL,
-  building_key VARCHAR(120)          DEFAULT NULL,
+  building_key VARCHAR(120)          DEFAULT NULL COMMENT 'NULL = city-wide; задан = только для этого дома',
   created_at   DATETIME              NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   CONSTRAINT fk_dp_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE,
+  CONSTRAINT fk_dp_layer    FOREIGN KEY (layer_id) REFERENCES district_layers(id) ON UPDATE CASCADE,
   INDEX idx_dp_layer    (layer_id),
   INDEX idx_dp_building (building_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -513,7 +528,7 @@ CREATE TABLE IF NOT EXISTS district_pois (
 CREATE TABLE IF NOT EXISTS admin_users (
   id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   email         VARCHAR(255)    NOT NULL,
-  password_hash TEXT            NOT NULL,
+  password_hash VARCHAR(255)    NOT NULL,
   full_name     VARCHAR(255)    NOT NULL DEFAULT '',
   role          ENUM('admin','moderator') NOT NULL DEFAULT 'admin',
   permissions   JSON            DEFAULT NULL,

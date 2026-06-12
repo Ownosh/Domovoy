@@ -65,7 +65,7 @@ export async function migrate(): Promise<void> {
         CREATE TABLE IF NOT EXISTS users (
             id                  BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             email               VARCHAR(255) NOT NULL,
-            password_hash       TEXT NOT NULL,
+            password_hash       VARCHAR(255) NOT NULL,
             data_consent_at     DATETIME NULL,
             is_active           TINYINT(1) NOT NULL DEFAULT 1,
             notif_outages       TINYINT(1) NOT NULL DEFAULT 1,
@@ -78,6 +78,7 @@ export async function migrate(): Promise<void> {
             UNIQUE KEY email (email)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+    await exec(`ALTER TABLE users MODIFY COLUMN password_hash VARCHAR(255) NOT NULL`);
 
     // ============================================================
     //  КВАРТИРЫ ПОЛЬЗОВАТЕЛЯ + ПРОФИЛЬ
@@ -391,11 +392,11 @@ export async function migrate(): Promise<void> {
             building_key          VARCHAR(120)    NOT NULL,
             title                 VARCHAR(500)    NOT NULL,
             body                  TEXT            NOT NULL,
-            category              VARCHAR(100)    NOT NULL,
+            category              ENUM('Аварийная ситуация','Сантехника','Электрика','Отопление','Вентиляция','Уборка и благоустройство','Нарушение порядка','Инициатива собрания собственников','Другое') NOT NULL DEFAULT 'Другое',
             kind                  ENUM('personal','collective') NOT NULL DEFAULT 'personal',
             status                ENUM('new','collecting_signatures','in_progress','resolved','closed','rejected') NOT NULL DEFAULT 'new',
             entrance              INT             DEFAULT NULL,
-            author_apartment      VARCHAR(20)     NOT NULL DEFAULT '',
+            author_apartment      VARCHAR(20)     NOT NULL DEFAULT '' COMMENT 'снепшот на момент подачи, не синхронизируется с user_apartments.apartment',
             author_apartment_id   BIGINT UNSIGNED DEFAULT NULL,
             escalated_to_uk       BOOLEAN         NOT NULL DEFAULT FALSE,
             manually_archived     TINYINT(1)      NOT NULL DEFAULT 0,
@@ -412,6 +413,7 @@ export async function migrate(): Promise<void> {
             INDEX idx_appeals_building_key   (building_key, created_at DESC)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+    await exec(`ALTER TABLE appeals MODIFY COLUMN author_apartment VARCHAR(20) NOT NULL DEFAULT '' COMMENT 'снепшот на момент подачи, не синхронизируется с user_apartments.apartment'`);
     await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS manually_archived TINYINT(1) NOT NULL DEFAULT 0`);
     await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS resolved_at DATETIME DEFAULT NULL`);
     await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_comment TEXT DEFAULT NULL`);
@@ -427,6 +429,20 @@ export async function migrate(): Promise<void> {
     `);
     await exec(`ALTER TABLE appeals ADD CONSTRAINT fk_appeals_apartment FOREIGN KEY (author_apartment_id) REFERENCES user_apartments(id) ON DELETE SET NULL`);
     await exec(`ALTER TABLE appeals ADD INDEX idx_appeals_apartment (author_apartment_id)`);
+
+    // category -> ENUM (был свободный VARCHAR без проверки на фронтовый список категорий)
+    await exec(`
+        UPDATE appeals SET category = 'Другое'
+        WHERE category NOT IN (
+            'Аварийная ситуация','Сантехника','Электрика','Отопление','Вентиляция',
+            'Уборка и благоустройство','Нарушение порядка','Инициатива собрания собственников','Другое'
+        )
+    `);
+    await exec(`
+        ALTER TABLE appeals MODIFY COLUMN category
+        ENUM('Аварийная ситуация','Сантехника','Электрика','Отопление','Вентиляция','Уборка и благоустройство','Нарушение порядка','Инициатива собрания собственников','Другое')
+        NOT NULL DEFAULT 'Другое'
+    `);
     // Старые установки хранили entrance как VARCHAR(20) — приводим к INT, как в user_apartments.entrance
     await exec(`ALTER TABLE appeals MODIFY COLUMN entrance INT DEFAULT NULL`);
     // Старые статусы -> новые, затем сужаем ENUM
@@ -458,10 +474,10 @@ export async function migrate(): Promise<void> {
             id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             appeal_id    BIGINT UNSIGNED NOT NULL,
             user_id      BIGINT UNSIGNED NOT NULL,
-            apartment    VARCHAR(20)     NOT NULL,
+            apartment    VARCHAR(20)     NOT NULL COMMENT 'снепшот на момент присоединения, не синхронизируется с user_apartments.apartment',
             apartment_id BIGINT UNSIGNED DEFAULT NULL,
             entrance     INT             DEFAULT NULL,
-            display_name VARCHAR(255)    NOT NULL DEFAULT '',
+            display_name VARCHAR(255)    NOT NULL DEFAULT '' COMMENT 'снепшот имени на момент присоединения, не синхронизируется с user_profiles.full_name',
             anonymous    BOOLEAN         NOT NULL DEFAULT FALSE,
             comment      TEXT            DEFAULT NULL,
             photo_uri    TEXT            DEFAULT NULL,
@@ -473,6 +489,8 @@ export async function migrate(): Promise<void> {
             INDEX idx_ap_appeal (appeal_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+    await exec(`ALTER TABLE appeal_participants MODIFY COLUMN apartment VARCHAR(20) NOT NULL COMMENT 'снепшот на момент присоединения, не синхронизируется с user_apartments.apartment'`);
+    await exec(`ALTER TABLE appeal_participants MODIFY COLUMN display_name VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'снепшот имени на момент присоединения, не синхронизируется с user_profiles.full_name'`);
     await exec(`ALTER TABLE appeal_participants MODIFY COLUMN photo_uri TEXT DEFAULT NULL`);
     await exec(`ALTER TABLE appeal_participants MODIFY COLUMN entrance INT DEFAULT NULL`);
     await exec(`ALTER TABLE appeal_participants ADD COLUMN IF NOT EXISTS apartment_id BIGINT UNSIGNED DEFAULT NULL`);
@@ -638,7 +656,7 @@ export async function migrate(): Promise<void> {
             id               BIGINT UNSIGNED        NOT NULL AUTO_INCREMENT,
             building_key     VARCHAR(120)           NOT NULL,
             user_id          BIGINT UNSIGNED        NULL,
-            created_by_label VARCHAR(255)           NOT NULL DEFAULT '',
+            created_by_label VARCHAR(255)           NOT NULL DEFAULT '' COMMENT 'снепшот имени автора на момент создания, не синхронизируется с user_profiles.full_name',
             sponsor          ENUM('uk','residents') NOT NULL DEFAULT 'residents',
             status           ENUM('new','under_review','active','completed','cancelled') NOT NULL DEFAULT 'new',
             topic            TEXT                   NOT NULL,
@@ -655,6 +673,7 @@ export async function migrate(): Promise<void> {
             INDEX idx_votes_ends_at      (ends_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+    await exec(`ALTER TABLE votes MODIFY COLUMN created_by_label VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'снепшот имени автора на момент создания, не синхронизируется с user_profiles.full_name'`);
     await exec(`ALTER TABLE votes ADD COLUMN IF NOT EXISTS updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`);
     await exec(`ALTER TABLE votes ADD COLUMN IF NOT EXISTS user_id BIGINT UNSIGNED NULL`);
     await exec(`
@@ -693,7 +712,7 @@ export async function migrate(): Promise<void> {
             user_id   BIGINT UNSIGNED NOT NULL,
             option_id BIGINT UNSIGNED NOT NULL,
             apartment_id BIGINT UNSIGNED DEFAULT NULL,
-            area_sqm  DECIMAL(6,2)    NOT NULL DEFAULT 0,
+            area_sqm  DECIMAL(6,2)    NOT NULL DEFAULT 0 COMMENT 'снепшот площади на момент голосования, не синхронизируется с user_apartments.apartment_area_sqm',
             voted_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             UNIQUE KEY uq_vc_vote_user (vote_id, user_id),
@@ -702,6 +721,7 @@ export async function migrate(): Promise<void> {
             CONSTRAINT fk_vc_option FOREIGN KEY (option_id) REFERENCES vote_options(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+    await exec(`ALTER TABLE vote_casts MODIFY COLUMN area_sqm DECIMAL(6,2) NOT NULL DEFAULT 0 COMMENT 'снепшот площади на момент голосования, не синхронизируется с user_apartments.apartment_area_sqm'`);
     await exec(`ALTER TABLE vote_casts ADD COLUMN IF NOT EXISTS apartment_id BIGINT UNSIGNED DEFAULT NULL`);
     await exec(`
         UPDATE vote_casts vc
@@ -752,14 +772,31 @@ export async function migrate(): Promise<void> {
     // ============================================================
 
     await pool.query(`
+        CREATE TABLE IF NOT EXISTS district_layers (
+            id       VARCHAR(40)  NOT NULL,
+            label    VARCHAR(255) NOT NULL,
+            position INT          NOT NULL DEFAULT 0,
+            PRIMARY KEY (id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    await exec(`
+        INSERT IGNORE INTO district_layers (id, label, position) VALUES
+            ('schools_daycare','Школы и детские сады',0),
+            ('clinic_pharmacy','Поликлиники',1),
+            ('grocery','Продуктовые магазины',2),
+            ('parks','Парки и скверы',3),
+            ('bus_stops_city','Остановки (город)',4),
+            ('parking_city','Парковки (город)',5),
+            ('waste_yard','Контейнеры у дома',6),
+            ('bus_stops_house','Остановки у дома',7),
+            ('parking_house','Парковка жильцов',8)
+    `);
+
+    await pool.query(`
         CREATE TABLE IF NOT EXISTS district_pois (
             id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             name         VARCHAR(255)    NOT NULL,
-            layer_id     ENUM(
-                          'schools_daycare','clinic_pharmacy','grocery','parks',
-                          'bus_stops_city','parking_city','waste_yard',
-                          'bus_stops_house','parking_house'
-                         )              NOT NULL,
+            layer_id     VARCHAR(40)     NOT NULL,
             address      VARCHAR(500)    NOT NULL DEFAULT '',
             lat          DOUBLE          NOT NULL,
             lng          DOUBLE          NOT NULL,
@@ -778,6 +815,9 @@ export async function migrate(): Promise<void> {
     // scope полностью определялся building_key (NULL -> city, иначе -> house) — избыточная колонка
     await exec(`ALTER TABLE district_pois DROP COLUMN IF EXISTS scope`);
     await exec(`ALTER TABLE district_pois ADD CONSTRAINT fk_dp_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
+    // Старые установки: layer_id был ENUM — переводим на VARCHAR + FK на district_layers
+    await exec(`ALTER TABLE district_pois MODIFY COLUMN layer_id VARCHAR(40) NOT NULL`);
+    await exec(`ALTER TABLE district_pois ADD CONSTRAINT fk_dp_layer FOREIGN KEY (layer_id) REFERENCES district_layers(id) ON UPDATE CASCADE`);
 
     // ============================================================
     //  АДМИНКА И PUSH-ТОКЕНЫ
@@ -787,7 +827,7 @@ export async function migrate(): Promise<void> {
         CREATE TABLE IF NOT EXISTS admin_users (
             id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             email         VARCHAR(255)    NOT NULL,
-            password_hash TEXT            NOT NULL,
+            password_hash VARCHAR(255)    NOT NULL,
             full_name     VARCHAR(255)    NOT NULL DEFAULT '',
             role          ENUM('admin','moderator') NOT NULL DEFAULT 'admin',
             permissions   JSON            DEFAULT NULL,
@@ -800,6 +840,7 @@ export async function migrate(): Promise<void> {
     `);
     await exec(`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS role ENUM('admin','moderator') NOT NULL DEFAULT 'admin'`);
     await exec(`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS permissions JSON DEFAULT NULL`);
+    await exec(`ALTER TABLE admin_users MODIFY COLUMN password_hash VARCHAR(255) NOT NULL`);
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS push_tokens (

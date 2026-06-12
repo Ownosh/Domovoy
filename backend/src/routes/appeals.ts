@@ -8,6 +8,10 @@ import { getActiveApartment, isApartmentOwner } from "../db/helpers";
 const router = Router();
 const MASS_APPEAL_THRESHOLD = 5;
 const OWNERS_MEETING_CATEGORY = "Инициатива собрания собственников";
+const VALID_CATEGORIES = [
+    "Аварийная ситуация", "Сантехника", "Электрика", "Отопление", "Вентиляция",
+    "Уборка и благоустройство", "Нарушение порядка", OWNERS_MEETING_CATEGORY, "Другое",
+];
 
 async function getProfile(userId: number): Promise<{ apartmentId: number; buildingKey: string; apartment: string; entrance: string | null } | null> {
     const apt = await getActiveApartment(userId);
@@ -157,6 +161,8 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         return res.status(400).json({ error: "Тема и описание обязательны" });
     if (!["personal", "collective"].includes(kind ?? ""))
         return res.status(400).json({ error: "Некорректный тип обращения" });
+    if (!VALID_CATEGORIES.includes(category?.trim() ?? ""))
+        return res.status(400).json({ error: "Некорректная категория обращения" });
 
     try {
         const mod = await moderateContent("appeal", {
@@ -273,6 +279,8 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     };
     if (!title?.trim() || !body?.trim())
         return res.status(400).json({ error: "Тема и описание обязательны" });
+    if (!VALID_CATEGORIES.includes(category?.trim() ?? ""))
+        return res.status(400).json({ error: "Некорректная категория обращения" });
     try {
         const mod = await moderateContent("appeal", {
             title: title.trim(), body: body.trim(), category: category?.trim(),

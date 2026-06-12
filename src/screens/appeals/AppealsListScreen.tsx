@@ -77,7 +77,7 @@ function AppealCard({ item, onPress }: { item: Appeal; onPress: () => void }) {
                     {item.entrance ? (
                         <Text style={styles.cardMeta}>подъезд {item.entrance}</Text>
                     ) : null}
-                    {item.adminComment ? (
+                    {item.adminComment && !item.adminCommentRead ? (
                         <View style={styles.commentBadge}>
                             <Ionicons name="chatbox-ellipses" size={11} color={colors.warning} />
                             <Text style={styles.commentBadgeText}>Новый комментарий</Text>

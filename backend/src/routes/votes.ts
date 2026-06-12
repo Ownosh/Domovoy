@@ -109,7 +109,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         return res.status(400).json({ error: "Срок: 3, 7 или 14 дней" });
 
     try {
-        const mod = await moderateContent({ topic: topic.trim(), description: description.trim() });
+        const mod = await moderateContent({ topic: topic.trim(), description: description.trim(), options: optionLabels.map((o) => o.trim()) });
         if (!mod.ok) {
             return res.status(422).json({
                 error: mod.issue,
@@ -182,7 +182,7 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
         return res.status(400).json({ error: "Нужно 2–4 варианта ответа" });
 
     try {
-        const mod = await moderateContent({ topic: topic.trim(), description: description.trim() });
+        const mod = await moderateContent({ topic: topic.trim(), description: description.trim(), options: optionLabels.map((o) => o.trim()) });
         if (!mod.ok) {
             return res.status(422).json({
                 error: mod.issue,

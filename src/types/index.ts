@@ -87,6 +87,7 @@ export type Appeal = {
     manuallyArchived?: boolean;
     adminComment?: string;
     adminCommentAt?: string;
+    adminCommentRead?: boolean;
     authorName?: string;
     authorPhoto?: string;
 };

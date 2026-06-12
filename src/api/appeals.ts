@@ -42,6 +42,10 @@ export async function apiArchiveAppeal(id: string): Promise<void> {
     await apiRequest(`/appeals/${id}/archive`, { method: "POST" });
 }
 
+export async function apiMarkAppealCommentRead(id: string): Promise<void> {
+    await apiRequest(`/appeals/${id}/read-comment`, { method: "POST" });
+}
+
 export async function apiEditAppeal(id: string, data: {
     title: string; body: string; category: string; entrance?: string; imageUrls?: string[];
 }): Promise<Appeal> {

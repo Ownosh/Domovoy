@@ -4,7 +4,7 @@ import { apiLogin, apiLogout, apiRegister, apiChangePassword } from "../api/auth
 import { apiFetchNews } from "../api/news";
 import { apiFetchVotes, apiCreateVote, apiCastVote, apiEditVote, apiDeleteVote } from "../api/votes";
 import { apiFetchNeighborAds, apiCreateNeighborAd, apiDeleteNeighborAd, apiExtendNeighborAd, apiReportNeighborAd, apiEditNeighborAd } from "../api/neighborAds";
-import { apiFetchAppeals, apiCreateAppeal, apiJoinAppeal, apiDeleteAppeal, apiEditAppeal, apiArchiveAppeal } from "../api/appeals";
+import { apiFetchAppeals, apiCreateAppeal, apiJoinAppeal, apiDeleteAppeal, apiEditAppeal, apiArchiveAppeal, apiMarkAppealCommentRead } from "../api/appeals";
 import { clearTokens, ApiError } from "../api/client";
 import { apiSubmitRating, apiFetchMyRating, apiFetchRatingStats } from "../api/ratings";
 import { apiFetchBuildingInfo, apiFetchBuildingPhotos, apiFetchBuildingSpecs, apiFetchBuildingSchedule, apiFetchBuildingCalendar, apiFetchBuildingContacts, apiFetchBuildingStatus, type BuildingInfo, type BuildingSpec, type HouseScheduleItem, type HouseStatusItem } from "../api/buildings";
@@ -776,6 +776,7 @@ type AppContextValue = {
     joinAppeal: (appealId: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
     deleteAppeal: (id: string) => void;
     archiveAppeal: (id: string) => void;
+    markAppealCommentRead: (id: string) => void;
     markNotificationRead: (id: string) => void;
     markAllNotificationsRead: () => void;
     toggleNotificationPref: (key: keyof NotificationPrefs) => void;
@@ -1134,6 +1135,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ),
         });
         apiArchiveAppeal(id).catch(() => {});
+    }, [state.appeals]);
+
+    const markAppealCommentRead = useCallback((id: string) => {
+        dispatch({
+            type: "SET_APPEALS",
+            payload: state.appeals.map((a) =>
+                a.id === id ? { ...a, adminCommentRead: true } : a,
+            ),
+        });
+        apiMarkAppealCommentRead(id).catch(() => {});
     }, [state.appeals]);
 
     const markNotificationRead = useCallback((id: string) => {
@@ -1560,6 +1571,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             joinAppeal,
             deleteAppeal,
             archiveAppeal,
+            markAppealCommentRead,
             markNotificationRead,
             markAllNotificationsRead,
             toggleNotificationPref,
@@ -1621,6 +1633,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             joinAppeal,
             deleteAppeal,
             archiveAppeal,
+            markAppealCommentRead,
             markNotificationRead,
             markAllNotificationsRead,
             toggleNotificationPref,

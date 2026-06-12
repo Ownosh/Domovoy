@@ -72,6 +72,9 @@ function mapAppealRow(v: RowDataPacket, parts: RowDataPacket[], photoUrls: strin
         manuallyArchived: Boolean(v.manually_archived),
         adminComment: (v.admin_comment as string | null) ?? undefined,
         adminCommentAt: v.admin_comment_at ? (v.admin_comment_at as Date).toISOString() : undefined,
+        adminCommentRead: v.admin_comment_at
+            ? Boolean(v.admin_comment_read_at && v.admin_comment_read_at >= v.admin_comment_at)
+            : true,
         authorName: (v.author_name as string | null) ?? undefined,
         authorPhoto: (v.author_photo as string | null) ?? undefined,
         imageUrls: photoUrls,
@@ -93,7 +96,7 @@ async function fetchWithParticipants(appealIds: number[]): Promise<object[]> {
     const [rows] = await pool.query<RowDataPacket[]>(
         `SELECT a.id, a.user_id, a.building_key, a.title, a.body, a.category, a.kind, a.status,
                 a.entrance, a.author_apartment, a.escalated_to_uk, a.created_at,
-                a.resolved_at, a.manually_archived, a.admin_comment, a.admin_comment_at,
+                a.resolved_at, a.manually_archived, a.admin_comment, a.admin_comment_at, a.admin_comment_read_at,
                 p.full_name AS author_name, p.profile_photo AS author_photo
          FROM appeals a
          LEFT JOIN user_profiles p ON p.user_id = a.user_id
@@ -338,6 +341,28 @@ router.post("/:id/archive", requireAuth, async (req: AuthRequest, res) => {
         return res.json({ ok: true });
     } catch (err) {
         console.error("[appeals archive]", err);
+        return res.status(500).json({ error: "Ошибка сервера" });
+    }
+});
+
+// POST /api/appeals/:id/read-comment — отметить комментарий администратора прочитанным
+router.post("/:id/read-comment", requireAuth, async (req: AuthRequest, res) => {
+    const userId = req.userId!;
+    const appealId = Number(req.params.id);
+    try {
+        const [[appeal]] = await pool.query<RowDataPacket[]>(
+            `SELECT id, user_id FROM appeals WHERE id = ?`, [appealId],
+        );
+        if (!appeal) return res.status(404).json({ error: "Обращение не найдено" });
+        if (Number(appeal.user_id) !== userId)
+            return res.status(403).json({ error: "Нет прав" });
+
+        await pool.execute(
+            `UPDATE appeals SET admin_comment_read_at = NOW() WHERE id = ?`, [appealId],
+        );
+        return res.json({ ok: true });
+    } catch (err) {
+        console.error("[appeals read-comment]", err);
         return res.status(500).json({ error: "Ошибка сервера" });
     }
 });

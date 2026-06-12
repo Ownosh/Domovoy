@@ -76,9 +76,15 @@ function formatShortDate(iso: string) {
 }
 
 export function AppealDetailScreen({ route, navigation }: Props) {
-    const { appeals, deleteAppeal, archiveAppeal, joinAppeal, verification, user, profile } = useApp();
+    const { appeals, deleteAppeal, archiveAppeal, markAppealCommentRead, joinAppeal, verification, user, profile } = useApp();
     const goBack = useModalBack();
     const item = appeals.find((a) => a.id === route.params.id);
+
+    React.useEffect(() => {
+        if (item?.adminComment && !item.adminCommentRead) {
+            markAppealCommentRead(item.id);
+        }
+    }, [item?.id, item?.adminComment, item?.adminCommentRead]);
 
     if (!item) {
         return (

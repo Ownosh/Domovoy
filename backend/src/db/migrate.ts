@@ -414,6 +414,7 @@ export async function migrate(): Promise<void> {
     // Комментарий администратора к обращению
     await pool.query(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_comment TEXT DEFAULT NULL`).catch(() => {});
     await pool.query(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_comment_at DATETIME DEFAULT NULL`).catch(() => {});
+    await pool.query(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_comment_read_at DATETIME DEFAULT NULL`).catch(() => {});
 
     // Новые статусы обращений
     await pool.query(`

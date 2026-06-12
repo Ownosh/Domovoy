@@ -108,7 +108,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         return res.status(400).json({ error: "Некорректная категория" });
 
     try {
-        const mod = await moderateContent({ title: title.trim(), body: body.trim(), category: category?.trim() });
+        const mod = await moderateContent({ title: title.trim(), body: body.trim() });
         if (!mod.ok) {
             return res.status(422).json({
                 error: mod.issue,
@@ -169,7 +169,7 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     if (category && !VALID_CATEGORIES.includes(category))
         return res.status(400).json({ error: "Некорректная категория" });
     try {
-        const mod = await moderateContent({ title: title.trim(), body: body.trim(), category: category?.trim() });
+        const mod = await moderateContent({ title: title.trim(), body: body.trim() });
         if (!mod.ok) {
             return res.status(422).json({
                 error: mod.issue,

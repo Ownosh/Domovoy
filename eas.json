@@ -6,7 +6,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://192.168.0.104:3001",
+        "EXPO_PUBLIC_API_URL": "http://5.181.109.109:3001",
         "EXPO_PUBLIC_IMAGEKIT_PUBLIC_KEY": "public_4/F5JOUr3FfPiIctm5D62MR8xa0=",
         "EXPO_PUBLIC_IMAGEKIT_URL_ENDPOINT": "https://ik.imagekit.io/k9opkddi7",
         "EXPO_PUBLIC_YANDEX_MAPKIT_API_KEY": "380e6e80-b316-4896-9572-fd01f0e87a80"

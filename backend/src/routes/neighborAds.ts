@@ -19,14 +19,17 @@ const AD_CATEGORY_RU: Record<string, string> = {
 async function getPhotos(adIds: number[]): Promise<Record<number, string[]>> {
     if (!adIds.length) return {};
     const [rows] = await pool.query<RowDataPacket[]>(
-        `SELECT ad_id, image_url FROM neighbor_ad_photos WHERE ad_id IN (?) ORDER BY ad_id, position`,
+        `SELECT owner_key, url
+         FROM media
+         WHERE owner_type = 'neighbor_ad' AND owner_key IN (?)
+         ORDER BY owner_key, position`,
         [adIds],
     );
     const map: Record<number, string[]> = {};
     for (const r of rows) {
-        const id = r.ad_id as number;
+        const id = Number(r.owner_key);
         if (!map[id]) map[id] = [];
-        map[id].push(r.image_url as string);
+        map[id].push(r.url as string);
     }
     return map;
 }
@@ -35,8 +38,9 @@ async function insertPhotos(adId: number, imageUrls: string[]): Promise<void> {
     if (!imageUrls.length) return;
     for (let i = 0; i < imageUrls.length; i++) {
         await pool.execute(
-            `INSERT INTO neighbor_ad_photos (ad_id, image_url, position, is_primary) VALUES (?, ?, ?, ?)`,
-            [adId, imageUrls[i], i, i === 0 ? 1 : 0],
+            `INSERT IGNORE INTO media (owner_type, owner_key, url, position, is_primary)
+             VALUES ('neighbor_ad', ?, ?, ?, ?)`,
+            [String(adId), imageUrls[i], i, i === 0 ? 1 : 0],
         );
     }
 }
@@ -201,7 +205,10 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
             return res.status(404).json({ error: "Объявление не найдено или нет прав" });
 
         if (Array.isArray(imageUrls)) {
-            await pool.execute(`DELETE FROM neighbor_ad_photos WHERE ad_id = ?`, [adId]);
+            await pool.execute(
+                `DELETE FROM media WHERE owner_type = 'neighbor_ad' AND owner_key = ?`,
+                [String(adId)],
+            );
             await insertPhotos(adId, imageUrls);
         }
 

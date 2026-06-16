@@ -28,14 +28,17 @@ async function getProfile(userId: number): Promise<{ apartmentId: number; buildi
 async function getAppealPhotos(appealIds: number[]): Promise<Record<number, string[]>> {
     if (!appealIds.length) return {};
     const [rows] = await pool.query<RowDataPacket[]>(
-        `SELECT appeal_id, image_url FROM appeal_photos WHERE appeal_id IN (?) ORDER BY appeal_id, position`,
+        `SELECT owner_key, url
+         FROM media
+         WHERE owner_type = 'appeal' AND owner_key IN (?)
+         ORDER BY owner_key, position`,
         [appealIds],
     );
     const map: Record<number, string[]> = {};
     for (const r of rows) {
-        const id = r.appeal_id as number;
+        const id = Number(r.owner_key);
         if (!map[id]) map[id] = [];
-        map[id].push(r.image_url as string);
+        map[id].push(r.url as string);
     }
     return map;
 }
@@ -43,8 +46,8 @@ async function getAppealPhotos(appealIds: number[]): Promise<Record<number, stri
 async function insertAppealPhotos(appealId: number, imageUrls: string[]): Promise<void> {
     for (let i = 0; i < imageUrls.length; i++) {
         await pool.execute(
-            `INSERT INTO appeal_photos (appeal_id, image_url, position) VALUES (?, ?, ?)`,
-            [appealId, imageUrls[i], i],
+            `INSERT IGNORE INTO media (owner_type, owner_key, url, position, is_primary) VALUES ('appeal', ?, ?, ?, 0)`,
+            [String(appealId), imageUrls[i], i],
         );
     }
 }
@@ -99,17 +102,22 @@ async function fetchWithParticipants(appealIds: number[]): Promise<object[]> {
     if (appealIds.length === 0) return [];
     const [rows] = await pool.query<RowDataPacket[]>(
         `SELECT a.id, a.user_id, a.building_key, a.title, a.body, a.category, a.kind, a.status,
-                a.entrance, a.author_apartment, a.escalated_to_uk, a.created_at,
+                a.entrance, ua.apartment AS author_apartment, a.escalated_to_uk, a.created_at,
                 a.resolved_at, a.manually_archived, a.admin_comment, a.admin_comment_at, a.admin_comment_read_at,
                 p.full_name AS author_name, p.profile_photo AS author_photo
          FROM appeals a
          LEFT JOIN user_profiles p ON p.user_id = a.user_id
+         LEFT JOIN user_apartments ua ON ua.id = a.author_apartment_id
          WHERE a.id IN (?) ORDER BY a.created_at DESC`,
         [appealIds],
     );
     const [parts] = await pool.query<RowDataPacket[]>(
-        `SELECT appeal_id, user_id, apartment, entrance, display_name, anonymous, comment, photo_uri, joined_at
-         FROM appeal_participants WHERE appeal_id IN (?)`,
+        `SELECT ap.appeal_id, ap.user_id, uap.apartment, ap.entrance, p.full_name AS display_name,
+                ap.anonymous, ap.comment, ap.photo_uri, ap.joined_at
+         FROM appeal_participants ap
+         LEFT JOIN user_apartments uap ON uap.id = ap.apartment_id
+         LEFT JOIN user_profiles p ON p.user_id = ap.user_id
+         WHERE ap.appeal_id IN (?)`,
         [appealIds],
     );
     const photosMap = await getAppealPhotos(appealIds);
@@ -187,9 +195,9 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 
         const initialStatus = kind === "collective" ? "collecting_signatures" : "new";
         const [result] = await pool.execute<ResultSetHeader>(
-            `INSERT INTO appeals (user_id, building_key, title, body, category, kind, entrance, author_apartment, author_apartment_id, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [userId, prof.buildingKey, title.trim(), body.trim(), category?.trim() ?? "", kind!, entrance?.trim() || null, prof.apartment, prof.apartmentId, initialStatus],
+            `INSERT INTO appeals (user_id, building_key, title, body, category, kind, entrance, author_apartment_id, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [userId, prof.buildingKey, title.trim(), body.trim(), category?.trim() ?? "", kind!, entrance?.trim() || null, prof.apartmentId, initialStatus],
         );
 
         const urls = Array.isArray(imageUrls) ? imageUrls : [];
@@ -207,8 +215,8 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 router.post("/:id/join", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     const appealId = Number(req.params.id);
-    const { anonymous, comment, photoUri, displayName } = req.body as {
-        anonymous?: boolean; comment?: string; photoUri?: string; displayName?: string;
+    const { anonymous, comment, photoUri } = req.body as {
+        anonymous?: boolean; comment?: string; photoUri?: string;
     };
 
     try {
@@ -231,10 +239,10 @@ router.post("/:id/join", requireAuth, async (req: AuthRequest, res) => {
 
         try {
             await pool.execute(
-                `INSERT INTO appeal_participants (appeal_id, user_id, apartment, apartment_id, entrance, display_name, anonymous, comment, photo_uri)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [appealId, userId, prof.apartment, prof.apartmentId, prof.entrance ?? null,
-                 displayName?.trim() ?? "", anonymous ? 1 : 0, comment?.trim() || null, photoUri || null],
+                `INSERT INTO appeal_participants (appeal_id, user_id, apartment_id, entrance, anonymous, comment, photo_uri)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [appealId, userId, prof.apartmentId, prof.entrance ?? null,
+                 anonymous ? 1 : 0, comment?.trim() || null, photoUri || null],
             );
         } catch (e: any) {
             if (e?.code === "ER_DUP_ENTRY") return res.status(409).json({ error: "Вы уже присоединились" });
@@ -247,9 +255,14 @@ router.post("/:id/join", requireAuth, async (req: AuthRequest, res) => {
                 : "";
             const [[countRow]] = await pool.query<RowDataPacket[]>(
                 `SELECT COUNT(DISTINCT apt) AS cnt FROM (
-                    SELECT author_apartment AS apt FROM appeals WHERE id = ?
+                    SELECT ua.apartment AS apt
+                    FROM appeals a
+                    LEFT JOIN user_apartments ua ON ua.id = a.author_apartment_id
+                    WHERE a.id = ?
                     UNION ALL
-                    SELECT ap.apartment AS apt FROM appeal_participants ap
+                    SELECT uap.apartment AS apt
+                    FROM appeal_participants ap
+                    LEFT JOIN user_apartments uap ON uap.id = ap.apartment_id
                     WHERE ap.appeal_id = ? ${entranceCond}
                 ) t`,
                 [appealId, appealId],
@@ -302,7 +315,10 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
         await pool.execute(`DELETE FROM appeal_participants WHERE appeal_id=?`, [appealId]);
 
         if (Array.isArray(imageUrls)) {
-            await pool.execute(`DELETE FROM appeal_photos WHERE appeal_id=?`, [appealId]);
+            await pool.execute(
+                `DELETE FROM media WHERE owner_type = 'appeal' AND owner_key = ?`,
+                [String(appealId)],
+            );
             await insertAppealPhotos(appealId, imageUrls);
         }
 

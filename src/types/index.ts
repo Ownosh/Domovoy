@@ -234,6 +234,8 @@ export type Vote = {
     id: string;
     buildingKey: string;
     createdByLabel: string;
+    /** Автор голосования (user_id в БД). Для УК может быть null */
+    userId?: string;
     topic: string;
     description: string;
     options: VoteOption[];

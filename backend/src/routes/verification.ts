@@ -27,8 +27,10 @@ router.get("/status", requireAuth, async (req: AuthRequest, res) => {
         if (!row) return res.json({ status: "none" });
 
         const [photoRows] = await pool.query<RowDataPacket[]>(
-            `SELECT image_url FROM verification_photos WHERE request_id = ? ORDER BY position`,
-            [row.id],
+            `SELECT url FROM media
+             WHERE owner_type = 'verification' AND owner_key = ?
+             ORDER BY position`,
+            [String(row.id)],
         );
 
         return res.json({
@@ -37,7 +39,7 @@ router.get("/status", requireAuth, async (req: AuthRequest, res) => {
             comment: (row.comment as string | null) ?? undefined,
             submittedAt: (row.submitted_at as Date).toISOString(),
             reviewedAt: row.reviewed_at ? (row.reviewed_at as Date).toISOString() : undefined,
-            photoUrls: photoRows.map((p) => p.image_url as string),
+            photoUrls: photoRows.map((p) => p.url as string),
         });
     } catch (err) {
         console.error("[verification GET]", err);
@@ -80,8 +82,9 @@ router.post("/submit", requireAuth, async (req: AuthRequest, res) => {
 
         for (let i = 0; i < photoUrls.length; i++) {
             await pool.execute(
-                `INSERT INTO verification_photos (request_id, image_url, position) VALUES (?, ?, ?)`,
-                [result.insertId, photoUrls[i], i],
+                `INSERT IGNORE INTO media (owner_type, owner_key, url, position, is_primary)
+                 VALUES ('verification', ?, ?, ?, 0)`,
+                [String(result.insertId), photoUrls[i], i],
             );
         }
 

@@ -19,9 +19,11 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
 
         const [rows] = await pool.query<RowDataPacket[]>(
             `SELECT n.id, n.building_key, n.title, n.excerpt, n.published_at,
-                    GROUP_CONCAT(np.image_url ORDER BY np.position SEPARATOR '||') AS image_urls
+                    GROUP_CONCAT(m.url ORDER BY m.position SEPARATOR '||') AS image_urls
              FROM news n
-             LEFT JOIN news_photos np ON np.news_id = n.id
+             LEFT JOIN media m
+               ON m.owner_type = 'news'
+              AND m.owner_key = CAST(n.id AS CHAR)
              WHERE n.building_key = ? AND n.is_published = 1
              GROUP BY n.id
              ORDER BY n.published_at DESC

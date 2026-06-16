@@ -169,18 +169,15 @@ export function AppealsListScreen() {
         [activeAppeals, uid],
     );
 
-    const myVoteLabel = useMemo(() => {
-        const namePart = profile.name?.trim();
-        const apt = profile.apartment || "—";
-        return namePart ? `${namePart}, кв. ${apt}` : `Кв. ${apt}`;
-    }, [profile.name, profile.apartment]);
-
     const myVotes = useMemo(() => {
-        if (!user) return [];
+        if (!uid) return [];
         return votes.filter(
-            (v) => v.buildingKey.toLowerCase() === bkLower && v.sponsor === "residents" && v.createdByLabel === myVoteLabel,
+            (v) =>
+                v.buildingKey.toLowerCase() === bkLower &&
+                v.sponsor === "residents" &&
+                v.userId === uid,
         );
-    }, [votes, bkLower, user, myVoteLabel]);
+    }, [votes, bkLower, uid]);
 
     const myAds = useMemo(() => {
         if (!uid) return [];

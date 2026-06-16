@@ -597,6 +597,7 @@ function normalizeVoteRaw(v: Vote | Record<string, unknown>): Vote {
         id: String(r.id ?? ""),
         buildingKey: String(r.buildingKey ?? ""),
         createdByLabel: String(r.createdByLabel ?? ""),
+        userId: r.userId != null ? String(r.userId) : undefined,
         topic: String(r.topic ?? ""),
         description: String(r.description ?? ""),
         options,

@@ -12,17 +12,20 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
     try {
         const buildingKey = await getActiveBuildingKey(userId);
 
+        const [[u]] = await pool.query<RowDataPacket[]>(
+            `SELECT notifications_last_seen_at FROM users WHERE id = ?`,
+            [userId],
+        );
+        const lastSeen = u?.notifications_last_seen_at as Date | null | undefined;
+
         const [rows] = await pool.query<RowDataPacket[]>(
-            `SELECT n.id, n.title, n.body, n.type, n.created_at,
-                    (nr.user_id IS NOT NULL) AS is_read
+            `SELECT n.id, n.title, n.body, n.type, n.created_at
              FROM notifications n
-             LEFT JOIN user_notification_reads nr
-                   ON nr.notification_id = n.id AND nr.user_id = ?
              WHERE n.building_key IS NULL
                 OR LOWER(n.building_key) = LOWER(?)
              ORDER BY n.created_at DESC
              LIMIT 100`,
-            [userId, buildingKey ?? ""],
+            [buildingKey ?? ""],
         );
 
         return res.json(rows.map((r) => ({
@@ -31,7 +34,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
             body: String(r.body),
             type: r.type as string,
             date: (r.created_at as Date).toISOString(),
-            read: Boolean(r.is_read),
+            read: lastSeen ? (r.created_at as Date) <= lastSeen : false,
         })));
     } catch (err) {
         console.error("[notifications GET]", err);
@@ -46,13 +49,21 @@ router.post("/:id/read", requireAuth, async (req: AuthRequest, res) => {
     if (!notifId || isNaN(notifId)) return res.status(400).json({ error: "Некорректный id" });
     try {
         const [[exists]] = await pool.query<RowDataPacket[]>(
-            `SELECT id FROM notifications WHERE id = ?`, [notifId],
+            `SELECT id, created_at FROM notifications WHERE id = ?`, [notifId],
         );
         if (!exists) return res.status(404).json({ error: "Уведомление не найдено" });
 
+        const createdAt = exists.created_at as Date;
         await pool.execute(
-            `INSERT IGNORE INTO user_notification_reads (notification_id, user_id) VALUES (?, ?)`,
-            [notifId, userId],
+            `UPDATE users
+             SET notifications_last_seen_at =
+                CASE
+                    WHEN notifications_last_seen_at IS NULL THEN ?
+                    WHEN notifications_last_seen_at < ? THEN ?
+                    ELSE notifications_last_seen_at
+                END
+             WHERE id = ?`,
+            [createdAt, createdAt, createdAt, userId],
         );
         return res.json({ ok: true });
     } catch (err) {
@@ -65,16 +76,9 @@ router.post("/:id/read", requireAuth, async (req: AuthRequest, res) => {
 router.post("/read-all", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     try {
-        const buildingKey = await getActiveBuildingKey(userId);
         await pool.execute(
-            `INSERT IGNORE INTO user_notification_reads (notification_id, user_id)
-             SELECT n.id, ? FROM notifications n
-             WHERE (n.building_key IS NULL OR LOWER(n.building_key) = LOWER(?))
-               AND NOT EXISTS (
-                   SELECT 1 FROM user_notification_reads nr2
-                   WHERE nr2.notification_id = n.id AND nr2.user_id = ?
-               )`,
-            [userId, buildingKey ?? "", userId],
+            `UPDATE users SET notifications_last_seen_at = NOW() WHERE id = ?`,
+            [userId],
         );
         return res.json({ ok: true });
     } catch (err) {

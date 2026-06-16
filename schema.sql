@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS buildings (
   apartments   INT             DEFAULT NULL,
   lat          DECIMAL(9,6)    DEFAULT NULL,
   lng          DECIMAL(9,6)    DEFAULT NULL,
+  chat_telegram_url VARCHAR(500) NOT NULL DEFAULT '',
+  chat_vk_url       VARCHAR(500) NOT NULL DEFAULT '',
+  chat_max_url      VARCHAR(500) NOT NULL DEFAULT '',
   management_company_id BIGINT UNSIGNED DEFAULT NULL,
   created_at   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -58,6 +61,7 @@ CREATE TABLE IF NOT EXISTS users (
   notif_meetings      BOOLEAN         NOT NULL DEFAULT TRUE,
   notif_announcements BOOLEAN         NOT NULL DEFAULT TRUE,
   notif_general       BOOLEAN         NOT NULL DEFAULT TRUE,
+  notifications_last_seen_at DATETIME DEFAULT NULL,
   created_at          DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at          DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -144,31 +148,13 @@ CREATE TABLE IF NOT EXISTS verification_requests (
   INDEX idx_vr_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS verification_photos (
-  id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  request_id   BIGINT UNSIGNED NOT NULL,
-  image_url    TEXT            NOT NULL,
-  position     INT             NOT NULL DEFAULT 0,
-  created_at   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  CONSTRAINT fk_vp_request FOREIGN KEY (request_id) REFERENCES verification_requests(id) ON DELETE CASCADE,
-  INDEX idx_vp_request (request_id, position)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- verification_photos удалены — медиа документов хранятся в универсальной таблице media
 
 -- ============================================================
 --  УК — КОНТАКТЫ ДОМА
 -- ============================================================
 
--- building_chats — официальные чаты дома (Telegram/VK/Max)
-CREATE TABLE IF NOT EXISTS building_chats (
-  id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  building_key VARCHAR(120)    NOT NULL,
-  platform     ENUM('telegram','vk','max') NOT NULL,
-  url          VARCHAR(500)    NOT NULL,
-  PRIMARY KEY (id),
-  UNIQUE KEY uq_building_chats (building_key, platform),
-  CONSTRAINT fk_building_chats_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- building_chats удалены — ссылки на чаты хранятся в buildings.chat_*_url
 
 -- ============================================================
 --  НОВОСТИ
@@ -187,15 +173,7 @@ CREATE TABLE IF NOT EXISTS news (
   INDEX idx_news_building_published (building_key, published_at DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS news_photos (
-  id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  news_id    BIGINT UNSIGNED NOT NULL,
-  image_url  TEXT            NOT NULL,
-  position   INT             NOT NULL DEFAULT 0,
-  PRIMARY KEY (id),
-  CONSTRAINT fk_np_news FOREIGN KEY (news_id) REFERENCES news(id) ON DELETE CASCADE,
-  INDEX idx_np_news (news_id, position)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- news_photos удалены — медиа новостей хранятся в универсальной таблице media
 
 -- ============================================================
 --  УВЕДОМЛЕНИЯ
@@ -215,16 +193,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   INDEX idx_notif_type_created     (type, created_at DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS user_notification_reads (
-  id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  notification_id BIGINT UNSIGNED NOT NULL,
-  user_id         BIGINT UNSIGNED NOT NULL,
-  read_at         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  UNIQUE KEY uq_unr (notification_id, user_id),
-  CONSTRAINT fk_unr_notif FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE,
-  CONSTRAINT fk_unr_user  FOREIGN KEY (user_id)         REFERENCES users(id)         ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- user_notification_reads удалены — используется users.notifications_last_seen_at
 
 -- ============================================================
 --  ОБРАЩЕНИЯ (ЗАЯВКИ)
@@ -240,7 +209,6 @@ CREATE TABLE IF NOT EXISTS appeals (
   kind                   ENUM('personal','collective')                                                            NOT NULL DEFAULT 'personal',
   status                 ENUM('new','collecting_signatures','in_progress','resolved','closed','rejected')        NOT NULL DEFAULT 'new',
   entrance               INT                                                                                      DEFAULT NULL,
-  author_apartment       VARCHAR(20)                                                                              NOT NULL DEFAULT '' COMMENT 'снепшот на момент подачи, не синхронизируется с user_apartments.apartment',
   author_apartment_id    BIGINT UNSIGNED                                                                          DEFAULT NULL,
   escalated_to_uk        BOOLEAN                                                                                  NOT NULL DEFAULT FALSE,
   manually_archived      BOOLEAN                                                                                  NOT NULL DEFAULT FALSE,
@@ -260,25 +228,14 @@ CREATE TABLE IF NOT EXISTS appeals (
   INDEX idx_appeals_apartment      (author_apartment_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS appeal_photos (
-  id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  appeal_id  BIGINT UNSIGNED NOT NULL,
-  image_url  TEXT            NOT NULL,
-  position   INT             NOT NULL DEFAULT 0,
-  created_at DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  CONSTRAINT fk_aph_appeal FOREIGN KEY (appeal_id) REFERENCES appeals(id) ON DELETE CASCADE,
-  INDEX idx_aph_appeal (appeal_id, position)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- appeal_photos удалены — медиа обращений хранятся в универсальной таблице media
 
 CREATE TABLE IF NOT EXISTS appeal_participants (
   id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   appeal_id    BIGINT UNSIGNED NOT NULL,
   user_id      BIGINT UNSIGNED NOT NULL,
-  apartment    VARCHAR(20)     NOT NULL COMMENT 'снепшот на момент присоединения, не синхронизируется с user_apartments.apartment',
   apartment_id BIGINT UNSIGNED DEFAULT NULL,
   entrance     INT             DEFAULT NULL,
-  display_name VARCHAR(255)    NOT NULL DEFAULT '' COMMENT 'снепшот имени на момент присоединения, не синхронизируется с user_profiles.full_name',
   anonymous    BOOLEAN         NOT NULL DEFAULT FALSE,
   comment      TEXT            DEFAULT NULL,
   photo_uri    TEXT            DEFAULT NULL,
@@ -307,15 +264,7 @@ CREATE TABLE IF NOT EXISTS house_specs (
   INDEX idx_hs_building_position (building_key, position)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS house_photos (
-  id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  building_key VARCHAR(120)    NOT NULL,
-  image_url    TEXT            NOT NULL,
-  position     INT             NOT NULL DEFAULT 0,
-  PRIMARY KEY (id),
-  CONSTRAINT fk_hph_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE,
-  INDEX idx_hph_building_position (building_key, position)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- house_photos удалены — медиа дома хранятся в универсальной таблице media
 
 CREATE TABLE IF NOT EXISTS house_status (
   id           BIGINT UNSIGNED                NOT NULL AUTO_INCREMENT,
@@ -382,17 +331,7 @@ CREATE TABLE IF NOT EXISTS neighbor_ads (
   INDEX idx_na_status           (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS neighbor_ad_photos (
-  id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  ad_id      BIGINT UNSIGNED NOT NULL,
-  image_url  TEXT            NOT NULL,
-  position   INT             NOT NULL DEFAULT 0,
-  is_primary BOOLEAN         NOT NULL DEFAULT FALSE,
-  created_at DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  CONSTRAINT fk_nap_ad FOREIGN KEY (ad_id) REFERENCES neighbor_ads(id) ON DELETE CASCADE,
-  INDEX idx_nap_ad (ad_id, position)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- neighbor_ad_photos удалены — медиа объявлений хранятся в универсальной таблице media
 
 -- ============================================================
 --  ГОЛОСОВАНИЯ
@@ -405,7 +344,6 @@ CREATE TABLE IF NOT EXISTS votes (
   id               BIGINT UNSIGNED                                              NOT NULL AUTO_INCREMENT,
   building_key     VARCHAR(120)                                                 NOT NULL,
   user_id          BIGINT UNSIGNED                                              DEFAULT NULL,
-  created_by_label VARCHAR(255)                                                 NOT NULL DEFAULT '' COMMENT 'снепшот имени автора на момент создания, не синхронизируется с user_profiles.full_name',
   sponsor          ENUM('uk','residents')                                       NOT NULL DEFAULT 'residents',
   status           ENUM('new','under_review','active','completed','cancelled')  NOT NULL DEFAULT 'active',
   topic            TEXT                                                         NOT NULL,
@@ -440,7 +378,6 @@ CREATE TABLE IF NOT EXISTS vote_casts (
   user_id   BIGINT UNSIGNED NOT NULL,
   option_id BIGINT UNSIGNED NOT NULL,
   apartment_id BIGINT UNSIGNED DEFAULT NULL,
-  area_sqm  DECIMAL(6,2)    NOT NULL DEFAULT 0 COMMENT 'снепшот площади на момент голосования, не синхронизируется с user_apartments.apartment_area_sqm',
   voted_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_vc_vote_user (vote_id, user_id),
@@ -480,23 +417,7 @@ CREATE TABLE IF NOT EXISTS environment_ratings (
 --  иначе — точка, привязанная к конкретному дому.
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS district_layers (
-  id       VARCHAR(40)  NOT NULL,
-  label    VARCHAR(255) NOT NULL,
-  position INT          NOT NULL DEFAULT 0,
-  PRIMARY KEY (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-INSERT IGNORE INTO district_layers (id, label, position) VALUES
-  ('schools_daycare','Школы и детские сады',0),
-  ('clinic_pharmacy','Поликлиники',1),
-  ('grocery','Продуктовые магазины',2),
-  ('parks','Парки и скверы',3),
-  ('bus_stops_city','Остановки (город)',4),
-  ('parking_city','Парковки (город)',5),
-  ('waste_yard','Контейнеры у дома',6),
-  ('bus_stops_house','Остановки у дома',7),
-  ('parking_house','Парковка жильцов',8);
+-- district_layers удалены — метаданные слоёв фиксированы в приложении
 
 CREATE TABLE IF NOT EXISTS district_pois (
   id           BIGINT UNSIGNED       NOT NULL AUTO_INCREMENT,
@@ -512,9 +433,26 @@ CREATE TABLE IF NOT EXISTS district_pois (
   created_at   DATETIME              NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   CONSTRAINT fk_dp_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE,
-  CONSTRAINT fk_dp_layer    FOREIGN KEY (layer_id) REFERENCES district_layers(id) ON UPDATE CASCADE,
   INDEX idx_dp_layer    (layer_id),
   INDEX idx_dp_building (building_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+--  МЕДИА (универсальная таблица вместо *_photos)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS media (
+  id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  owner_type ENUM('news','building','appeal','neighbor_ad','verification') NOT NULL,
+  owner_key  VARCHAR(160) NOT NULL,
+  url        VARCHAR(900) NOT NULL,
+  position   INT NOT NULL DEFAULT 0,
+  is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_media_owner_pos_url (owner_type, owner_key, position, url),
+  INDEX idx_media_owner (owner_type, owner_key, position),
+  INDEX idx_media_owner_primary (owner_type, owner_key, is_primary)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================

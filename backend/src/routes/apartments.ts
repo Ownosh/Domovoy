@@ -122,8 +122,9 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
             );
             for (let i = 0; i < docUrls.length; i++) {
                 await conn.execute(
-                    `INSERT INTO verification_photos (request_id, image_url, position) VALUES (?, ?, ?)`,
-                    [vrResult.insertId, docUrls[i], i],
+                    `INSERT IGNORE INTO media (owner_type, owner_key, url, position, is_primary)
+                     VALUES ('verification', ?, ?, ?, 0)`,
+                    [String(vrResult.insertId), docUrls[i], i],
                 );
             }
 

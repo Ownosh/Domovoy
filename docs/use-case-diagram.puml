@@ -1,0 +1,188 @@
+@startuml Domovoy_UseCases
+left to right direction
+skinparam packageStyle rectangle
+
+' ===================== АКТЁРЫ =====================
+actor "Гость" as Guest
+actor "Жилец" as Resident
+actor "Верифицированный жилец" as VerifiedResident
+actor "Верифицированный собственник" as VerifiedOwner
+actor "Администратор" as Admin
+
+Resident --|> Guest
+VerifiedResident --|> Resident
+VerifiedOwner --|> VerifiedResident
+
+' ===================== АУТЕНТИФИКАЦИЯ И ПРОФИЛЬ =====================
+package "Аутентификация и профиль" {
+  usecase "Зарегистрироваться\n(email, пароль, дом, квартира)" as UC_Register
+  usecase "Войти / выйти" as UC_Login
+  usecase "Обновить токен сессии" as UC_RefreshToken
+  usecase "Редактировать профиль\n(имя, телефон, фото)" as UC_EditProfile
+  usecase "Сменить пароль" as UC_ChangePassword
+  usecase "Принять политику конфиденциальности" as UC_PrivacyPolicy
+  usecase "Настроить уведомления\n(аварии/собрания/объявления/общие)" as UC_NotifSettings
+  usecase "Управлять квартирами\n(добавить/активировать/удалить)" as UC_ManageApartments
+}
+
+Guest --> UC_Register
+Guest --> UC_Login
+Resident --> UC_RefreshToken
+Resident --> UC_EditProfile
+Resident --> UC_ChangePassword
+Resident --> UC_PrivacyPolicy
+Resident --> UC_NotifSettings
+Resident --> UC_ManageApartments
+
+' ===================== ВЕРИФИКАЦИЯ =====================
+package "Верификация жильца" {
+  usecase "Подать заявку на верификацию\n(тип документа + фото)" as UC_SubmitVerification
+  usecase "Просмотреть статус верификации" as UC_ViewVerification
+}
+
+Resident --> UC_SubmitVerification
+Resident --> UC_ViewVerification
+UC_ManageApartments .> UC_SubmitVerification : <<include>>
+
+' ===================== ЛЕНТА: НОВОСТИ И УВЕДОМЛЕНИЯ =====================
+package "Лента (новости и уведомления)" {
+  usecase "Просмотреть новости дома" as UC_ViewNews
+  usecase "Просмотреть уведомления" as UC_ViewNotifications
+  usecase "Отметить уведомление прочитанным" as UC_ReadNotification
+  usecase "Зарегистрировать push-токен" as UC_PushToken
+}
+
+Resident --> UC_ViewNews
+Resident --> UC_ViewNotifications
+Resident --> UC_ReadNotification
+Resident --> UC_PushToken
+
+' ===================== О ДОМЕ =====================
+package "О доме (паспорт дома)" {
+  usecase "Просмотреть паспорт дома\n(адрес, фото, характеристики)" as UC_HousePassport
+  usecase "Просмотреть календарь мероприятий" as UC_HouseCalendar
+  usecase "Просмотреть график вывоза мусора" as UC_TrashSchedule
+  usecase "Просмотреть статусы дома\n(аварии/предупреждения)" as UC_HouseStatus
+  usecase "Просмотреть контакты УК и чаты дома" as UC_UkContacts
+}
+
+Resident --> UC_HousePassport
+Resident --> UC_HouseCalendar
+Resident --> UC_TrashSchedule
+Resident --> UC_HouseStatus
+Resident --> UC_UkContacts
+
+' ===================== ОБРАЩЕНИЯ =====================
+package "Обращения (заявки)" {
+  usecase "Создать личное обращение" as UC_CreateAppeal
+  usecase "Создать коллективное обращение" as UC_CreateCollectiveAppeal
+  usecase "Создать обращение\n«Инициатива собрания собственников»" as UC_CreateOwnersAppeal
+  usecase "Просмотреть свои обращения / историю" as UC_ViewAppeals
+  usecase "Подписать коллективное обращение" as UC_JoinAppeal
+  usecase "Редактировать / удалить обращение" as UC_EditAppeal
+  usecase "Архивировать обращение" as UC_ArchiveAppeal
+  usecase "Прочитать комментарий администратора" as UC_ReadAdminComment
+}
+
+VerifiedResident --> UC_CreateAppeal
+VerifiedResident --> UC_CreateCollectiveAppeal
+VerifiedOwner --> UC_CreateOwnersAppeal
+VerifiedResident --> UC_ViewAppeals
+VerifiedResident --> UC_JoinAppeal
+VerifiedResident --> UC_EditAppeal
+VerifiedResident --> UC_ArchiveAppeal
+VerifiedResident --> UC_ReadAdminComment
+UC_CreateAppeal <|-- UC_CreateCollectiveAppeal
+UC_CreateAppeal <|-- UC_CreateOwnersAppeal
+
+' ===================== ОБЪЯВЛЕНИЯ СОСЕДЕЙ =====================
+package "Объявления соседей" {
+  usecase "Создать объявление\n(категория, фото, телефон)" as UC_CreateAd
+  usecase "Просмотреть доску объявлений" as UC_ViewAds
+  usecase "Редактировать / продлить объявление" as UC_EditAd
+  usecase "Удалить объявление" as UC_DeleteAd
+  usecase "Пожаловаться на объявление" as UC_ReportAd
+}
+
+VerifiedResident --> UC_CreateAd
+VerifiedResident --> UC_ViewAds
+VerifiedResident --> UC_EditAd
+VerifiedResident --> UC_DeleteAd
+VerifiedResident --> UC_ReportAd
+
+' ===================== ГОЛОСОВАНИЯ =====================
+package "Голосования" {
+  usecase "Создать голосование\n(тема, варианты, срок, видимость)" as UC_CreateVote
+  usecase "Просмотреть голосования дома" as UC_ViewVotes
+  usecase "Проголосовать" as UC_CastVote
+  usecase "Редактировать голосование\n(сброс голосов)" as UC_EditVote
+  usecase "Пожаловаться на голосование" as UC_ReportVote
+  usecase "Удалить голосование" as UC_DeleteVote
+}
+
+VerifiedResident --> UC_CreateVote
+VerifiedResident --> UC_ViewVotes
+VerifiedResident --> UC_CastVote
+VerifiedResident --> UC_EditVote
+VerifiedResident --> UC_ReportVote
+VerifiedResident --> UC_DeleteVote
+
+' ===================== РАЙОН (КАРТА) =====================
+package "Район (карта)" {
+  usecase "Просмотреть точки интереса на карте\n(школы, медицина, парковки и т.д.)" as UC_ViewMap
+}
+
+VerifiedResident --> UC_ViewMap
+
+' ===================== ОЦЕНКИ СРЕДЫ =====================
+package "Оценки среды" {
+  usecase "Оставить ежемесячную оценку\n(двор/подъезд/УК)" as UC_RateEnvironment
+  usecase "Просмотреть статистику оценок дома" as UC_ViewRatingStats
+}
+
+Resident --> UC_RateEnvironment
+Resident --> UC_ViewRatingStats
+
+' ===================== БЕЗОПАСНОСТЬ =====================
+package "Безопасность и ЧС" {
+  usecase "Просмотреть памятки при ЧС" as UC_EmergencyGuide
+  usecase "Просмотреть телефоны экстренных служб" as UC_EmergencyPhones
+  usecase "Просмотреть права жителей / УК" as UC_RightsInfo
+}
+
+Guest --> UC_EmergencyGuide
+Guest --> UC_EmergencyPhones
+Guest --> UC_RightsInfo
+
+' ===================== ЗАГРУЗКА ФАЙЛОВ (СКВОЗНОЙ) =====================
+package "Загрузка файлов" {
+  usecase "Загрузить фото/файл (ImageKit)" as UC_UploadFile
+}
+
+UC_SubmitVerification .> UC_UploadFile : <<include>>
+UC_CreateAppeal .> UC_UploadFile : <<include>>
+UC_CreateAd .> UC_UploadFile : <<include>>
+UC_EditProfile .> UC_UploadFile : <<include>>
+
+' ===================== АДМИНКА =====================
+package "Админка" {
+  usecase "Создать/пригласить администратора\n(назначить роль)" as UC_CreateAdmin
+  usecase "Управлять новостями и уведомлениями" as UC_ManageNews
+  usecase "Модерировать обращения\n(комментарии, статусы, эскалация в УК)" as UC_ModerateAppeals
+  usecase "Модерировать объявления соседей" as UC_ModerateAds
+  usecase "Модерировать голосования" as UC_ModerateVotes
+  usecase "Проверять заявки на верификацию" as UC_ReviewVerification
+  usecase "Управлять контентом дома\n(фото, характеристики, статусы, календарь)" as UC_ManageHouseContent
+  usecase "Управлять справочником домов и УК" as UC_ManageBuildings
+}
+
+Admin --> UC_CreateAdmin
+Admin --> UC_ManageNews
+Admin --> UC_ModerateAppeals
+Admin --> UC_ModerateAds
+Admin --> UC_ModerateVotes
+Admin --> UC_ReviewVerification
+Admin --> UC_ManageHouseContent
+Admin --> UC_ManageBuildings
+
+@enduml

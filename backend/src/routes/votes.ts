@@ -15,11 +15,13 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
         if (!buildingKey) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
         const [voteRows] = await pool.query<RowDataPacket[]>(
-            `SELECT v.id, v.building_key, v.user_id, v.created_by_label, v.sponsor, v.topic, v.description,
+            `SELECT v.id, v.building_key, v.user_id, v.sponsor, v.topic, v.description,
                     v.visibility, v.ends_at, v.closed, v.trial, v.status, v.created_at,
-                    p.full_name AS author_name, p.profile_photo AS author_photo
+                    p.full_name AS author_name, p.profile_photo AS author_photo,
+                    ua.apartment AS author_apartment
              FROM votes v
              LEFT JOIN user_profiles p ON p.user_id = v.user_id
+             LEFT JOIN user_apartments ua ON ua.id = p.active_apartment_id
              WHERE LOWER(v.building_key) = ?
              ORDER BY v.created_at DESC`,
             [buildingKey.toLowerCase()],
@@ -37,7 +39,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
             votes.push({
                 id: String(v.id),
                 buildingKey: v.building_key as string,
-                createdByLabel: String(v.created_by_label ?? ""),
+                userId: v.user_id != null ? String(v.user_id) : undefined,
                 sponsor: v.sponsor as string,
                 topic: String(v.topic),
                 description: String(v.description ?? ""),
@@ -50,6 +52,13 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
                 options: opts.map((o) => ({ id: String(o.id), label: String(o.label) })),
                 authorName: (v.author_name as string | null) ?? undefined,
                 authorPhoto: (v.author_photo as string | null) ?? undefined,
+                createdByLabel: (() => {
+                    const name = (v.author_name as string | null) ?? null;
+                    const apt = (v.author_apartment as string | null) ?? null;
+                    if (!name && !apt) return "";
+                    if (name && apt) return `${name}, кв. ${apt}`;
+                    return apt ? `Кв. ${apt}` : String(name ?? "");
+                })(),
             });
         }
 
@@ -59,12 +68,14 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
         const hasOpen = openVoteIds.length > 0;
         const [castRows] = await pool.query<RowDataPacket[]>(
             hasOpen
-                ? `SELECT vote_id, user_id, option_id, area_sqm, voted_at
-                   FROM vote_casts
-                   WHERE vote_id IN (?) OR user_id = ?`
-                : `SELECT vote_id, user_id, option_id, area_sqm, voted_at
-                   FROM vote_casts
-                   WHERE user_id = ?`,
+                ? `SELECT vc.vote_id, vc.user_id, vc.option_id, ua.apartment_area_sqm AS area_sqm, vc.voted_at
+                   FROM vote_casts vc
+                   LEFT JOIN user_apartments ua ON ua.id = vc.apartment_id
+                   WHERE vc.vote_id IN (?) OR vc.user_id = ?`
+                : `SELECT vc.vote_id, vc.user_id, vc.option_id, ua.apartment_area_sqm AS area_sqm, vc.voted_at
+                   FROM vote_casts vc
+                   LEFT JOIN user_apartments ua ON ua.id = vc.apartment_id
+                   WHERE vc.user_id = ?`,
             hasOpen ? [openVoteIds, userId] : [userId],
         );
         const casts = castRows.map((c) => ({
@@ -85,14 +96,13 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
 // POST /api/votes  — создать голосование
 router.post("/", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
-    const { topic, description, visibility, optionLabels, durationDays, createdByLabel } =
+    const { topic, description, visibility, optionLabels, durationDays } =
         req.body as {
             topic?: string;
             description?: string;
             visibility?: string;
             optionLabels?: string[];
             durationDays?: number;
-            createdByLabel?: string;
         };
 
     if (!topic?.trim() || !description?.trim())
@@ -119,9 +129,9 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         try {
             await conn.beginTransaction();
             const [vr] = await conn.execute<ResultSetHeader>(
-                `INSERT INTO votes (building_key, user_id, created_by_label, sponsor, topic, description, visibility, ends_at, status)
-                 VALUES (?, ?, ?, 'residents', ?, ?, ?, ?, 'active')`,
-                [buildingKey, userId, createdByLabel?.trim() ?? "", topic.trim(), description.trim(), visibility ?? "open", endsAt],
+                `INSERT INTO votes (building_key, user_id, sponsor, topic, description, visibility, ends_at, status)
+                 VALUES (?, ?, 'residents', ?, ?, ?, ?, 'active')`,
+                [buildingKey, userId, topic.trim(), description.trim(), visibility ?? "open", endsAt],
             );
             const voteId = vr.insertId;
             const optionIds: number[] = [];
@@ -133,10 +143,28 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
                 optionIds.push(or.insertId);
             }
             await conn.commit();
+
+            const [[authorRow]] = await pool.query<RowDataPacket[]>(
+                `SELECT p.full_name AS author_name, ua.apartment AS author_apartment
+                 FROM user_profiles p
+                 LEFT JOIN user_apartments ua ON ua.id = p.active_apartment_id
+                 WHERE p.user_id = ?`,
+                [userId],
+            );
+            const authorName = (authorRow?.author_name as string | null) ?? null;
+            const authorApartment = (authorRow?.author_apartment as string | null) ?? null;
+            const createdByLabel =
+                authorName && authorApartment
+                    ? `${authorName}, кв. ${authorApartment}`
+                    : authorApartment
+                      ? `Кв. ${authorApartment}`
+                      : authorName ?? "";
+
             return res.status(201).json({
                 id: String(voteId),
                 buildingKey,
-                createdByLabel: createdByLabel?.trim() ?? "",
+                userId: String(userId),
+                createdByLabel,
                 sponsor: "residents",
                 topic: topic.trim(),
                 description: description.trim(),
@@ -217,17 +245,33 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
         }
 
         const [[updated]] = await pool.query<RowDataPacket[]>(
-            `SELECT id, building_key, user_id, created_by_label, sponsor, topic, description,
-                    visibility, ends_at, closed, trial, status, created_at
-             FROM votes WHERE id=?`, [voteId],
+            `SELECT v.id, v.building_key, v.user_id, v.sponsor, v.topic, v.description,
+                    v.visibility, v.ends_at, v.closed, v.trial, v.status, v.created_at,
+                    p.full_name AS author_name, ua.apartment AS author_apartment
+             FROM votes v
+             LEFT JOIN user_profiles p ON p.user_id = v.user_id
+             LEFT JOIN user_apartments ua ON ua.id = p.active_apartment_id
+             WHERE v.id=?`,
+            [voteId],
         );
         const [opts] = await pool.query<RowDataPacket[]>(
             `SELECT id, label FROM vote_options WHERE vote_id=? ORDER BY position`, [voteId],
         );
+
+        const authorName = (updated.author_name as string | null) ?? null;
+        const authorApartment = (updated.author_apartment as string | null) ?? null;
+        const createdByLabel =
+            authorName && authorApartment
+                ? `${authorName}, кв. ${authorApartment}`
+                : authorApartment
+                  ? `Кв. ${authorApartment}`
+                  : authorName ?? "";
+
         return res.json({
             id: String(updated.id),
             buildingKey: updated.building_key as string,
-            createdByLabel: String(updated.created_by_label ?? ""),
+            userId: updated.user_id != null ? String(updated.user_id) : undefined,
+            createdByLabel,
             sponsor: updated.sponsor as string,
             topic: String(updated.topic),
             description: String(updated.description ?? ""),
@@ -303,8 +347,8 @@ router.post("/:id/cast", requireAuth, async (req: AuthRequest, res) => {
         if (!opt) return res.status(400).json({ error: "Некорректный вариант" });
 
         await pool.execute(
-            `INSERT INTO vote_casts (vote_id, user_id, option_id, apartment_id, area_sqm) VALUES (?, ?, ?, ?, ?)`,
-            [voteId, userId, optionId, apt.apartmentId, apt.apartmentAreaSqm ?? 0],
+            `INSERT INTO vote_casts (vote_id, user_id, option_id, apartment_id) VALUES (?, ?, ?, ?)`,
+            [voteId, userId, optionId, apt.apartmentId],
         );
         return res.json({ ok: true });
     } catch (err: any) {

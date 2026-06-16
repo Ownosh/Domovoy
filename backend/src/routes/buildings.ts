@@ -66,9 +66,12 @@ router.get("/photos", requireAuth, async (req: AuthRequest, res) => {
     if (!key) return res.status(404).json({ error: "Дом не найден" });
     try {
         const [rows] = await pool.query<RowDataPacket[]>(
-            `SELECT image_url FROM house_photos WHERE LOWER(building_key) = LOWER(?) ORDER BY position`, [key],
+            `SELECT url FROM media
+             WHERE owner_type = 'building' AND LOWER(owner_key) = LOWER(?)
+             ORDER BY position`,
+            [key],
         );
-        return res.json(rows.map((r) => r.image_url as string));
+        return res.json(rows.map((r) => r.url as string));
     } catch (err) {
         console.error("buildings/photos error:", err);
         return res.status(500).json({ error: "Ошибка сервера" });
@@ -173,13 +176,13 @@ router.get("/contacts", requireAuth, async (req: AuthRequest, res) => {
     if (!key) return res.status(404).json({ error: "Дом не найден" });
     try {
         const [[row]] = await pool.query<RowDataPacket[]>(
-            `SELECT mc.company_name, mc.phone, mc.email, mc.site, mc.hours
+            `SELECT mc.id AS mc_id, mc.company_name, mc.phone, mc.email, mc.site, mc.hours
              FROM buildings b
-             JOIN management_companies mc ON mc.id = b.management_company_id
+             LEFT JOIN management_companies mc ON mc.id = b.management_company_id
              WHERE LOWER(b.building_key) = LOWER(?)`,
             [key],
         );
-        if (!row) return res.json(null);
+        if (!row || row.mc_id == null) return res.json(null);
         return res.json({
             companyName: row.company_name as string,
             phone: row.phone as string,
@@ -198,14 +201,21 @@ router.get("/chats", requireAuth, async (req: AuthRequest, res) => {
     const key = await getActiveBuildingKey(req.userId!);
     if (!key) return res.status(404).json({ error: "Дом не найден" });
     try {
-        const [rows] = await pool.query<RowDataPacket[]>(
-            `SELECT platform, url FROM building_chats WHERE LOWER(building_key) = LOWER(?)`,
+        const [[b]] = await pool.query<RowDataPacket[]>(
+            `SELECT chat_telegram_url, chat_vk_url, chat_max_url
+             FROM buildings
+             WHERE LOWER(building_key) = LOWER(?)`,
             [key],
         );
-        return res.json(rows.map((r) => ({
-            platform: r.platform as "telegram" | "vk" | "max",
-            url: r.url as string,
-        })));
+        if (!b) return res.json([]);
+        const out: { platform: "telegram" | "vk" | "max"; url: string }[] = [];
+        const tg = String(b.chat_telegram_url ?? "").trim();
+        const vk = String(b.chat_vk_url ?? "").trim();
+        const mx = String(b.chat_max_url ?? "").trim();
+        if (tg) out.push({ platform: "telegram", url: tg });
+        if (vk) out.push({ platform: "vk", url: vk });
+        if (mx) out.push({ platform: "max", url: mx });
+        return res.json(out);
     } catch (err) {
         console.error("buildings/chats error:", err);
         return res.status(500).json({ error: "Ошибка сервера" });

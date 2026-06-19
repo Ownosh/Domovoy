@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS users (
   notif_announcements BOOLEAN         NOT NULL DEFAULT TRUE,
   notif_general       BOOLEAN         NOT NULL DEFAULT TRUE,
   notifications_last_seen_at DATETIME DEFAULT NULL,
+  blocked_by_admin_id BIGINT UNSIGNED DEFAULT NULL,
   created_at          DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at          DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -133,22 +134,28 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS verification_requests (
-  id           BIGINT UNSIGNED                              NOT NULL AUTO_INCREMENT,
-  apartment_id BIGINT UNSIGNED                              NOT NULL,
-  doc_type     ENUM('lease','ownership')                    NOT NULL,
-  status       ENUM('pending','approved','rejected')        NOT NULL DEFAULT 'pending',
-  comment      TEXT                                          DEFAULT NULL,
-  submitted_at DATETIME                                      NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  reviewed_at  DATETIME                                      DEFAULT NULL,
-  created_at   DATETIME                                      NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at   DATETIME                                      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  id                   BIGINT UNSIGNED                              NOT NULL AUTO_INCREMENT,
+  apartment_id         BIGINT UNSIGNED                              NOT NULL,
+  doc_type             ENUM('lease','ownership')                    NOT NULL,
+  status               ENUM('pending','approved','rejected')        NOT NULL DEFAULT 'pending',
+  comment              TEXT                                          DEFAULT NULL,
+  submitted_at         DATETIME                                      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  reviewed_at          DATETIME                                      DEFAULT NULL,
+  reviewed_by_admin_id BIGINT UNSIGNED                               DEFAULT NULL,
+  created_at           DATETIME                                      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at           DATETIME                                      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  -- pending => apartment_id, иначе NULL: UNIQUE гарантирует не более одной
+  -- активной заявки на квартиру (частичные индексы не поддерживаются).
+  pending_apartment_id BIGINT UNSIGNED AS (IF(status = 'pending', apartment_id, NULL)) STORED,
   PRIMARY KEY (id),
   CONSTRAINT fk_vr_apartment FOREIGN KEY (apartment_id) REFERENCES user_apartments(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_vr_pending_apartment (pending_apartment_id),
   INDEX idx_vr_apartment_submitted (apartment_id, submitted_at DESC),
-  INDEX idx_vr_status (status)
+  INDEX idx_vr_status (status),
+  INDEX idx_vr_admin (reviewed_by_admin_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- verification_photos удалены — медиа документов хранятся в универсальной таблице media
+-- verification_photos — см. ниже в разделе фото
 
 -- ============================================================
 --  УК — КОНТАКТЫ ДОМА
@@ -161,19 +168,21 @@ CREATE TABLE IF NOT EXISTS verification_requests (
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS news (
-  id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  building_key VARCHAR(120)    NOT NULL,
-  title        TEXT            NOT NULL,
-  excerpt      TEXT            NOT NULL,
-  published_at DATE            NOT NULL,
-  is_published BOOLEAN         NOT NULL DEFAULT TRUE,
-  created_at   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  id                   BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  building_key         VARCHAR(120)    NOT NULL,
+  title                TEXT            NOT NULL,
+  excerpt              TEXT            NOT NULL,
+  published_at         DATE            NOT NULL,
+  is_published         BOOLEAN         NOT NULL DEFAULT TRUE,
+  created_by_admin_id  BIGINT UNSIGNED DEFAULT NULL,
+  created_at           DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   CONSTRAINT fk_news_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE,
-  INDEX idx_news_building_published (building_key, published_at DESC)
+  INDEX idx_news_building_published (building_key, published_at DESC),
+  INDEX idx_news_admin (created_by_admin_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- news_photos удалены — медиа новостей хранятся в универсальной таблице media
+-- news_photos — см. ниже в разделе фото
 
 -- ============================================================
 --  УВЕДОМЛЕНИЯ
@@ -181,16 +190,18 @@ CREATE TABLE IF NOT EXISTS news (
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS notifications (
-  id           BIGINT UNSIGNED                                     NOT NULL AUTO_INCREMENT,
-  building_key VARCHAR(120)                                        DEFAULT NULL,
-  type         ENUM('outage','meeting','announcement','general')   NOT NULL DEFAULT 'general',
-  title        VARCHAR(500)                                        NOT NULL,
-  body         TEXT                                                NOT NULL,
-  created_at   DATETIME                                            NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  id                   BIGINT UNSIGNED                                     NOT NULL AUTO_INCREMENT,
+  building_key         VARCHAR(120)                                        DEFAULT NULL,
+  type                 ENUM('outage','meeting','announcement','general')   NOT NULL DEFAULT 'general',
+  title                VARCHAR(500)                                        NOT NULL,
+  body                 TEXT                                                NOT NULL,
+  created_by_admin_id  BIGINT UNSIGNED                                     DEFAULT NULL,
+  created_at           DATETIME                                            NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   CONSTRAINT fk_notif_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE,
   INDEX idx_notif_building_created (building_key, created_at DESC),
-  INDEX idx_notif_type_created     (type, created_at DESC)
+  INDEX idx_notif_type_created     (type, created_at DESC),
+  INDEX idx_notif_admin (created_by_admin_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- user_notification_reads удалены — используется users.notifications_last_seen_at
@@ -199,43 +210,38 @@ CREATE TABLE IF NOT EXISTS notifications (
 --  ОБРАЩЕНИЯ (ЗАЯВКИ)
 -- ============================================================
 
+-- 3НФ: дом и автор обращения выводятся из author_apartment_id -> user_apartments.
 CREATE TABLE IF NOT EXISTS appeals (
   id                     BIGINT UNSIGNED                                                                          NOT NULL AUTO_INCREMENT,
-  user_id                BIGINT UNSIGNED                                                                          NOT NULL,
-  building_key           VARCHAR(120)                                                                             NOT NULL,
   title                  VARCHAR(500)                                                                             NOT NULL,
   body                   TEXT                                                                                     NOT NULL,
   category               ENUM('Аварийная ситуация','Сантехника','Электрика','Отопление','Вентиляция','Уборка и благоустройство','Нарушение порядка','Инициатива собрания собственников','Другое') NOT NULL DEFAULT 'Другое',
   kind                   ENUM('personal','collective')                                                            NOT NULL DEFAULT 'personal',
   status                 ENUM('new','collecting_signatures','in_progress','resolved','closed','rejected')        NOT NULL DEFAULT 'new',
-  entrance               INT                                                                                      DEFAULT NULL,
-  author_apartment_id    BIGINT UNSIGNED                                                                          DEFAULT NULL,
+  author_apartment_id    BIGINT UNSIGNED                                                                          NOT NULL,
   escalated_to_uk        BOOLEAN                                                                                  NOT NULL DEFAULT FALSE,
   manually_archived      BOOLEAN                                                                                  NOT NULL DEFAULT FALSE,
   admin_comment          TEXT                                                                                     DEFAULT NULL,
   admin_comment_at       DATETIME                                                                                 DEFAULT NULL,
   admin_comment_read_at  DATETIME                                                                                 DEFAULT NULL,
+  handled_by_admin_id    BIGINT UNSIGNED                                                                          DEFAULT NULL,
   created_at             DATETIME                                                                                 NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at             DATETIME                                                                                 NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   resolved_at            DATETIME                                                                                 DEFAULT NULL,
   PRIMARY KEY (id),
-  CONSTRAINT fk_appeals_user      FOREIGN KEY (user_id)             REFERENCES users(id)               ON DELETE CASCADE,
-  CONSTRAINT fk_appeals_building  FOREIGN KEY (building_key)        REFERENCES buildings(building_key) ON UPDATE CASCADE,
-  CONSTRAINT fk_appeals_apartment FOREIGN KEY (author_apartment_id) REFERENCES user_apartments(id)     ON DELETE SET NULL,
-  INDEX idx_appeals_user_created   (user_id, created_at DESC),
+  CONSTRAINT fk_appeals_apartment FOREIGN KEY (author_apartment_id) REFERENCES user_apartments(id)     ON DELETE RESTRICT,
   INDEX idx_appeals_status_created (status, created_at DESC),
-  INDEX idx_appeals_building_key   (building_key, created_at DESC),
-  INDEX idx_appeals_apartment      (author_apartment_id)
+  INDEX idx_appeals_apartment      (author_apartment_id),
+  INDEX idx_appeals_admin          (handled_by_admin_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- appeal_photos удалены — медиа обращений хранятся в универсальной таблице media
+-- appeal_photos — см. ниже в разделе фото
 
 CREATE TABLE IF NOT EXISTS appeal_participants (
   id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   appeal_id    BIGINT UNSIGNED NOT NULL,
   user_id      BIGINT UNSIGNED NOT NULL,
   apartment_id BIGINT UNSIGNED DEFAULT NULL,
-  entrance     INT             DEFAULT NULL,
   anonymous    BOOLEAN         NOT NULL DEFAULT FALSE,
   comment      TEXT            DEFAULT NULL,
   photo_uri    TEXT            DEFAULT NULL,
@@ -264,19 +270,7 @@ CREATE TABLE IF NOT EXISTS house_specs (
   INDEX idx_hs_building_position (building_key, position)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- house_photos удалены — медиа дома хранятся в универсальной таблице media
-
-CREATE TABLE IF NOT EXISTS house_status (
-  id           BIGINT UNSIGNED                NOT NULL AUTO_INCREMENT,
-  building_key VARCHAR(120)                   NOT NULL,
-  text         VARCHAR(500)                   NOT NULL,
-  status       ENUM('ok','warning','danger')  NOT NULL DEFAULT 'ok',
-  position     INT                            NOT NULL DEFAULT 0,
-  is_active    BOOLEAN                        NOT NULL DEFAULT TRUE,
-  PRIMARY KEY (id),
-  CONSTRAINT fk_hst_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE,
-  INDEX idx_hst_building_position (building_key, position)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- building_photos — см. ниже в разделе фото
 
 CREATE TABLE IF NOT EXISTS house_calendar_activities (
   id            BIGINT UNSIGNED                                            NOT NULL AUTO_INCREMENT,
@@ -318,7 +312,6 @@ CREATE TABLE IF NOT EXISTS neighbor_ads (
   category           ENUM('sell','buy','service','invite','lost','found','other')                              NOT NULL DEFAULT 'other',
   status             ENUM('new','under_review','published','archived','rejected','under_review_appeal')        NOT NULL DEFAULT 'published',
   show_phone         BOOLEAN                                                                                    NOT NULL DEFAULT FALSE,
-  author_phone       VARCHAR(50)                                                                                DEFAULT NULL,
   created_at         DATETIME                                                                                   NOT NULL DEFAULT CURRENT_TIMESTAMP,
   expires_at         DATETIME                                                                                   NOT NULL,
   updated_at         DATETIME                                                                                   NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -331,7 +324,7 @@ CREATE TABLE IF NOT EXISTS neighbor_ads (
   INDEX idx_na_status           (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- neighbor_ad_photos удалены — медиа объявлений хранятся в универсальной таблице media
+-- neighbor_ad_photos — см. ниже в разделе фото
 
 -- ============================================================
 --  ГОЛОСОВАНИЯ
@@ -395,20 +388,24 @@ CREATE TABLE IF NOT EXISTS vote_casts (
 
 CREATE TABLE IF NOT EXISTS environment_ratings (
   id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  user_id         BIGINT UNSIGNED NOT NULL,
-  building_key    VARCHAR(120)    NOT NULL,
+  apartment_id    BIGINT UNSIGNED NOT NULL,
   month_key       CHAR(7)         NOT NULL,
   courtyard_stars TINYINT         NOT NULL CHECK (courtyard_stars BETWEEN 1 AND 5),
   entrance_stars  TINYINT         NOT NULL CHECK (entrance_stars  BETWEEN 1 AND 5),
   uk_stars        TINYINT         NOT NULL CHECK (uk_stars        BETWEEN 1 AND 5),
-  feedback_tags   JSON            DEFAULT NULL,
   feedback_other  TEXT            DEFAULT NULL,
   submitted_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_er_user_building_month (user_id, building_key, month_key),
-  CONSTRAINT fk_er_user     FOREIGN KEY (user_id)      REFERENCES users(id)               ON DELETE CASCADE,
-  CONSTRAINT fk_er_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE,
-  INDEX idx_er_building_month (building_key, month_key DESC)
+  UNIQUE KEY uq_er_apartment_month (apartment_id, month_key),
+  CONSTRAINT fk_er_apartment FOREIGN KEY (apartment_id) REFERENCES user_apartments(id) ON DELETE CASCADE,
+  INDEX idx_er_apartment_month (apartment_id, month_key DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS environment_rating_feedback_tags (
+  rating_id BIGINT UNSIGNED NOT NULL,
+  tag_id    ENUM('yard','entrance','uk_comm','uk_work','contractors','safety','other') NOT NULL,
+  PRIMARY KEY (rating_id, tag_id),
+  CONSTRAINT fk_erft_rating FOREIGN KEY (rating_id) REFERENCES environment_ratings(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
@@ -437,44 +434,103 @@ CREATE TABLE IF NOT EXISTS district_pois (
   INDEX idx_dp_building (building_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ============================================================
---  МЕДИА (универсальная таблица вместо *_photos)
--- ============================================================
+-- appeal_photos — фото обращений
 
-CREATE TABLE IF NOT EXISTS media (
+CREATE TABLE IF NOT EXISTS appeal_photos (
   id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  owner_type ENUM('news','building','appeal','neighbor_ad','verification') NOT NULL,
-  owner_key  VARCHAR(160) NOT NULL,
-  url        VARCHAR(900) NOT NULL,
-  position   INT NOT NULL DEFAULT 0,
-  is_primary BOOLEAN NOT NULL DEFAULT FALSE,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  appeal_id  BIGINT UNSIGNED NOT NULL,
+  url        VARCHAR(900)    NOT NULL,
+  position   INT             NOT NULL DEFAULT 0,
+  created_at DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_media_owner_pos_url (owner_type, owner_key, position, url),
-  INDEX idx_media_owner (owner_type, owner_key, position),
-  INDEX idx_media_owner_primary (owner_type, owner_key, is_primary)
+  CONSTRAINT fk_aphotos_appeal FOREIGN KEY (appeal_id) REFERENCES appeals(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_ap_appeal_pos_url (appeal_id, position, url),
+  INDEX idx_ap_appeal (appeal_id, position)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- neighbor_ad_photos — фото объявлений соседей
+
+CREATE TABLE IF NOT EXISTS neighbor_ad_photos (
+  id             BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  neighbor_ad_id BIGINT UNSIGNED NOT NULL,
+  url            VARCHAR(900)    NOT NULL,
+  position       INT             NOT NULL DEFAULT 0,
+  is_primary     BOOLEAN         NOT NULL DEFAULT FALSE,
+  created_at     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT fk_nap_ad FOREIGN KEY (neighbor_ad_id) REFERENCES neighbor_ads(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_nap_ad_pos_url (neighbor_ad_id, position, url),
+  INDEX idx_nap_ad (neighbor_ad_id, position)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- verification_photos — фото документов верификации
+
+CREATE TABLE IF NOT EXISTS verification_photos (
+  id                      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  verification_request_id BIGINT UNSIGNED NOT NULL,
+  url                     VARCHAR(900)    NOT NULL,
+  position                INT             NOT NULL DEFAULT 0,
+  created_at              DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT fk_vp_request FOREIGN KEY (verification_request_id) REFERENCES verification_requests(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_vp_request_pos_url (verification_request_id, position, url),
+  INDEX idx_vp_request (verification_request_id, position)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- building_photos — фото паспорта дома
+
+CREATE TABLE IF NOT EXISTS building_photos (
+  id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  building_key VARCHAR(120)    NOT NULL,
+  url          VARCHAR(900)    NOT NULL,
+  position     INT             NOT NULL DEFAULT 0,
+  created_at   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT fk_bp_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON DELETE CASCADE ON UPDATE CASCADE,
+  UNIQUE KEY uq_bp_building_pos_url (building_key, position, url),
+  INDEX idx_bp_building (building_key, position)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- news_photos — фото новостей
+
+CREATE TABLE IF NOT EXISTS news_photos (
+  id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  news_id    BIGINT UNSIGNED NOT NULL,
+  url        VARCHAR(900)    NOT NULL,
+  position   INT             NOT NULL DEFAULT 0,
+  created_at DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT fk_np_news FOREIGN KEY (news_id) REFERENCES news(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_np_news_pos_url (news_id, position, url),
+  INDEX idx_np_news (news_id, position)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
 --  АДМИНКА И PUSH-ТОКЕНЫ
 -- ============================================================
 
--- role = 'admin'     -> полный доступ, permissions игнорируются
--- role = 'moderator' -> доступ только к разделам, включённым в permissions, например:
---   {"news": true, "notifications": true, "appeals": false, "votes": false,
---    "neighbor_ads": true, "verification_requests": false, "house_content": true, "buildings": false}
+-- Администраторы. Ролевая модель:
+--   admin     — полный доступ;
+--   moderator — новости, уведомления, обработка жалоб, модерация контента.
+-- Проверки прав реализованы в админ-панели.
 CREATE TABLE IF NOT EXISTS admin_users (
   id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   email         VARCHAR(255)    NOT NULL,
   password_hash VARCHAR(255)    NOT NULL,
   full_name     VARCHAR(255)    NOT NULL DEFAULT '',
   role          ENUM('admin','moderator') NOT NULL DEFAULT 'admin',
-  permissions   JSON            DEFAULT NULL,
   is_active     TINYINT(1)      NOT NULL DEFAULT 1,
   created_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_admin_users_email (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS admin_user_permissions (
+  admin_user_id BIGINT UNSIGNED NOT NULL,
+  permission    VARCHAR(64)     NOT NULL,
+  PRIMARY KEY (admin_user_id, permission),
+  CONSTRAINT fk_aup_admin FOREIGN KEY (admin_user_id) REFERENCES admin_users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS push_tokens (
@@ -487,5 +543,16 @@ CREATE TABLE IF NOT EXISTS push_tokens (
   UNIQUE KEY uq_pt_token (token),
   CONSTRAINT fk_pt_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE verification_requests
+  ADD CONSTRAINT fk_vr_admin FOREIGN KEY (reviewed_by_admin_id) REFERENCES admin_users(id) ON DELETE SET NULL;
+ALTER TABLE news
+  ADD CONSTRAINT fk_news_admin FOREIGN KEY (created_by_admin_id) REFERENCES admin_users(id) ON DELETE SET NULL;
+ALTER TABLE notifications
+  ADD CONSTRAINT fk_notif_admin FOREIGN KEY (created_by_admin_id) REFERENCES admin_users(id) ON DELETE SET NULL;
+ALTER TABLE appeals
+  ADD CONSTRAINT fk_appeals_admin FOREIGN KEY (handled_by_admin_id) REFERENCES admin_users(id) ON DELETE SET NULL;
+ALTER TABLE users
+  ADD CONSTRAINT fk_users_blocked_admin FOREIGN KEY (blocked_by_admin_id) REFERENCES admin_users(id) ON DELETE SET NULL;
 
 SET FOREIGN_KEY_CHECKS = 1;

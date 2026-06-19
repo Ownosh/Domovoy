@@ -7,7 +7,7 @@ import { apiFetchNeighborAds, apiCreateNeighborAd, apiDeleteNeighborAd, apiExten
 import { apiFetchAppeals, apiCreateAppeal, apiJoinAppeal, apiDeleteAppeal, apiEditAppeal, apiArchiveAppeal, apiMarkAppealCommentRead } from "../api/appeals";
 import { clearTokens, ApiError } from "../api/client";
 import { apiSubmitRating, apiFetchMyRating, apiFetchRatingStats } from "../api/ratings";
-import { apiFetchBuildingInfo, apiFetchBuildingPhotos, apiFetchBuildingSpecs, apiFetchBuildingSchedule, apiFetchBuildingCalendar, apiFetchBuildingContacts, apiFetchBuildingStatus, apiFetchBuildingChats, type BuildingInfo, type BuildingSpec, type HouseScheduleItem, type HouseStatusItem } from "../api/buildings";
+import { apiFetchBuildingInfo, apiFetchBuildingPhotos, apiFetchBuildingSpecs, apiFetchBuildingSchedule, apiFetchBuildingCalendar, apiFetchBuildingContacts, apiFetchBuildingChats, type BuildingInfo, type BuildingSpec, type HouseScheduleItem } from "../api/buildings";
 import { apiFetchDistrictPois } from "../api/district";
 import { apiFetchNotifications, apiMarkNotificationRead, apiMarkAllNotificationsRead } from "../api/notifications";
 import { apiFetchVerificationStatus, apiSubmitVerification } from "../api/verification";
@@ -104,7 +104,6 @@ type AppState = {
     houseSchedule: HouseScheduleItem[];
     houseCalendar: HouseCalendarActivity[];
     ukContacts: UkContacts | null;
-    houseStatus: HouseStatusItem[];
     houseChats: BuildingChat[];
     apartments: UserApartment[];
 };
@@ -137,7 +136,6 @@ const initialState: AppState = {
     houseSchedule: [],
     houseCalendar: [],
     ukContacts: null,
-    houseStatus: [],
     houseChats: [],
     apartments: [],
 };
@@ -194,7 +192,7 @@ type Action =
     | { type: "SET_APPEALS"; payload: Appeal[] }
     | { type: "SET_NOTIFICATIONS"; payload: AppNotification[] }
     | { type: "SET_DISTRICT"; payload: { pois: DistrictPoi[]; anchor: { lat: number; lng: number } | null } }
-    | { type: "SET_HOUSE_DATA"; payload: { info?: BuildingInfo; photos?: string[]; specs?: BuildingSpec[]; schedule?: HouseScheduleItem[]; calendar?: HouseCalendarActivity[]; contacts?: UkContacts | null; status?: HouseStatusItem[]; chats?: BuildingChat[] } }
+    | { type: "SET_HOUSE_DATA"; payload: { info?: BuildingInfo; photos?: string[]; specs?: BuildingSpec[]; schedule?: HouseScheduleItem[]; calendar?: HouseCalendarActivity[]; contacts?: UkContacts | null; chats?: BuildingChat[] } }
     | { type: "REPLACE_APPEAL"; payload: Appeal }
     | { type: "SET_APARTMENTS"; payload: UserApartment[] }
     | { type: "ADD_APARTMENT"; payload: UserApartment }
@@ -471,7 +469,6 @@ function reducer(state: AppState, action: Action): AppState {
                 houseSchedule: action.payload.schedule ?? state.houseSchedule,
                 houseCalendar: action.payload.calendar ?? state.houseCalendar,
                 ukContacts: action.payload.contacts !== undefined ? action.payload.contacts : state.ukContacts,
-                houseStatus: action.payload.status ?? state.houseStatus,
                 houseChats: action.payload.chats ?? state.houseChats,
             };
         case "REPLACE_APPEAL": {
@@ -642,7 +639,6 @@ function mergeHydrated(parsed: Partial<AppState>): AppState {
         houseSchedule: parsed.houseSchedule ?? [],
         houseCalendar: parsed.houseCalendar ?? [],
         ukContacts: parsed.ukContacts ?? null,
-        houseStatus: parsed.houseStatus ?? [],
         houseChats: parsed.houseChats ?? [],
         ukStats: parsed.ukStats ?? {},
         apartments: [],
@@ -776,7 +772,6 @@ type AppContextValue = {
         body: string;
         category: string;
         kind: AppealKind;
-        entrance?: string;
         imageUrls?: string[];
     }) => Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }>;
     joinAppeal: (appealId: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
@@ -795,13 +790,12 @@ type AppContextValue = {
         category: NeighborAdCategory;
         imageUrls?: string[];
         showPhone: boolean;
-        authorPhone?: string;
     }) => Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }>;
     extendNeighborAd: (id: string) => void;
     deleteNeighborAd: (id: string) => void;
     reportNeighborAd: (id: string) => void;
-    editNeighborAd: (id: string, data: { title: string; body: string; category: NeighborAdCategory; imageUrls?: string[]; showPhone: boolean; authorPhone?: string }) => Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }>;
-    editAppeal: (id: string, data: { title: string; body: string; category: string; entrance?: string; imageUrls?: string[] }) => Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }>;
+    editNeighborAd: (id: string, data: { title: string; body: string; category: NeighborAdCategory; imageUrls?: string[]; showPhone: boolean }) => Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }>;
+    editAppeal: (id: string, data: { title: string; body: string; category: string; imageUrls?: string[] }) => Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }>;
     editVote: (id: string, data: { topic: string; description: string; visibility: string; optionLabels: string[] }) => Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }>;
     deleteVote: (id: string) => Promise<void>;
     castVote: (input: {
@@ -822,7 +816,6 @@ type AppContextValue = {
     houseSchedule: HouseScheduleItem[];
     houseCalendar: HouseCalendarActivity[];
     ukContacts: UkContacts | null;
-    houseStatus: HouseStatusItem[];
     houseChats: BuildingChat[];
     apartments: UserApartment[];
     fetchApartments: () => Promise<void>;
@@ -922,9 +915,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             apiFetchBuildingSchedule(),
             apiFetchBuildingCalendar("2020-01", "2030-12"),
             apiFetchBuildingContacts(),
-            apiFetchBuildingStatus(),
             apiFetchBuildingChats(),
-        ]).then(([info, photos, specs, schedule, calendar, contacts, status, chats]) => {
+        ]).then(([info, photos, specs, schedule, calendar, contacts, chats]) => {
             dispatch({ type: "SET_HOUSE_DATA", payload: {
                 info:     info.status     === "fulfilled" ? info.value     : undefined,
                 photos:   photos.status   === "fulfilled" ? photos.value   : undefined,
@@ -932,7 +924,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 schedule: schedule.status === "fulfilled" ? schedule.value : undefined,
                 calendar: calendar.status === "fulfilled" ? calendar.value : undefined,
                 contacts: contacts.status === "fulfilled" ? contacts.value : undefined,
-                status:   status.status   === "fulfilled" ? status.value   : undefined,
                 chats:    chats.status    === "fulfilled" ? chats.value    : undefined,
             }});
         });
@@ -1066,7 +1057,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             body: string;
             category: string;
             kind: AppealKind;
-            entrance?: string;
             imageUrls?: string[];
         }): Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }> => {
             if (!state.account?.user) return { ok: false, reason: "Войдите в аккаунт" };
@@ -1076,7 +1066,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     body: input.body,
                     category: input.category,
                     kind: input.kind,
-                    entrance: input.entrance,
                     imageUrls: input.imageUrls,
                 });
                 const updated = await apiFetchAppeals();
@@ -1220,7 +1209,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             category: NeighborAdCategory;
             imageUrls?: string[];
             showPhone: boolean;
-            authorPhone?: string;
         }): Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }> => {
             if (!state.account?.user) {
                 return { ok: false, reason: "Войдите в аккаунт" };
@@ -1238,7 +1226,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     category: input.category,
                     imageUrls: input.imageUrls,
                     showPhone: input.showPhone,
-                    authorPhone: input.showPhone ? (input.authorPhone?.trim() || undefined) : undefined,
                 });
                 dispatch({
                     type: "ADD_NEIGHBOR_AD",
@@ -1268,7 +1255,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const editNeighborAd = useCallback(
-        async (id: string, data: { title: string; body: string; category: NeighborAdCategory; imageUrls?: string[]; showPhone: boolean; authorPhone?: string }): Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }> => {
+        async (id: string, data: { title: string; body: string; category: NeighborAdCategory; imageUrls?: string[]; showPhone: boolean }): Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }> => {
             try {
                 const updated = await apiEditNeighborAd(id, data);
                 dispatch({ type: "SET_NEIGHBOR_ADS", payload: (await apiFetchNeighborAds()) });
@@ -1281,7 +1268,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
 
     const editAppeal = useCallback(
-        async (id: string, data: { title: string; body: string; category: string; entrance?: string; imageUrls?: string[] }): Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }> => {
+        async (id: string, data: { title: string; body: string; category: string; imageUrls?: string[] }): Promise<{ ok: true } | { ok: false; reason: string; moderation?: import("../api/client").ModerationData }> => {
             try {
                 await apiEditAppeal(id, data);
                 const list = await apiFetchAppeals();
@@ -1608,7 +1595,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             houseSchedule: state.houseSchedule,
             houseCalendar: state.houseCalendar,
             ukContacts: state.ukContacts,
-            houseStatus: state.houseStatus,
             houseChats: state.houseChats,
             apartments: state.apartments,
             fetchApartments,
@@ -1669,7 +1655,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             state.houseSchedule,
             state.houseCalendar,
             state.ukContacts,
-            state.houseStatus,
             state.houseChats,
             state.apartments,
             fetchApartments,

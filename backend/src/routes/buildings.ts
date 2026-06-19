@@ -66,8 +66,8 @@ router.get("/photos", requireAuth, async (req: AuthRequest, res) => {
     if (!key) return res.status(404).json({ error: "Дом не найден" });
     try {
         const [rows] = await pool.query<RowDataPacket[]>(
-            `SELECT url FROM media
-             WHERE owner_type = 'building' AND LOWER(owner_key) = LOWER(?)
+            `SELECT url FROM building_photos
+             WHERE LOWER(building_key) = LOWER(?)
              ORDER BY position`,
             [key],
         );
@@ -144,28 +144,6 @@ router.get("/schedule", requireAuth, async (req: AuthRequest, res) => {
         })));
     } catch (err) {
         console.error("buildings/schedule error:", err);
-        return res.status(500).json({ error: "Ошибка сервера" });
-    }
-});
-
-// GET /api/buildings/status
-router.get("/status", requireAuth, async (req: AuthRequest, res) => {
-    const key = await getActiveBuildingKey(req.userId!);
-    if (!key) return res.status(404).json({ error: "Дом не найден" });
-    try {
-        const [rows] = await pool.query<RowDataPacket[]>(
-            `SELECT id, text, status FROM house_status
-             WHERE LOWER(building_key) = LOWER(?) AND is_active = 1
-             ORDER BY position`,
-            [key],
-        );
-        return res.json(rows.map((r) => ({
-            id: String(r.id),
-            text: r.text as string,
-            status: r.status as "ok" | "warning" | "danger",
-        })));
-    } catch (err) {
-        console.error("buildings/status error:", err);
         return res.status(500).json({ error: "Ошибка сервера" });
     }
 });

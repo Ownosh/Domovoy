@@ -27,10 +27,10 @@ router.get("/status", requireAuth, async (req: AuthRequest, res) => {
         if (!row) return res.json({ status: "none" });
 
         const [photoRows] = await pool.query<RowDataPacket[]>(
-            `SELECT url FROM media
-             WHERE owner_type = 'verification' AND owner_key = ?
+            `SELECT url FROM verification_photos
+             WHERE verification_request_id = ?
              ORDER BY position`,
-            [String(row.id)],
+            [row.id],
         );
 
         return res.json({
@@ -82,9 +82,9 @@ router.post("/submit", requireAuth, async (req: AuthRequest, res) => {
 
         for (let i = 0; i < photoUrls.length; i++) {
             await pool.execute(
-                `INSERT IGNORE INTO media (owner_type, owner_key, url, position, is_primary)
-                 VALUES ('verification', ?, ?, ?, 0)`,
-                [String(result.insertId), photoUrls[i], i],
+                `INSERT IGNORE INTO verification_photos (verification_request_id, url, position)
+                 VALUES (?, ?, ?)`,
+                [result.insertId, photoUrls[i], i],
             );
         }
 

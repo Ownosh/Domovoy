@@ -11,7 +11,6 @@ export async function apiCreateNeighborAd(data: {
     category: NeighborAdCategory;
     imageUrls?: string[];
     showPhone: boolean;
-    authorPhone?: string;
 }): Promise<NeighborAd> {
     return apiRequest<NeighborAd>("/neighbor-ads", {
         method: "POST",
@@ -24,7 +23,7 @@ export async function apiDeleteNeighborAd(id: string): Promise<void> {
 }
 
 export async function apiEditNeighborAd(id: string, data: {
-    title: string; body: string; category: NeighborAdCategory; imageUrls?: string[]; showPhone: boolean; authorPhone?: string;
+    title: string; body: string; category: NeighborAdCategory; imageUrls?: string[]; showPhone: boolean;
 }): Promise<NeighborAd> {
     return apiRequest<NeighborAd>(`/neighbor-ads/${id}`, { method: "PATCH", body: JSON.stringify(data) });
 }

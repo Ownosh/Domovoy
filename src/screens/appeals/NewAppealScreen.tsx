@@ -36,9 +36,6 @@ export function NewAppealScreen({ navigation, route }: Props) {
     const [body, setBody] = useState(existing?.body ?? "");
     const [category, setCategory] = useState(existing?.category ?? appealCategories[0]);
     const [kind, setKind] = useState<AppealKind>(existing?.kind ?? route.params?.defaultKind ?? "personal");
-    const [entrance, setEntrance] = useState(
-        existing?.entrance ?? (profile.entrance != null ? String(profile.entrance) : ""),
-    );
     const [photos, setPhotos] = useState<PhotoItem[]>(
         () => (existing?.imageUrls ?? []).map((uri) => ({ kind: "existing" as const, uri })),
     );
@@ -98,8 +95,8 @@ export function NewAppealScreen({ navigation, route }: Props) {
             setErr("Укажите тему и описание");
             return;
         }
-        if (kind === "collective" && !entrance.trim()) {
-            setErr("Для коллективного обращения укажите номер подъезда");
+        if (kind === "collective" && profile.entrance == null) {
+            setErr("Укажите подъезд в профиле — он нужен для коллективного обращения");
             return;
         }
         setErr("");
@@ -120,12 +117,10 @@ export function NewAppealScreen({ navigation, route }: Props) {
         const r = editId
             ? await editAppeal(editId, {
                 title: title.trim(), body: body.trim(), category,
-                entrance: kind === "collective" ? entrance.trim() : undefined,
                 imageUrls,
               })
             : await addAppeal({
                 title: title.trim(), body: body.trim(), category, kind,
-                entrance: kind === "collective" ? entrance.trim() : undefined,
                 imageUrls,
               });
         setSubmitting(false);
@@ -199,19 +194,6 @@ export function NewAppealScreen({ navigation, route }: Props) {
                         multiline
                         style={styles.area}
                     />
-                    {kind === "collective" && (
-                        <>
-                            <View style={styles.gap} />
-                            <Input
-                                label="Подъезд №"
-                                value={entrance}
-                                onChangeText={setEntrance}
-                                keyboardType="number-pad"
-                                placeholder="Например: 2"
-                                hint="Порог «массового обращения» — уникальные квартиры в этом подъезде"
-                            />
-                        </>
-                    )}
                     <View style={styles.gap} />
                     <Text style={[textStyles.label, styles.photoLabel]}>Фото</Text>
                     <Text style={[textStyles.caption, styles.photoSub]}>необязательно, до {MAX_PHOTOS} фотографий</Text>

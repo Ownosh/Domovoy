@@ -49,8 +49,7 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
     const [body, setBody] = useState(existing?.body ?? "");
     const preset = route.params?.presetCategory;
     const [category, setCategory] = useState<NeighborAdCategory>(existing?.category ?? "sell");
-    const [phone, setPhone] = useState(existing?.authorPhone ?? "");
-    const [useProfilePhone, setUseProfilePhone] = useState(false);
+    const [showPhone, setShowPhone] = useState(existing?.showPhone ?? false);
     const [photos, setPhotos] = useState<PhotoItem[]>(
         () => (existing?.imageUrls ?? []).map((uri) => ({ kind: "existing" as const, uri })),
     );
@@ -63,16 +62,6 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
             setCategory(preset);
         }
     }, [preset, existing]);
-
-    const handleToggleProfilePhone = () => {
-        if (useProfilePhone) {
-            setUseProfilePhone(false);
-            setPhone("");
-        } else {
-            setUseProfilePhone(true);
-            setPhone(profile.phone ?? "");
-        }
-    };
 
     const pickPhoto = async () => {
         if (photos.length >= MAX_PHOTOS) {
@@ -109,8 +98,10 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
             setErr("Заполните заголовок и текст");
             return;
         }
-        const trimmedPhone = phone.trim();
-        const showPhone = trimmedPhone.length > 0;
+        if (showPhone && !profile.phone?.trim()) {
+            setErr("Добавьте телефон в профиль, чтобы показывать его в объявлении");
+            return;
+        }
 
         let imageUrls: string[];
         try {
@@ -131,7 +122,6 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
                 category,
                 imageUrls,
                 showPhone,
-                authorPhone: showPhone ? trimmedPhone : undefined,
               })
             : await addNeighborAd({
                 title: title.trim(),
@@ -139,7 +129,6 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
                 category,
                 imageUrls,
                 showPhone,
-                authorPhone: showPhone ? trimmedPhone : undefined,
               });
         setSubmitting(false);
         if (!r.ok) {
@@ -208,23 +197,14 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
                     )}
                 </ScrollView>
                 <View style={styles.gap} />
-                {!useProfilePhone && (
-                    <Input
-                        label="Телефон для связи (необязательно)"
-                        value={phone}
-                        onChangeText={setPhone}
-                        keyboardType="phone-pad"
-                        placeholder="+7 900 000-00-00"
-                    />
-                )}
-                <Pressable style={styles.checkRow} onPress={handleToggleProfilePhone}>
-                    <View style={[styles.checkbox, useProfilePhone && styles.checkboxOn]}>
-                        {useProfilePhone && (
+                <Pressable style={styles.checkRow} onPress={() => setShowPhone((v) => !v)}>
+                    <View style={[styles.checkbox, showPhone && styles.checkboxOn]}>
+                        {showPhone && (
                             <Ionicons name="checkmark" size={13} color="#fff" />
                         )}
                     </View>
                     <Text style={[textStyles.caption, styles.checkLabel]}>
-                        Использовать номер из профиля
+                        Показывать телефон из профиля
                     </Text>
                 </Pressable>
                 {!!err && !moderation && (

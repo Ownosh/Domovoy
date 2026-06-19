@@ -140,7 +140,6 @@ export function HomeScreen() {
     const navigation = useNavigation<MainTabNavigationProp>();
     const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
     const [notifOpen, setNotifOpen] = useState(false);
-    const [statusOpen, setStatusOpen] = useState(false);
     const [detailNotif, setDetailNotif] = useState<import("../../types").AppNotification | null>(null);
     const [photoViewerUrls, setPhotoViewerUrls] = useState<string[]>([]);
     const [photoViewerIndex, setPhotoViewerIndex] = useState(0);
@@ -160,7 +159,6 @@ export function HomeScreen() {
         profile,
         refreshFeed,
         verification,
-        houseStatus,
     } = useApp();
     const verified = isVerifiedResident(verification);
 
@@ -267,21 +265,6 @@ export function HomeScreen() {
             contentStyle={styles.flex}
             rightAccessory={
                 <View style={styles.headerActions}>
-                    {houseStatus.length > 0 && (() => {
-                        const worst = houseStatus.some(s => s.status === "danger") ? "danger"
-                            : houseStatus.some(s => s.status === "warning") ? "warning" : "ok";
-                        const dotClr = worst === "ok" ? colors.primary : worst === "warning" ? colors.accent : colors.danger;
-                        return (
-                            <Pressable
-                                onPress={() => setStatusOpen(true)}
-                                hitSlop={10}
-                                style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
-                            >
-                                <Ionicons name="pulse-outline" size={26} color={colors.text} />
-                                <View style={[styles.statusDot, { backgroundColor: dotClr }]} />
-                            </Pressable>
-                        );
-                    })()}
                     <Pressable
                         onPress={() => setNotifOpen(true)}
                         hitSlop={10}
@@ -373,42 +356,6 @@ export function HomeScreen() {
                                         onOpen={() => { markNotificationRead(n.id); setDetailNotif(n); }}
                                     />
                                 ))
-                            )}
-                        </ScrollView>
-                    </Pressable>
-                </Pressable>
-            </Modal>
-
-            <Modal
-                visible={statusOpen}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setStatusOpen(false)}
-            >
-                <Pressable style={styles.sheetBackdrop} onPress={() => setStatusOpen(false)}>
-                    <Pressable style={styles.notifSheet} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.sheetHeader}>
-                            <Text style={[textStyles.subtitle, styles.sheetTitle]}>Статус дома</Text>
-                            <Pressable onPress={() => setStatusOpen(false)} hitSlop={12} style={styles.sheetClose}>
-                                <Ionicons name="close" size={26} color={colors.text} />
-                            </Pressable>
-                        </View>
-                        <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
-                            {houseStatus.length === 0 ? (
-                                <Text style={[textStyles.body, styles.sheetEmpty]}>Нет данных о статусе дома.</Text>
-                            ) : (
-                                houseStatus.map((item) => {
-                                    const clr = item.status === "ok" ? colors.primary : item.status === "warning" ? colors.accent : colors.danger;
-                                    const lbl = item.status === "ok" ? "ОК" : item.status === "warning" ? "Внимание" : "Важно";
-                                    return (
-                                        <View key={item.id} style={[styles.statusSheetRow, { borderLeftColor: clr }]}>
-                                            <Text style={[textStyles.body, styles.statusSheetText]}>{item.text}</Text>
-                                            <View style={[styles.statusBadge, { backgroundColor: `${clr}22`, borderColor: `${clr}44` }]}>
-                                                <Text style={[styles.statusBadgeText, { color: clr }]}>{lbl}</Text>
-                                            </View>
-                                        </View>
-                                    );
-                                })
                             )}
                         </ScrollView>
                     </Pressable>
@@ -1014,54 +961,6 @@ const styles = StyleSheet.create({
     date: { color: colors.textDim },
     ntitle: { color: colors.text },
     nbody: { color: colors.textMuted },
-    statusCard: {
-        marginBottom: spacing.md,
-        borderRadius: radius.md,
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.border,
-        overflow: "hidden",
-    },
-    statusHeader: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: spacing.xs,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.sm,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.borderSubtle,
-        backgroundColor: colors.bgElevated,
-    },
-    statusTitle: { fontSize: 12, fontWeight: "700", color: colors.textDim, letterSpacing: 0.5 },
-    statusRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingHorizontal: spacing.md,
-        paddingVertical: 10,
-        borderLeftWidth: 3,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.borderSubtle,
-        gap: spacing.sm,
-    },
-    statusText: { fontSize: 14, flex: 1, color: colors.text },
-    statusBadge: {
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 4,
-        borderWidth: 1,
-    },
-    statusBadgeText: { fontSize: 11, fontWeight: "600" },
-    statusSheetRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingHorizontal: spacing.lg,
-        paddingVertical: 14,
-        borderLeftWidth: 3,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.borderSubtle,
-        gap: spacing.sm,
-    },
-    statusSheetText: { color: colors.text, flex: 1, fontSize: 15 },
     filterRow: {
     flexDirection: "row",
     gap: spacing.sm,
@@ -1160,5 +1059,4 @@ const styles = StyleSheet.create({
         marginTop: spacing.sm,
     },
     cardMeta: { color: colors.textMuted, fontSize: 13 },
-    statusDot: { width: 6, height: 6, borderRadius: 3 },
 });

@@ -89,27 +89,6 @@ export async function migrate(): Promise<void> {
     await exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_last_seen_at DATETIME NULL`);
 
     // ============================================================
-    //  МЕДИА (универсальная таблица вместо *_photos)
-    //  Нужна до миграций, которые могут писать ссылки в media.
-    // ============================================================
-
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS media (
-            id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-            owner_type ENUM('news','building','appeal','neighbor_ad','verification') NOT NULL,
-            owner_key  VARCHAR(160) NOT NULL,
-            url        VARCHAR(900) NOT NULL,
-            position   INT NOT NULL DEFAULT 0,
-            is_primary TINYINT(1) NOT NULL DEFAULT 0,
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
-            UNIQUE KEY uq_media_owner_pos_url (owner_type, owner_key, position, url),
-            INDEX idx_media_owner (owner_type, owner_key, position),
-            INDEX idx_media_owner_primary (owner_type, owner_key, is_primary)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    `);
-
-    // ============================================================
     //  КВАРТИРЫ ПОЛЬЗОВАТЕЛЯ + ПРОФИЛЬ
     //  user_apartments — единственный источник данных о доме/квартире/площади.
     //  user_profiles ссылается на «активную» квартиру через active_apartment_id.
@@ -228,17 +207,8 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
-    // verification_photos удалены — медиа документов хранятся в универсальной таблице media.
-    // --- Перенос старого единственного photo_url в media (для старых установок) ---
-    if (await columnExists("verification_requests", "photo_url")) {
-        await exec(`
-            INSERT IGNORE INTO media (owner_type, owner_key, url, position, is_primary)
-            SELECT 'verification', CAST(id AS CHAR), photo_url, 0, 0
-            FROM verification_requests
-            WHERE photo_url IS NOT NULL AND photo_url <> ''
-        `);
-        await exec(`ALTER TABLE verification_requests DROP COLUMN photo_url`);
-    }
+    // verification_photos — см. раздел фото ниже
+    // когда уже созданы все таблицы-владельцы для внешних ключей.
 
     // --- Миграция старых установок verification_requests (user_id/building_key -> apartment_id) ---
     if (await tableExists("verification_requests") && await columnExists("verification_requests", "user_id")) {
@@ -277,6 +247,33 @@ export async function migrate(): Promise<void> {
         await exec(`ALTER TABLE verification_requests ADD CONSTRAINT fk_vr_apartment FOREIGN KEY (apartment_id) REFERENCES user_apartments(id) ON DELETE CASCADE`);
         await exec(`ALTER TABLE verification_requests ADD INDEX idx_vr_apartment_submitted (apartment_id, submitted_at DESC)`);
         await exec(`ALTER TABLE verification_requests ADD INDEX idx_vr_status (status)`);
+    }
+
+    // Гарантия на уровне БД: не более одной активной (pending) заявки на квартиру.
+    // Частичные индексы MySQL/MariaDB не поддерживает, поэтому используем
+    // сохраняемый генерируемый столбец (pending => apartment_id, иначе NULL) + UNIQUE.
+    if (!(await columnExists("verification_requests", "pending_apartment_id"))) {
+        // Сначала закрываем уже существующие дубли pending, оставляя самую свежую заявку
+        await exec(`
+            UPDATE verification_requests vr
+            JOIN (
+                SELECT apartment_id, MAX(id) AS keep_id
+                FROM verification_requests
+                WHERE status = 'pending'
+                GROUP BY apartment_id
+                HAVING COUNT(*) > 1
+            ) d ON d.apartment_id = vr.apartment_id
+               AND vr.status = 'pending'
+               AND vr.id <> d.keep_id
+            SET vr.status = 'rejected',
+                vr.comment = COALESCE(vr.comment, 'Закрыта автоматически: дубликат заявки')
+        `);
+        await exec(`
+            ALTER TABLE verification_requests
+              ADD COLUMN pending_apartment_id BIGINT UNSIGNED
+                AS (IF(status = 'pending', apartment_id, NULL)) STORED
+        `);
+        await exec(`ALTER TABLE verification_requests ADD UNIQUE KEY uq_vr_pending_apartment (pending_apartment_id)`);
     }
 
     // ============================================================
@@ -354,7 +351,7 @@ export async function migrate(): Promise<void> {
     await exec(`ALTER TABLE news DROP FOREIGN KEY fk_news_building`);
     await exec(`ALTER TABLE news ADD CONSTRAINT fk_news_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
 
-    // news_photos заменены на универсальную таблицу media
+    // news_photos — см. раздел фото ниже
 
     // ============================================================
     //  УВЕДОМЛЕНИЯ
@@ -431,6 +428,12 @@ export async function migrate(): Promise<void> {
     // author_apartment (snapshot) удаляем — значение берём через JOIN user_apartments
     await exec(`ALTER TABLE appeals DROP COLUMN IF EXISTS author_apartment`);
 
+    // 3НФ: дом обращения выводится из квартиры автора (author_apartment_id ->
+    // user_apartments.building_key), поэтому отдельная колонка appeals.building_key
+    // удаляется (см. блок нормализации ниже), а триггеры согласованности больше не нужны.
+    await exec(`DROP TRIGGER IF EXISTS trg_appeals_building_consistency_bi`);
+    await exec(`DROP TRIGGER IF EXISTS trg_appeals_building_consistency_bu`);
+
     // category -> ENUM (был свободный VARCHAR без проверки на фронтовый список категорий)
     await exec(`
         UPDATE appeals SET category = 'Другое'
@@ -456,7 +459,34 @@ export async function migrate(): Promise<void> {
         NOT NULL DEFAULT 'new'
     `);
 
-    // appeal_photos заменены на универсальную таблицу media
+    // ============================================================
+    //  НОРМАЛИЗАЦИЯ 3НФ: appeals.building_key выводится из квартиры автора
+    //  (author_apartment_id -> user_apartments.building_key). Убираем дублирующую
+    //  колонку building_key и делаем привязку к квартире обязательной (ON DELETE RESTRICT),
+    //  чтобы дом всегда был разрешим через JOIN, а не хранился отдельной копией.
+    // ============================================================
+    // Подстраховка: добиваем author_apartment_id там, где он ещё не проставлен —
+    // берём активную квартиру пользователя в том же доме (колонка building_key ещё есть).
+    await exec(`
+        UPDATE appeals a
+        JOIN user_profiles p ON p.user_id = a.user_id
+        JOIN user_apartments ua ON ua.id = p.active_apartment_id AND ua.building_key = a.building_key
+        SET a.author_apartment_id = ua.id
+        WHERE a.author_apartment_id IS NULL
+    `);
+    // Осиротевшие обращения (без разрешимой квартиры) в нормализованной модели
+    // представить нельзя — удаляем (обычно их нет).
+    await exec(`DELETE FROM appeals WHERE author_apartment_id IS NULL`);
+    // Привязка к квартире автора обязательна и защищена от удаления квартиры.
+    await exec(`ALTER TABLE appeals MODIFY COLUMN author_apartment_id BIGINT UNSIGNED NOT NULL`);
+    await exec(`ALTER TABLE appeals DROP FOREIGN KEY fk_appeals_apartment`);
+    await exec(`ALTER TABLE appeals ADD CONSTRAINT fk_appeals_apartment FOREIGN KEY (author_apartment_id) REFERENCES user_apartments(id) ON DELETE RESTRICT`);
+    // Удаляем дублирующую building_key — дом берём через JOIN user_apartments.
+    await exec(`ALTER TABLE appeals DROP FOREIGN KEY fk_appeals_building`);
+    await exec(`ALTER TABLE appeals DROP INDEX idx_appeals_building_key`);
+    await exec(`ALTER TABLE appeals DROP COLUMN building_key`);
+
+    // appeal_photos — см. раздел фото ниже
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS appeal_participants (
@@ -514,22 +544,8 @@ export async function migrate(): Promise<void> {
     await exec(`ALTER TABLE house_specs DROP FOREIGN KEY fk_hs_building`);
     await exec(`ALTER TABLE house_specs ADD CONSTRAINT fk_hs_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
 
-    // house_photos заменены на универсальную таблицу media
-
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS house_status (
-            id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-            building_key VARCHAR(120)    NOT NULL,
-            text         VARCHAR(500)    NOT NULL,
-            status       ENUM('ok','warning','danger') NOT NULL DEFAULT 'ok',
-            position     INT             NOT NULL DEFAULT 0,
-            is_active    TINYINT(1)      NOT NULL DEFAULT 1,
-            PRIMARY KEY (id),
-            INDEX idx_hst_building_position (building_key, position)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    `);
-    await exec(`ALTER TABLE house_status DROP FOREIGN KEY fk_hst_building`);
-    await exec(`ALTER TABLE house_status ADD CONSTRAINT fk_hst_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
+    // building_photos — см. раздел фото ниже
+    await exec(`DROP TABLE IF EXISTS house_status`);
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS house_calendar_activities (
@@ -575,7 +591,6 @@ export async function migrate(): Promise<void> {
             category           ENUM('sell','buy','service','invite','lost','found','other') NOT NULL DEFAULT 'other',
             status             ENUM('new','under_review','published','archived','rejected','under_review_appeal') NOT NULL DEFAULT 'new',
             show_phone         TINYINT(1)      NOT NULL DEFAULT 0,
-            author_phone       VARCHAR(50)     DEFAULT NULL,
             pending_moderation TINYINT(1)      NOT NULL DEFAULT 0,
             archived           TINYINT(1)      NOT NULL DEFAULT 0,
             created_at         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -612,7 +627,7 @@ export async function migrate(): Promise<void> {
     `);
     await exec(`ALTER TABLE neighbor_ads ADD INDEX idx_na_status (status)`);
 
-    // neighbor_ad_photos заменены на универсальную таблицу media
+    // neighbor_ad_photos — см. раздел фото ниже
 
     // ============================================================
     //  ГОЛОСОВАНИЯ
@@ -715,25 +730,60 @@ export async function migrate(): Promise<void> {
     await pool.query(`
         CREATE TABLE IF NOT EXISTS environment_ratings (
             id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-            user_id         BIGINT UNSIGNED NOT NULL,
-            building_key    VARCHAR(120)    NOT NULL,
+            apartment_id    BIGINT UNSIGNED NOT NULL,
             month_key       CHAR(7)         NOT NULL,
             courtyard_stars TINYINT         NOT NULL,
             entrance_stars  TINYINT         NOT NULL,
             uk_stars        TINYINT         NOT NULL,
-            feedback_tags   JSON            DEFAULT NULL,
             feedback_other  TEXT            DEFAULT NULL,
             submitted_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
-            UNIQUE KEY uq_er_user_building_month (user_id, building_key, month_key),
-            CONSTRAINT fk_er_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            INDEX idx_er_building_month (building_key, month_key DESC)
+            UNIQUE KEY uq_er_apartment_month (apartment_id, month_key),
+            CONSTRAINT fk_er_apartment FOREIGN KEY (apartment_id) REFERENCES user_apartments(id) ON DELETE CASCADE,
+            INDEX idx_er_apartment_month (apartment_id, month_key DESC)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    await exec(`ALTER TABLE environment_ratings ADD CONSTRAINT fk_er_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS environment_rating_feedback_tags (
+            rating_id BIGINT UNSIGNED NOT NULL,
+            tag_id    ENUM('yard','entrance','uk_comm','uk_work','contractors','safety','other') NOT NULL,
+            PRIMARY KEY (rating_id, tag_id),
+            CONSTRAINT fk_erft_rating FOREIGN KEY (rating_id) REFERENCES environment_ratings(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    if (await columnExists("environment_ratings", "feedback_tags")) {
+        const VALID_RATING_FEEDBACK_TAGS = new Set([
+            "yard", "entrance", "uk_comm", "uk_work", "contractors", "safety", "other",
+        ]);
+        const [legacyRows] = await pool.query<RowDataPacket[]>(
+            `SELECT id, feedback_tags FROM environment_ratings WHERE feedback_tags IS NOT NULL`,
+        );
+        for (const row of legacyRows) {
+            let tags: unknown;
+            try {
+                const raw = row.feedback_tags;
+                tags = typeof raw === "string" ? JSON.parse(raw) : raw;
+            } catch {
+                continue;
+            }
+            if (!Array.isArray(tags)) continue;
+            for (const tag of tags) {
+                if (typeof tag !== "string" || !VALID_RATING_FEEDBACK_TAGS.has(tag)) continue;
+                await pool
+                    .execute(
+                        `INSERT IGNORE INTO environment_rating_feedback_tags (rating_id, tag_id) VALUES (?, ?)`,
+                        [row.id, tag],
+                    )
+                    .catch(() => {});
+            }
+        }
+        await exec(`ALTER TABLE environment_ratings DROP COLUMN feedback_tags`);
+    }
 
     // Старые установки: одна оценка в месяц на пользователя суммарно — расширяем до «на дом»
-    if (await columnExists("environment_ratings", "month_key")) {
+    if (await columnExists("environment_ratings", "month_key") && await columnExists("environment_ratings", "user_id")) {
         await exec(`ALTER TABLE environment_ratings DROP INDEX uq_er_user_month`);
         await exec(`ALTER TABLE environment_ratings ADD UNIQUE KEY uq_er_user_building_month (user_id, building_key, month_key)`);
     }
@@ -776,6 +826,10 @@ export async function migrate(): Promise<void> {
     //  АДМИНКА И PUSH-ТОКЕНЫ
     // ============================================================
 
+    // Администраторы. Ролевая модель: admin (полный доступ) и moderator
+    // (новости, уведомления, обработка жалоб, модерация контента).
+    // Управление администраторами и проверки прав реализованы в админ-панели,
+    // здесь поддерживается только согласованность схемы общей БД.
     await pool.query(`
         CREATE TABLE IF NOT EXISTS admin_users (
             id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -783,7 +837,6 @@ export async function migrate(): Promise<void> {
             password_hash VARCHAR(255)    NOT NULL,
             full_name     VARCHAR(255)    NOT NULL DEFAULT '',
             role          ENUM('admin','moderator') NOT NULL DEFAULT 'admin',
-            permissions   JSON            DEFAULT NULL,
             is_active     TINYINT(1)      NOT NULL DEFAULT 1,
             created_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -791,9 +844,33 @@ export async function migrate(): Promise<void> {
             UNIQUE KEY uq_admin_users_email (email)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    await exec(`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS role ENUM('admin','moderator') NOT NULL DEFAULT 'admin'`);
-    await exec(`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS permissions JSON DEFAULT NULL`);
     await exec(`ALTER TABLE admin_users MODIFY COLUMN password_hash VARCHAR(255) NOT NULL`);
+    await exec(`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS role ENUM('admin','moderator') NOT NULL DEFAULT 'admin'`);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS admin_user_permissions (
+            admin_user_id BIGINT UNSIGNED NOT NULL,
+            permission    VARCHAR(64)     NOT NULL,
+            PRIMARY KEY (admin_user_id, permission),
+            CONSTRAINT fk_aup_admin FOREIGN KEY (admin_user_id) REFERENCES admin_users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    // Связи admin_users с сущностями, которые создаёт/обрабатывает админка
+    const adminFkLinks: [string, string][] = [
+        ["notifications", "created_by_admin_id"],
+        ["verification_requests", "reviewed_by_admin_id"],
+        ["appeals", "handled_by_admin_id"],
+        ["news", "created_by_admin_id"],
+        ["users", "blocked_by_admin_id"],
+    ];
+    for (const [table, column] of adminFkLinks) {
+        await exec(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} BIGINT UNSIGNED DEFAULT NULL`);
+        await exec(`ALTER TABLE ${table} ADD INDEX idx_${table}_${column} (${column})`);
+        await exec(
+            `ALTER TABLE ${table} ADD CONSTRAINT fk_${table}_${column} FOREIGN KEY (${column}) REFERENCES admin_users(id) ON DELETE SET NULL`,
+        );
+    }
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS push_tokens (
@@ -808,49 +885,252 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
     // ============================================================
-    //  МЕДИА (универсальная таблица вместо *_photos)
+    //  ФОТО: отдельная таблица на каждую сущность (без полиморфных FK)
     // ============================================================
 
-    // --- Перенос медиа из старых таблиц *_photos ---
-    if (await tableExists("news_photos")) {
-        await exec(`
-            INSERT IGNORE INTO media (owner_type, owner_key, url, position, is_primary)
-            SELECT 'news', CAST(news_id AS CHAR), image_url, position, 0
-            FROM news_photos
-        `);
-        await exec(`DROP TABLE news_photos`);
+    // Старые таблицы с колонкой image_url — убираем с пути, чтобы не мешать CREATE
+    if (await tableExists("appeal_photos") && await columnExists("appeal_photos", "image_url")) {
+        await exec(`DROP TABLE IF EXISTS legacy_appeal_photos`);
+        await exec(`RENAME TABLE appeal_photos TO legacy_appeal_photos`);
     }
+    if (await tableExists("neighbor_ad_photos") && (await columnExists("neighbor_ad_photos", "image_url") || await columnExists("neighbor_ad_photos", "ad_id"))) {
+        await exec(`DROP TABLE IF EXISTS legacy_neighbor_ad_photos`);
+        await exec(`RENAME TABLE neighbor_ad_photos TO legacy_neighbor_ad_photos`);
+    }
+    if (await tableExists("verification_photos") && (await columnExists("verification_photos", "image_url") || await columnExists("verification_photos", "request_id"))) {
+        await exec(`DROP TABLE IF EXISTS legacy_verification_photos`);
+        await exec(`RENAME TABLE verification_photos TO legacy_verification_photos`);
+    }
+    if (await tableExists("news_photos") && await columnExists("news_photos", "image_url")) {
+        await exec(`DROP TABLE IF EXISTS legacy_news_photos`);
+        await exec(`RENAME TABLE news_photos TO legacy_news_photos`);
+    }
+    if (await tableExists("house_photos") && await columnExists("house_photos", "image_url")) {
+        await exec(`DROP TABLE IF EXISTS legacy_house_photos`);
+        await exec(`RENAME TABLE house_photos TO legacy_house_photos`);
+    }
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS appeal_photos (
+            id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            appeal_id  BIGINT UNSIGNED NOT NULL,
+            url        VARCHAR(900)    NOT NULL,
+            position   INT             NOT NULL DEFAULT 0,
+            created_at DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            CONSTRAINT fk_aphotos_appeal FOREIGN KEY (appeal_id) REFERENCES appeals(id) ON DELETE CASCADE,
+            UNIQUE KEY uq_ap_appeal_pos_url (appeal_id, position, url),
+            INDEX idx_ap_appeal (appeal_id, position)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS neighbor_ad_photos (
+            id             BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            neighbor_ad_id BIGINT UNSIGNED NOT NULL,
+            url            VARCHAR(900)    NOT NULL,
+            position       INT             NOT NULL DEFAULT 0,
+            is_primary     TINYINT(1)      NOT NULL DEFAULT 0,
+            created_at     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            CONSTRAINT fk_nap_ad FOREIGN KEY (neighbor_ad_id) REFERENCES neighbor_ads(id) ON DELETE CASCADE,
+            UNIQUE KEY uq_nap_ad_pos_url (neighbor_ad_id, position, url),
+            INDEX idx_nap_ad (neighbor_ad_id, position)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS verification_photos (
+            id                      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            verification_request_id BIGINT UNSIGNED NOT NULL,
+            url                     VARCHAR(900)    NOT NULL,
+            position                INT             NOT NULL DEFAULT 0,
+            created_at              DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            CONSTRAINT fk_vp_request FOREIGN KEY (verification_request_id) REFERENCES verification_requests(id) ON DELETE CASCADE,
+            UNIQUE KEY uq_vp_request_pos_url (verification_request_id, position, url),
+            INDEX idx_vp_request (verification_request_id, position)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS building_photos (
+            id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            building_key VARCHAR(120)    NOT NULL,
+            url          VARCHAR(900)    NOT NULL,
+            position     INT             NOT NULL DEFAULT 0,
+            created_at   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            CONSTRAINT fk_bp_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON DELETE CASCADE ON UPDATE CASCADE,
+            UNIQUE KEY uq_bp_building_pos_url (building_key, position, url),
+            INDEX idx_bp_building (building_key, position)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS news_photos (
+            id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            news_id    BIGINT UNSIGNED NOT NULL,
+            url        VARCHAR(900)    NOT NULL,
+            position   INT             NOT NULL DEFAULT 0,
+            created_at DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            CONSTRAINT fk_np_news FOREIGN KEY (news_id) REFERENCES news(id) ON DELETE CASCADE,
+            UNIQUE KEY uq_np_news_pos_url (news_id, position, url),
+            INDEX idx_np_news (news_id, position)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    // --- Перенос из полиморфной content_photos ---
+    if (await tableExists("content_photos")) {
+        await exec(`
+            INSERT IGNORE INTO appeal_photos (appeal_id, url, position, created_at)
+            SELECT appeal_id, url, position, created_at
+            FROM content_photos
+            WHERE appeal_id IS NOT NULL
+        `);
+        await exec(`
+            INSERT IGNORE INTO neighbor_ad_photos (neighbor_ad_id, url, position, is_primary, created_at)
+            SELECT neighbor_ad_id, url, position, is_primary, created_at
+            FROM content_photos
+            WHERE neighbor_ad_id IS NOT NULL
+        `);
+        await exec(`
+            INSERT IGNORE INTO verification_photos (verification_request_id, url, position, created_at)
+            SELECT verification_request_id, url, position, created_at
+            FROM content_photos
+            WHERE verification_request_id IS NOT NULL
+        `);
+        await exec(`DROP TRIGGER IF EXISTS trg_content_photos_one_owner_bi`);
+        await exec(`DROP TRIGGER IF EXISTS trg_content_photos_one_owner_bu`);
+        await exec(`DROP TABLE content_photos`);
+    }
+
+    // --- Перенос из полиморфной house_photos ---
     if (await tableExists("house_photos")) {
         await exec(`
-            INSERT IGNORE INTO media (owner_type, owner_key, url, position, is_primary)
-            SELECT 'building', building_key, image_url, position, 0
+            INSERT IGNORE INTO building_photos (building_key, url, position, created_at)
+            SELECT building_key, url, position, created_at
             FROM house_photos
+            WHERE building_key IS NOT NULL
         `);
+        await exec(`
+            INSERT IGNORE INTO news_photos (news_id, url, position, created_at)
+            SELECT news_id, url, position, created_at
+            FROM house_photos
+            WHERE news_id IS NOT NULL
+        `);
+        await exec(`DROP TRIGGER IF EXISTS trg_house_photos_one_owner_bi`);
+        await exec(`DROP TRIGGER IF EXISTS trg_house_photos_one_owner_bu`);
         await exec(`DROP TABLE house_photos`);
     }
-    if (await tableExists("appeal_photos")) {
+
+    // --- Перенос из универсальной media ---
+    if (await tableExists("media")) {
         await exec(`
-            INSERT IGNORE INTO media (owner_type, owner_key, url, position, is_primary)
-            SELECT 'appeal', CAST(appeal_id AS CHAR), image_url, position, 0
-            FROM appeal_photos
+            INSERT IGNORE INTO appeal_photos (appeal_id, url, position, created_at)
+            SELECT a.id, m.url, m.position, m.created_at
+            FROM media m
+            JOIN appeals a ON a.id = CAST(m.owner_key AS UNSIGNED)
+            WHERE m.owner_type = 'appeal'
         `);
-        await exec(`DROP TABLE appeal_photos`);
+        await exec(`
+            INSERT IGNORE INTO neighbor_ad_photos (neighbor_ad_id, url, position, is_primary, created_at)
+            SELECT na.id, m.url, m.position, m.is_primary, m.created_at
+            FROM media m
+            JOIN neighbor_ads na ON na.id = CAST(m.owner_key AS UNSIGNED)
+            WHERE m.owner_type = 'neighbor_ad'
+        `);
+        await exec(`
+            INSERT IGNORE INTO verification_photos (verification_request_id, url, position, created_at)
+            SELECT vr.id, m.url, m.position, m.created_at
+            FROM media m
+            JOIN verification_requests vr ON vr.id = CAST(m.owner_key AS UNSIGNED)
+            WHERE m.owner_type = 'verification'
+        `);
+        await exec(`
+            INSERT IGNORE INTO building_photos (building_key, url, position, created_at)
+            SELECT b.building_key, m.url, m.position, m.created_at
+            FROM media m
+            JOIN buildings b ON LOWER(b.building_key) = LOWER(m.owner_key)
+            WHERE m.owner_type = 'building'
+        `);
+        await exec(`
+            INSERT IGNORE INTO news_photos (news_id, url, position, created_at)
+            SELECT n.id, m.url, m.position, m.created_at
+            FROM media m
+            JOIN news n ON n.id = CAST(m.owner_key AS UNSIGNED)
+            WHERE m.owner_type = 'news'
+        `);
+        await exec(`DROP TABLE IF EXISTS media`);
     }
-    if (await tableExists("neighbor_ad_photos")) {
+
+    // --- Перенос из legacy *_photos ---
+    if (await tableExists("legacy_appeal_photos")) {
         await exec(`
-            INSERT IGNORE INTO media (owner_type, owner_key, url, position, is_primary)
-            SELECT 'neighbor_ad', CAST(ad_id AS CHAR), image_url, position, is_primary
-            FROM neighbor_ad_photos
+            INSERT IGNORE INTO appeal_photos (appeal_id, url, position)
+            SELECT ap.appeal_id, ap.image_url, ap.position
+            FROM legacy_appeal_photos ap
         `);
-        await exec(`DROP TABLE neighbor_ad_photos`);
+        await exec(`DROP TABLE legacy_appeal_photos`);
     }
-    if (await tableExists("verification_photos")) {
+    if (await tableExists("legacy_neighbor_ad_photos")) {
+        if (await columnExists("legacy_neighbor_ad_photos", "neighbor_ad_id")) {
+            await exec(`
+                INSERT IGNORE INTO neighbor_ad_photos (neighbor_ad_id, url, position, is_primary)
+                SELECT neighbor_ad_id, image_url, position, COALESCE(is_primary, 0)
+                FROM legacy_neighbor_ad_photos
+            `);
+        } else {
+            await exec(`
+                INSERT IGNORE INTO neighbor_ad_photos (neighbor_ad_id, url, position, is_primary)
+                SELECT ad_id, image_url, position, COALESCE(is_primary, 0)
+                FROM legacy_neighbor_ad_photos
+            `);
+        }
+        await exec(`DROP TABLE legacy_neighbor_ad_photos`);
+    }
+    if (await tableExists("legacy_verification_photos")) {
+        if (await columnExists("legacy_verification_photos", "verification_request_id")) {
+            await exec(`
+                INSERT IGNORE INTO verification_photos (verification_request_id, url, position)
+                SELECT verification_request_id, image_url, position
+                FROM legacy_verification_photos
+            `);
+        } else {
+            await exec(`
+                INSERT IGNORE INTO verification_photos (verification_request_id, url, position)
+                SELECT request_id, image_url, position
+                FROM legacy_verification_photos
+            `);
+        }
+        await exec(`DROP TABLE legacy_verification_photos`);
+    }
+    if (await tableExists("legacy_news_photos")) {
         await exec(`
-            INSERT IGNORE INTO media (owner_type, owner_key, url, position, is_primary)
-            SELECT 'verification', CAST(request_id AS CHAR), image_url, position, 0
-            FROM verification_photos
+            INSERT IGNORE INTO news_photos (news_id, url, position)
+            SELECT np.news_id, np.image_url, np.position
+            FROM legacy_news_photos np
         `);
-        await exec(`DROP TABLE verification_photos`);
+        await exec(`DROP TABLE legacy_news_photos`);
+    }
+    if (await tableExists("legacy_house_photos")) {
+        await exec(`
+            INSERT IGNORE INTO building_photos (building_key, url, position)
+            SELECT hp.building_key, hp.image_url, hp.position
+            FROM legacy_house_photos hp
+        `);
+        await exec(`DROP TABLE legacy_house_photos`);
+    }
+
+    if (await columnExists("verification_requests", "photo_url")) {
+        await exec(`
+            INSERT IGNORE INTO verification_photos (verification_request_id, url, position)
+            SELECT id, photo_url, 0
+            FROM verification_requests
+            WHERE photo_url IS NOT NULL AND photo_url <> ''
+        `);
+        await exec(`ALTER TABLE verification_requests DROP COLUMN photo_url`);
     }
 
 
@@ -889,6 +1169,87 @@ export async function migrate(): Promise<void> {
     await exec(`DROP TABLE IF EXISTS emergency_scenario_steps`);
     await exec(`DROP TABLE IF EXISTS emergency_scenarios`);
     await exec(`DROP TABLE IF EXISTS uk_contacts`);
+
+    // ============================================================
+    //  НОРМАЛИЗАЦИЯ: убираем дублирующие колонки
+    // ============================================================
+
+    if (await columnExists("appeals", "user_id")) {
+        await exec(`ALTER TABLE appeals DROP FOREIGN KEY fk_appeals_user`);
+        await exec(`ALTER TABLE appeals DROP INDEX idx_appeals_user_created`);
+        await exec(`ALTER TABLE appeals DROP COLUMN user_id`);
+    }
+    if (await columnExists("appeals", "entrance")) {
+        await exec(`ALTER TABLE appeals DROP COLUMN entrance`);
+    }
+    if (await columnExists("appeal_participants", "entrance")) {
+        await exec(`ALTER TABLE appeal_participants DROP COLUMN entrance`);
+    }
+
+    if (await columnExists("neighbor_ads", "author_phone")) {
+        await exec(`ALTER TABLE neighbor_ads DROP COLUMN author_phone`);
+    }
+
+    if (!(await columnExists("environment_ratings", "apartment_id"))) {
+        await exec(`ALTER TABLE environment_ratings ADD COLUMN apartment_id BIGINT UNSIGNED DEFAULT NULL`);
+    }
+    if (await columnExists("environment_ratings", "user_id")) {
+        await exec(`
+            UPDATE environment_ratings er
+            LEFT JOIN user_profiles up ON up.user_id = er.user_id
+            SET er.apartment_id = COALESCE(
+                (SELECT ua.id FROM user_apartments ua
+                 WHERE ua.id = up.active_apartment_id AND ua.building_key = er.building_key),
+                (SELECT ua.id FROM user_apartments ua
+                 WHERE ua.user_id = er.user_id AND ua.building_key = er.building_key
+                 ORDER BY ua.id LIMIT 1)
+            )
+            WHERE er.apartment_id IS NULL
+        `);
+        await exec(`DELETE FROM environment_ratings WHERE apartment_id IS NULL`);
+        await exec(`ALTER TABLE environment_ratings DROP INDEX uq_er_user_building_month`);
+        await exec(`ALTER TABLE environment_ratings DROP FOREIGN KEY fk_er_user`);
+        await exec(`ALTER TABLE environment_ratings DROP FOREIGN KEY fk_er_building`);
+        await exec(`ALTER TABLE environment_ratings DROP INDEX idx_er_building_month`);
+        await exec(`ALTER TABLE environment_ratings DROP COLUMN user_id`);
+        await exec(`ALTER TABLE environment_ratings DROP COLUMN building_key`);
+        await exec(`ALTER TABLE environment_ratings MODIFY COLUMN apartment_id BIGINT UNSIGNED NOT NULL`);
+        await exec(`ALTER TABLE environment_ratings ADD UNIQUE KEY uq_er_apartment_month (apartment_id, month_key)`);
+        await exec(`ALTER TABLE environment_ratings ADD CONSTRAINT fk_er_apartment FOREIGN KEY (apartment_id) REFERENCES user_apartments(id) ON DELETE CASCADE`);
+        await exec(`ALTER TABLE environment_ratings ADD INDEX idx_er_apartment_month (apartment_id, month_key DESC)`);
+    }
+
+    if (await columnExists("admin_users", "permissions")) {
+        const [permRows] = await pool.query<RowDataPacket[]>(
+            `SELECT id, permissions FROM admin_users WHERE permissions IS NOT NULL`,
+        );
+        for (const row of permRows) {
+            let perms: unknown;
+            try {
+                const raw = row.permissions;
+                perms = typeof raw === "string" ? JSON.parse(raw) : raw;
+            } catch {
+                continue;
+            }
+            const keys: string[] = [];
+            if (Array.isArray(perms)) {
+                for (const p of perms) if (typeof p === "string" && p) keys.push(p);
+            } else if (perms && typeof perms === "object") {
+                for (const [k, v] of Object.entries(perms as Record<string, unknown>)) {
+                    if (v) keys.push(k);
+                }
+            }
+            for (const key of keys) {
+                await pool
+                    .execute(
+                        `INSERT IGNORE INTO admin_user_permissions (admin_user_id, permission) VALUES (?, ?)`,
+                        [row.id, key.slice(0, 64)],
+                    )
+                    .catch(() => {});
+            }
+        }
+        await exec(`ALTER TABLE admin_users DROP COLUMN permissions`);
+    }
 
     console.log("Migration complete");
 }

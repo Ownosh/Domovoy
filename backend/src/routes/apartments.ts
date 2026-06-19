@@ -122,9 +122,9 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
             );
             for (let i = 0; i < docUrls.length; i++) {
                 await conn.execute(
-                    `INSERT IGNORE INTO media (owner_type, owner_key, url, position, is_primary)
-                     VALUES ('verification', ?, ?, ?, 0)`,
-                    [String(vrResult.insertId), docUrls[i], i],
+                    `INSERT IGNORE INTO verification_photos (verification_request_id, url, position)
+                     VALUES (?, ?, ?)`,
+                    [vrResult.insertId, docUrls[i], i],
                 );
             }
 
@@ -209,6 +209,18 @@ router.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
         );
         if (!apt) {
             return res.status(404).json({ error: "Квартира не найдена" });
+        }
+
+        // Дом обращения выводится из квартиры автора (author_apartment_id, ON DELETE RESTRICT),
+        // поэтому квартиру с обращениями удалить нельзя — проверяем до любых изменений.
+        const [[appealCnt]] = await pool.query<RowDataPacket[]>(
+            `SELECT COUNT(*) AS cnt FROM appeals WHERE author_apartment_id = ?`,
+            [aptId],
+        );
+        if ((appealCnt?.cnt as number) > 0) {
+            return res.status(409).json({
+                error: "Нельзя удалить квартиру: по ней есть обращения. Сначала удалите свои обращения по этой квартире.",
+            });
         }
 
         // Если удаляемая — активная, переключаем на другую

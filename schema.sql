@@ -103,12 +103,13 @@ CREATE TABLE IF NOT EXISTS user_apartments (
 CREATE TABLE IF NOT EXISTS user_profiles (
   user_id             BIGINT UNSIGNED NOT NULL,
   full_name           VARCHAR(255)    NOT NULL DEFAULT '',
-  phone               VARCHAR(50)     NOT NULL DEFAULT '',
+  phone               VARCHAR(50)     DEFAULT NULL,
   profile_photo       TEXT            DEFAULT NULL,
   active_apartment_id BIGINT UNSIGNED DEFAULT NULL,
   created_at          DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at          DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (user_id),
+  UNIQUE KEY uq_profile_phone (phone),
   CONSTRAINT fk_up_user             FOREIGN KEY (user_id)             REFERENCES users(id)           ON DELETE CASCADE,
   CONSTRAINT fk_up_active_apartment FOREIGN KEY (active_apartment_id) REFERENCES user_apartments(id) ON DELETE SET NULL,
   INDEX idx_up_active_apartment (active_apartment_id)
@@ -246,6 +247,8 @@ CREATE TABLE IF NOT EXISTS appeals (
   CONSTRAINT fk_appeals_apartment FOREIGN KEY (author_apartment_id) REFERENCES user_apartments(id)     ON DELETE SET NULL,
   INDEX idx_appeals_status_created (status, created_at DESC),
   INDEX idx_appeals_apartment      (author_apartment_id),
+  INDEX idx_appeals_author_building (author_building_key, created_at DESC),
+  INDEX idx_appeals_author_user     (author_user_id, created_at DESC),
   INDEX idx_appeals_admin          (handled_by_admin_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -675,7 +678,7 @@ CREATE TRIGGER trg_vr_sync_ua_ai
 AFTER INSERT ON verification_requests
 FOR EACH ROW
 BEGIN
-  UPDATE user_apartments ua SET verification_status = (
+  UPDATE user_apartments ua SET verification_status = COALESCE((
     SELECT CASE
       WHEN vr.status = 'pending' THEN 'pending'
       WHEN vr.status = 'approved' AND vr.doc_type = 'ownership' THEN 'ownership'
@@ -687,7 +690,7 @@ BEGIN
     WHERE vr.apartment_id = NEW.apartment_id
     ORDER BY vr.submitted_at DESC
     LIMIT 1
-  )
+  ), 'none')
   WHERE ua.id = NEW.apartment_id;
 END;
 
@@ -696,7 +699,7 @@ CREATE TRIGGER trg_vr_sync_ua_au
 AFTER UPDATE ON verification_requests
 FOR EACH ROW
 BEGIN
-  UPDATE user_apartments ua SET verification_status = (
+  UPDATE user_apartments ua SET verification_status = COALESCE((
     SELECT CASE
       WHEN vr.status = 'pending' THEN 'pending'
       WHEN vr.status = 'approved' AND vr.doc_type = 'ownership' THEN 'ownership'
@@ -708,8 +711,45 @@ BEGIN
     WHERE vr.apartment_id = NEW.apartment_id
     ORDER BY vr.submitted_at DESC
     LIMIT 1
-  )
+  ), 'none')
   WHERE ua.id = NEW.apartment_id;
+END;
+
+DROP TRIGGER IF EXISTS trg_vr_sync_ua_ad;
+CREATE TRIGGER trg_vr_sync_ua_ad
+AFTER DELETE ON verification_requests
+FOR EACH ROW
+BEGIN
+  UPDATE user_apartments ua SET verification_status = COALESCE((
+    SELECT CASE
+      WHEN vr.status = 'pending' THEN 'pending'
+      WHEN vr.status = 'approved' AND vr.doc_type = 'ownership' THEN 'ownership'
+      WHEN vr.status = 'approved' THEN 'lease'
+      WHEN vr.status = 'rejected' THEN 'rejected'
+      ELSE 'none'
+    END
+    FROM verification_requests vr
+    WHERE vr.apartment_id = OLD.apartment_id
+    ORDER BY vr.submitted_at DESC
+    LIMIT 1
+  ), 'none')
+  WHERE ua.id = OLD.apartment_id;
+END;
+
+DROP TRIGGER IF EXISTS trg_buildings_normalize_bi;
+CREATE TRIGGER trg_buildings_normalize_bi
+BEFORE INSERT ON buildings
+FOR EACH ROW
+BEGIN
+  SET NEW.building_key = LOWER(TRIM(NEW.building_key));
+END;
+
+DROP TRIGGER IF EXISTS trg_buildings_normalize_bu;
+CREATE TRIGGER trg_buildings_normalize_bu
+BEFORE UPDATE ON buildings
+FOR EACH ROW
+BEGIN
+  SET NEW.building_key = LOWER(TRIM(NEW.building_key));
 END;
 
 DROP TRIGGER IF EXISTS trg_na_expiry_bi;
@@ -753,7 +793,7 @@ BEGIN
     JOIN user_apartments voter ON voter.id = NEW.apartment_id
     LEFT JOIN user_apartments author_ua ON author_ua.id = v.author_apartment_id
     WHERE v.id = NEW.vote_id
-      AND v.moderation_status NOT IN ('cancelled')
+      AND v.moderation_status = 'none'
       AND v.closed = 0 AND v.ends_at > NOW()
       AND LOWER(COALESCE(author_ua.building_key, v.building_key)) = LOWER(voter.building_key)
   ) THEN
@@ -783,7 +823,7 @@ BEGIN
       JOIN user_apartments voter ON voter.id = NEW.apartment_id
       LEFT JOIN user_apartments author_ua ON author_ua.id = v.author_apartment_id
       WHERE v.id = NEW.vote_id
-        AND v.moderation_status NOT IN ('cancelled')
+        AND v.moderation_status = 'none'
         AND v.closed = 0 AND v.ends_at > NOW()
         AND LOWER(COALESCE(author_ua.building_key, v.building_key)) = LOWER(voter.building_key)
     ) THEN
@@ -824,6 +864,33 @@ BEGIN
       SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'participant apartment is not in appeal building';
     END IF;
   END IF;
+END;
+
+-- ============================================================
+--  Периодическое обслуживание (MariaDB EVENT, раз в час)
+--  Дублируется в backend: runMaintenance() + startMaintenanceScheduler()
+-- ============================================================
+
+DROP EVENT IF EXISTS evt_domovoy_maintenance;
+CREATE EVENT evt_domovoy_maintenance
+ON SCHEDULE EVERY 1 HOUR
+STARTS CURRENT_TIMESTAMP
+ON COMPLETION PRESERVE
+ENABLE
+COMMENT 'Archive ads/appeals, close expired votes, purge refresh tokens'
+DO
+BEGIN
+  UPDATE neighbor_ads SET status = 'archived'
+    WHERE status = 'published' AND expires_at <= NOW();
+  UPDATE appeals SET manually_archived = 1
+    WHERE manually_archived = 0
+      AND status IN ('resolved', 'closed', 'rejected')
+      AND COALESCE(resolved_at, created_at) <= NOW() - INTERVAL 24 HOUR;
+  UPDATE votes SET closed = 1
+    WHERE closed = 0
+      AND moderation_status NOT IN ('cancelled')
+      AND ends_at <= NOW();
+  DELETE FROM refresh_tokens WHERE expires_at < NOW();
 END;
 
 SET FOREIGN_KEY_CHECKS = 1;

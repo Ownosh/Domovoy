@@ -175,11 +175,15 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
             `${AD_SELECT}
 
              WHERE LOWER(ua.building_key) = ?
+               AND (
+                 n.status NOT IN ('archived', 'rejected')
+                 OR ua.user_id = ?
+               )
                AND NOT (n.status = 'published' AND n.expires_at <= NOW())
 
              ORDER BY n.created_at DESC`,
 
-            [apt.buildingKey.toLowerCase()],
+            [apt.buildingKey.toLowerCase(), userId],
 
         );
 

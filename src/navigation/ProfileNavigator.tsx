@@ -2,6 +2,8 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React from "react";
 import { AppealHistoryScreen } from "../screens/profile/AppealHistoryScreen";
 import { AppealDetailScreen } from "../screens/appeals/AppealDetailScreen";
+import { VoteDetailScreen } from "../screens/community/VoteDetailScreen";
+import { NeighborAdDetailScreen } from "../screens/community/NeighborAdDetailScreen";
 import { ChangePasswordScreen } from "../screens/profile/ChangePasswordScreen";
 import { ContactsScreen } from "../screens/profile/ContactsScreen";
 import { HouseChatScreen } from "../screens/profile/HouseChatScreen";
@@ -42,6 +44,14 @@ export function ProfileNavigator() {
             <Stack.Screen
                 name="AppealHistory"
                 component={AppealHistoryScreen}
+            />
+            <Stack.Screen
+                name="VoteDetail"
+                component={VoteDetailScreen as any}
+            />
+            <Stack.Screen
+                name="NeighborAdDetail"
+                component={NeighborAdDetailScreen as any}
             />
             <Stack.Screen
                 name="AppealHistoryDetail"

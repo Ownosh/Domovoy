@@ -2,6 +2,7 @@ import { pool } from "./client";
 import { RowDataPacket } from "mysql2";
 import { SQL_NORMALIZE_APARTMENT_NORM } from "./normalize";
 import { LEGACY_APPEAL_CATEGORY_MAP } from "../constants/appealCategories";
+import { runMaintenance, installMaintenanceEvents } from "./maintenance";
 
 // Идемпотентный ALTER: только ожидаемые «уже есть» ошибки — warn, остальные — throw
 const SKIPPABLE_MIGRATE = /Duplicate|already exists|check that column\/key exists|Can't DROP|Unknown column|check that it exists|Multiple primary key/i;
@@ -1501,7 +1502,22 @@ export async function migrate(): Promise<void> {
     await exec(`ALTER TABLE user_apartments MODIFY COLUMN apartment_norm VARCHAR(20) NOT NULL`);
     await exec(`ALTER TABLE user_apartments DROP INDEX IF EXISTS uq_ua_user_building_apt`);
     await exec(`ALTER TABLE user_apartments ADD UNIQUE KEY uq_ua_user_building_norm (user_id, building_key, apartment_norm)`);
-    await exec(`ALTER TABLE user_apartments ADD UNIQUE KEY IF NOT EXISTS uq_ua_building_apartment_norm (building_key, apartment_norm)`);
+    // Дубликаты квартир в одном доме — оставляем запису с максимальным статусом верификации
+    await pool.query(`
+        DELETE ua FROM user_apartments ua
+        INNER JOIN (
+            SELECT building_key, apartment_norm,
+                CAST(SUBSTRING_INDEX(
+                    GROUP_CONCAT(id ORDER BY FIELD(verification_status,'ownership','lease','pending','rejected','none'), id),
+                    ',', 1
+                ) AS UNSIGNED) AS keep_id
+            FROM user_apartments
+            GROUP BY building_key, apartment_norm
+            HAVING COUNT(*) > 1
+        ) d ON ua.building_key = d.building_key AND ua.apartment_norm = d.apartment_norm AND ua.id <> d.keep_id
+    `);
+    await exec(`ALTER TABLE user_apartments DROP INDEX IF EXISTS uq_ua_building_apartment_norm`);
+    await exec(`ALTER TABLE user_apartments ADD UNIQUE KEY uq_ua_building_apartment_norm (building_key, apartment_norm)`);
 
     // Обращения: снимок автора + категории по ключам
     await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS author_building_key VARCHAR(120) NOT NULL DEFAULT ''`);
@@ -1617,7 +1633,7 @@ export async function migrate(): Promise<void> {
         AFTER INSERT ON verification_requests
         FOR EACH ROW
         BEGIN
-            UPDATE user_apartments ua SET verification_status = (
+            UPDATE user_apartments ua SET verification_status = COALESCE((
                 SELECT CASE
                     WHEN vr.status = 'pending' THEN 'pending'
                     WHEN vr.status = 'approved' AND vr.doc_type = 'ownership' THEN 'ownership'
@@ -1629,7 +1645,7 @@ export async function migrate(): Promise<void> {
                 WHERE vr.apartment_id = NEW.apartment_id
                 ORDER BY vr.submitted_at DESC
                 LIMIT 1
-            )
+            ), 'none')
             WHERE ua.id = NEW.apartment_id;
         END
     `);
@@ -1640,7 +1656,7 @@ export async function migrate(): Promise<void> {
         AFTER UPDATE ON verification_requests
         FOR EACH ROW
         BEGIN
-            UPDATE user_apartments ua SET verification_status = (
+            UPDATE user_apartments ua SET verification_status = COALESCE((
                 SELECT CASE
                     WHEN vr.status = 'pending' THEN 'pending'
                     WHEN vr.status = 'approved' AND vr.doc_type = 'ownership' THEN 'ownership'
@@ -1652,8 +1668,31 @@ export async function migrate(): Promise<void> {
                 WHERE vr.apartment_id = NEW.apartment_id
                 ORDER BY vr.submitted_at DESC
                 LIMIT 1
-            )
+            ), 'none')
             WHERE ua.id = NEW.apartment_id;
+        END
+    `);
+
+    await exec(`DROP TRIGGER IF EXISTS trg_vr_sync_ua_ad`);
+    await pool.query(`
+        CREATE TRIGGER trg_vr_sync_ua_ad
+        AFTER DELETE ON verification_requests
+        FOR EACH ROW
+        BEGIN
+            UPDATE user_apartments ua SET verification_status = COALESCE((
+                SELECT CASE
+                    WHEN vr.status = 'pending' THEN 'pending'
+                    WHEN vr.status = 'approved' AND vr.doc_type = 'ownership' THEN 'ownership'
+                    WHEN vr.status = 'approved' THEN 'lease'
+                    WHEN vr.status = 'rejected' THEN 'rejected'
+                    ELSE 'none'
+                END
+                FROM verification_requests vr
+                WHERE vr.apartment_id = OLD.apartment_id
+                ORDER BY vr.submitted_at DESC
+                LIMIT 1
+            ), 'none')
+            WHERE ua.id = OLD.apartment_id;
         END
     `);
 
@@ -1703,7 +1742,7 @@ export async function migrate(): Promise<void> {
                 JOIN user_apartments voter ON voter.id = NEW.apartment_id
                 LEFT JOIN user_apartments author_ua ON author_ua.id = v.author_apartment_id
                 WHERE v.id = NEW.vote_id
-                  AND v.moderation_status NOT IN ('cancelled')
+                  AND v.moderation_status = 'none'
                   AND v.closed = 0 AND v.ends_at > NOW()
                   AND LOWER(COALESCE(author_ua.building_key, v.building_key)) = LOWER(voter.building_key)
             ) THEN
@@ -1753,7 +1792,7 @@ export async function migrate(): Promise<void> {
                     JOIN user_apartments voter ON voter.id = NEW.apartment_id
                     LEFT JOIN user_apartments author_ua ON author_ua.id = v.author_apartment_id
                     WHERE v.id = NEW.vote_id
-                      AND v.moderation_status NOT IN ('cancelled')
+                      AND v.moderation_status = 'none'
                       AND v.closed = 0 AND v.ends_at > NOW()
                       AND LOWER(COALESCE(author_ua.building_key, v.building_key)) = LOWER(voter.building_key)
                 ) THEN
@@ -1795,7 +1834,46 @@ export async function migrate(): Promise<void> {
         await exec(`ALTER TABLE users DROP COLUMN notifications_last_seen_at`);
     }
 
-    await exec(`UPDATE neighbor_ads SET status = 'archived' WHERE status = 'published' AND expires_at <= NOW()`);
+    await runMaintenance();
+    await installMaintenanceEvents();
+
+    await exec(`ALTER TABLE appeals ADD INDEX IF NOT EXISTS idx_appeals_author_building (author_building_key, created_at DESC)`);
+    await exec(`ALTER TABLE appeals ADD INDEX IF NOT EXISTS idx_appeals_author_user (author_user_id, created_at DESC)`);
+
+    await exec(`UPDATE user_profiles SET phone = NULL WHERE phone IS NULL OR TRIM(phone) = ''`);
+    await exec(`ALTER TABLE user_profiles MODIFY phone VARCHAR(50) NULL DEFAULT NULL`);
+    await exec(`
+        UPDATE user_profiles p
+        JOIN (
+            SELECT phone, MIN(user_id) AS keep_uid
+            FROM user_profiles
+            WHERE phone IS NOT NULL
+            GROUP BY phone
+            HAVING COUNT(*) > 1
+        ) d ON p.phone = d.phone AND p.user_id <> d.keep_uid
+        SET p.phone = NULL
+    `);
+    await exec(`ALTER TABLE user_profiles DROP INDEX IF EXISTS uq_profile_phone`);
+    await exec(`ALTER TABLE user_profiles ADD UNIQUE KEY uq_profile_phone (phone)`);
+
+    await exec(`DROP TRIGGER IF EXISTS trg_buildings_normalize_bi`);
+    await pool.query(`
+        CREATE TRIGGER trg_buildings_normalize_bi
+        BEFORE INSERT ON buildings
+        FOR EACH ROW
+        BEGIN
+            SET NEW.building_key = LOWER(TRIM(NEW.building_key));
+        END
+    `);
+    await exec(`DROP TRIGGER IF EXISTS trg_buildings_normalize_bu`);
+    await pool.query(`
+        CREATE TRIGGER trg_buildings_normalize_bu
+        BEFORE UPDATE ON buildings
+        FOR EACH ROW
+        BEGIN
+            SET NEW.building_key = LOWER(TRIM(NEW.building_key));
+        END
+    `);
 
     console.log("Migration complete");
 }

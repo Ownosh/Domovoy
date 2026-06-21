@@ -82,7 +82,7 @@ export function ProfileScreen({ navigation }: Props) {
                 {
                     icon: "archive-outline",
                     title: "Архив",
-                    subtitle: "Завершённые обращения",
+                    subtitle: "Обращения, голосования и объявления",
                     iconColor: colors.textMuted,
                     iconBg: "rgba(154, 165, 181, 0.12)",
                     target: "AppealHistory",

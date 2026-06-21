@@ -67,6 +67,8 @@ export type ProfileStackParamList = {
     DeleteAccount: undefined;
     AppealHistory: undefined;
     AppealHistoryDetail: { id: string };
+    NeighborAdDetail: { id: string };
+    VoteDetail: { id: string };
     NotificationSettings: undefined;
     Contacts: undefined;
     HouseChat: undefined;

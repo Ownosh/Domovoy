@@ -1,4 +1,4 @@
-import type { Appeal, Vote, NeighborAd, VoteStatus, NeighborAdStatus } from "../types";
+import type { Appeal, Vote, NeighborAd, VoteStatus, NeighborAdStatus, VoteCast } from "../types";
 
 const HOUR_MS = 60 * 60 * 1000;
 const ARCHIVE_HOURS = 24;
@@ -17,6 +17,15 @@ export function adEffectiveStatus(ad: NeighborAd): NeighborAdStatus {
     return "published";
 }
 
+export function isArchivedVote(vote: Vote): boolean {
+    const status = voteEffectiveStatus(vote);
+    return status === "completed" || status === "cancelled";
+}
+
+export function isArchivedNeighborAd(ad: NeighborAd): boolean {
+    return ad.archived || adEffectiveStatus(ad) === "archived";
+}
+
 /** Порог квартир в подъезде для массовой жалобы. */
 export const MASS_APPEAL_THRESHOLD = 5;
 
@@ -31,6 +40,20 @@ export function isArchivedAppeal(appeal: Appeal): boolean {
     const baseMs = new Date(baseDate).getTime();
     if (Number.isNaN(baseMs)) return false;
     return Date.now() - baseMs >= ARCHIVE_HOURS * HOUR_MS;
+}
+
+/** Пользователь — автор или участник коллективного обращения. */
+export function userInCollectiveAppeal(appeal: Appeal, userId: string): boolean {
+    if (appeal.kind !== "collective") return false;
+    const uid = String(userId);
+    if (String(appeal.authorUserId) === uid) return true;
+    return appeal.participants.some((p) => String(p.userId) === uid);
+}
+
+/** Пользователь проголосовал в этом голосовании (любая его квартира). */
+export function userParticipatedInVote(voteId: string, voteCasts: VoteCast[], userId: string): boolean {
+    const uid = String(userId);
+    return voteCasts.some((c) => c.voteId === voteId && String(c.userId) === uid);
 }
 
 function normApt(s: string): string {

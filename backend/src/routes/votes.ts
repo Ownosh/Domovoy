@@ -362,6 +362,8 @@ router.post("/:id/cast", requireAuth, async (req: AuthRequest, res) => {
         if (!vote) return res.status(404).json({ error: "Голосование не найдено" });
         if (vote.moderation_status === "cancelled")
             return res.status(400).json({ error: "Голосование отменено" });
+        if (vote.moderation_status === "under_review")
+            return res.status(400).json({ error: "Голосование на проверке" });
         if (vote.closed || new Date(vote.ends_at as string) <= new Date())
             return res.status(400).json({ error: "Срок голосования истёк" });
 

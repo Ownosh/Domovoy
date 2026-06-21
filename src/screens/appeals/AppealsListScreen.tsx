@@ -12,15 +12,7 @@ import {
     View,
 } from "react-native";
 import { AppealStatusBadge, VoteStatusBadge, AdStatusBadge, appealStatusColor, voteStatusColor, adStatusColor, Card, NotificationBell, ScreenLayout } from "../../components/ui";
-import { voteEffectiveStatus, adEffectiveStatus } from "../../utils/appeals";
-import { APPEAL_CATEGORY_LABELS } from "../../constants/appealCategories";
-import type {
-    AppealsStackParamList,
-    MainTabNavigationProp,
-} from "../../navigation/types";
-import { buildBuildingKey } from "../../utils/buildingKey";
-import { colors, radius, spacing, textStyles } from "../../theme";
-import { isArchivedAppeal } from "../../utils/appeals";
+import { voteEffectiveStatus, adEffectiveStatus, isArchivedAppeal, isArchivedNeighborAd, isArchivedVote } from "../../utils/appeals";
 import type { Appeal, NeighborAd, Vote } from "../../types";
 
 type Nav = NativeStackNavigationProp<AppealsStackParamList>;
@@ -177,14 +169,15 @@ export function AppealsListScreen() {
             (v) =>
                 v.buildingKey.toLowerCase() === bkLower &&
                 v.sponsor === "residents" &&
-                v.userId === uid,
+                v.userId === uid &&
+                !isArchivedVote(v),
         );
     }, [votes, bkLower, uid]);
 
     const myAds = useMemo(() => {
         if (!uid) return [];
         return neighborAds.filter(
-            (a) => a.authorUserId === uid && a.buildingKey.toLowerCase() === bkLower && !a.archived,
+            (a) => a.authorUserId === uid && a.buildingKey.toLowerCase() === bkLower && !isArchivedNeighborAd(a),
         );
     }, [neighborAds, bkLower, uid]);
 

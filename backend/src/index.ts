@@ -5,6 +5,7 @@ import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import path from "path";
 import { migrate } from "./db/migrate";
+import { startMaintenanceScheduler } from "./db/maintenance";
 import authRoutes from "./routes/auth";
 import buildingsRoutes from "./routes/buildings";
 import newsRoutes from "./routes/news";
@@ -57,6 +58,7 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 
 migrate()
     .then(() => {
+        startMaintenanceScheduler();
         app.listen(PORT, () => console.log(`Server running on :${PORT}`));
     })
     .catch((err) => {

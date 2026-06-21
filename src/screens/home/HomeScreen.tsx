@@ -15,7 +15,7 @@ import {
 
 import { AppealStatusBadge, VoteStatusBadge, AdStatusBadge, Card, FeedAuthorRow, ScreenLayout } from "../../components/ui";
 import { appealStatusColor, voteStatusColor, adStatusColor } from "../../components/ui/StatusBadge";
-import { voteEffectiveStatus, adEffectiveStatus } from "../../utils/appeals";
+import { voteEffectiveStatus, adEffectiveStatus, isArchivedAppeal, isArchivedNeighborAd, isArchivedVote } from "../../utils/appeals";
 import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type {
     AuthenticatedRootParamList,
@@ -24,7 +24,6 @@ import type {
 } from "../../navigation/types";
 import type { Appeal, NeighborAd, NewsItem, Vote } from "../../types";
 import { buildBuildingKey } from "../../utils/buildingKey";
-import { isArchivedAppeal } from "../../utils/appeals";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { colors, radius, spacing, textStyles } from "../../theme";
 
@@ -174,12 +173,12 @@ export function HomeScreen() {
     );
 
     const houseAds = useMemo(
-        () => neighborAds.filter((a) => a.buildingKey.toLowerCase() === bkLower && !a.archived),
+        () => neighborAds.filter((a) => a.buildingKey.toLowerCase() === bkLower && !isArchivedNeighborAd(a)),
         [neighborAds, bkLower],
     );
 
     const houseVotes = useMemo(
-        () => votes.filter((v) => v.buildingKey.toLowerCase() === bkLower),
+        () => votes.filter((v) => v.buildingKey.toLowerCase() === bkLower && !isArchivedVote(v)),
         [votes, bkLower],
     );
 

@@ -10,7 +10,7 @@ export function VoteCreateInfoScreen({ navigation }: Props) {
     return (
         <ScreenLayout
             title="Новое голосование"
-            subtitle="Как инициировать опрос собственников"
+            subtitle="Как инициировать голосование собственников"
             onBack={() => navigation.goBack()}
         >
             <Card>
@@ -20,7 +20,7 @@ export function VoteCreateInfoScreen({ navigation }: Props) {
                     инициативную группу с подписным листом.
                 </Text>
                 <Text style={[textStyles.body, styles.p]}>
-                    В приложении вы участвуете в уже открытых опросах. Чтобы поднять тему,
+                    В приложении вы участвуете в уже открытых голосованиях. Чтобы поднять тему,
                     создайте обращение в разделе «Обращения» с категорией, близкой к вашему
                     вопросу, или свяжитесь с УК через контакты в профиле.
                 </Text>

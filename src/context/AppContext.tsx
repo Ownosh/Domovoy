@@ -1315,7 +1315,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 return {
                     ok: false,
                     reason: state.verification.status === "approved" && state.verification.docType === "lease"
-                        ? "Голосование доступно только собственникам жилья. Арендаторы не имеют права голоса на ОСС (ЖК РФ ст. 48)."
+                        ? "В голосованиях могут участвовать только собственники с подтверждённым правом собственности."
                         : "Голосование доступно после подтверждения статуса жильца в разделе «Верификация»",
                 };
             }
@@ -1335,20 +1335,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ) {
                 return { ok: false, reason: "Некорректный вариант" };
             }
-            const areaSqm =
-                state.account.profile.apartmentAreaSqm &&
-                state.account.profile.apartmentAreaSqm > 0
-                    ? state.account.profile.apartmentAreaSqm
-                    : 42;
             const cast = {
                 voteId: input.voteId,
                 userId: String(state.account.user.id),
                 optionId: input.optionId,
                 votedAt: new Date().toISOString(),
-                areaSqm,
             };
             dispatch({ type: "CAST_VOTE", payload: cast });
-            apiCastVote({ voteId: input.voteId, optionId: input.optionId, areaSqm }).catch(() => {});
+            apiCastVote({ voteId: input.voteId, optionId: input.optionId }).catch(() => {});
             return { ok: true };
         },
         [state.account, state.verification, state.votes],
@@ -1365,7 +1359,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 return {
                     ok: false,
                     reason:
-                        "Создавать опросы могут жильцы с подтверждённой верификацией. Для юридически значимого ОСС действует отдельная процедура (ГИС ЖКХ, УК).",
+                        "Создавать голосования могут жильцы с подтверждённой верификацией.",
                 };
             }
             const topic = input.topic.trim();

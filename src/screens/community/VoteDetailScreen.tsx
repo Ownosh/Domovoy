@@ -155,7 +155,7 @@ export function VoteDetailScreen({ route }: Props) {
 
                 {vote.trial && (
                     <Text style={[textStyles.caption, { color: colors.accent, marginTop: spacing.xs }]}>
-                        Пробный пример — результат не является протоколом ОСС
+                        Пробный пример — не влияет на реальные решения дома
                     </Text>
                 )}
             </Card>

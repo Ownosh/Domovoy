@@ -58,7 +58,7 @@ export function VoteNewScreen({ navigation, route }: Props) {
         setModeration(null);
         Alert.alert(
             "Голосование создано",
-            "Оно появится в ленте дома. Напоминаем: для юридически значимого ОСС используется официальная процедура и ГИС ЖКХ.",
+            "Оно появится в ленте дома.",
             [{ text: "OK", onPress: () => navigation.goBack() }],
         );
     };
@@ -200,7 +200,7 @@ export function VoteNewScreen({ navigation, route }: Props) {
                     style={styles.submitBtn}
                 />
             </Card>
-            <CollapsibleHint text="Укажите тему, пояснение и варианты ответа (от 2 до 4). Создавать опрос могут жильцы с подтверждённой верификацией; вес по площади берётся из профиля. Это не заменяет официальное ОСС." defaultOpen={false} />
+            <CollapsibleHint text="Укажите тему, пояснение и варианты ответа (от 2 до 4). Создавать голосования могут жильцы с подтверждённой верификацией. Каждая квартира — один голос." defaultOpen={false} />
         </ScreenLayout>
     );
 }

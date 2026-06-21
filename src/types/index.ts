@@ -53,7 +53,7 @@ export type Profile = {
     apartment: string;
     /** Номер подъезда */
     entrance?: number;
-    /** Площадь квартиры, м² — для веса голоса на ОСС */
+    /** Площадь квартиры, м² */
     apartmentAreaSqm?: number;
     profilePhoto?: string;
 };
@@ -227,7 +227,7 @@ export type VoteVisibility = "open" | "secret";
 
 export type VoteOption = { id: string; label: string };
 
-/** Кто инициировал опрос в ленте дома */
+/** Кто инициировал голосование в ленте дома */
 export type VoteSponsor = "uk" | "residents";
 
 export type Vote = {
@@ -266,7 +266,6 @@ export type VoteCast = {
     userId: string;
     optionId: string;
     votedAt: string;
-    areaSqm: number;
 };
 
 /** Идентификаторы тегов «что не понравилось» при оценке ≤3 звёзд */

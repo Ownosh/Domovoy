@@ -34,6 +34,21 @@ export async function getActiveBuildingKey(userId: number): Promise<string | nul
 }
 
 // Подтверждён ли пользователь как собственник квартиры (verification_requests.doc_type = 'ownership')
+/** Дом голосования: из квартиры автора или building_key (голосование УК без автора). */
+export const VOTE_BUILDING_KEY_EXPR = `COALESCE(author_ua.building_key, v.building_key)`;
+
+export function voteEffectiveStatus(row: {
+    moderation_status?: string;
+    closed: boolean | number;
+    ends_at: Date | string;
+}): string {
+    const mod = row.moderation_status ?? "none";
+    if (mod === "under_review") return "under_review";
+    if (mod === "cancelled") return "cancelled";
+    if (Boolean(row.closed) || new Date(row.ends_at) <= new Date()) return "completed";
+    return "active";
+}
+
 export async function isApartmentOwner(apartmentId: number): Promise<boolean> {
     const [[verif]] = await pool.query<RowDataPacket[]>(
         `SELECT doc_type FROM verification_requests

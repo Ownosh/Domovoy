@@ -31,10 +31,9 @@ export async function apiDeleteVote(id: string): Promise<void> {
 export async function apiCastVote(data: {
     voteId: string;
     optionId: string;
-    areaSqm: number;
 }): Promise<void> {
     await apiRequest(`/votes/${data.voteId}/cast`, {
         method: "POST",
-        body: JSON.stringify({ optionId: data.optionId, areaSqm: data.areaSqm }),
+        body: JSON.stringify({ optionId: data.optionId }),
     });
 }

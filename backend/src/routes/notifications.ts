@@ -6,26 +6,30 @@ import { getActiveBuildingKey } from "../db/helpers";
 
 const router = Router();
 
+function notificationScopeSql(buildingKey: string | null): { sql: string; params: string[] } {
+    return {
+        sql: `(n.building_key IS NULL OR LOWER(n.building_key) = LOWER(?))`,
+        params: [buildingKey ?? ""],
+    };
+}
+
 // GET /api/notifications
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     try {
         const buildingKey = await getActiveBuildingKey(userId);
-
-        const [[u]] = await pool.query<RowDataPacket[]>(
-            `SELECT notifications_last_seen_at FROM users WHERE id = ?`,
-            [userId],
-        );
-        const lastSeen = u?.notifications_last_seen_at as Date | null | undefined;
+        const scope = notificationScopeSql(buildingKey);
 
         const [rows] = await pool.query<RowDataPacket[]>(
-            `SELECT n.id, n.title, n.body, n.type, n.created_at
+            `SELECT n.id, n.title, n.body, n.type, n.created_at,
+                    (unr.notification_id IS NOT NULL) AS is_read
              FROM notifications n
-             WHERE n.building_key IS NULL
-                OR LOWER(n.building_key) = LOWER(?)
+             LEFT JOIN user_notification_reads unr
+                ON unr.notification_id = n.id AND unr.user_id = ?
+             WHERE ${scope.sql}
              ORDER BY n.created_at DESC
              LIMIT 100`,
-            [buildingKey ?? ""],
+            [userId, ...scope.params],
         );
 
         return res.json(rows.map((r) => ({
@@ -34,7 +38,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
             body: String(r.body),
             type: r.type as string,
             date: (r.created_at as Date).toISOString(),
-            read: lastSeen ? (r.created_at as Date) <= lastSeen : false,
+            read: Boolean(r.is_read),
         })));
     } catch (err) {
         console.error("[notifications GET]", err);
@@ -48,22 +52,21 @@ router.post("/:id/read", requireAuth, async (req: AuthRequest, res) => {
     const notifId = Number(req.params.id);
     if (!notifId || isNaN(notifId)) return res.status(400).json({ error: "Некорректный id" });
     try {
+        const buildingKey = await getActiveBuildingKey(userId);
+        const scope = notificationScopeSql(buildingKey);
+
         const [[exists]] = await pool.query<RowDataPacket[]>(
-            `SELECT id, created_at FROM notifications WHERE id = ?`, [notifId],
+            `SELECT n.id FROM notifications n
+             WHERE n.id = ? AND ${scope.sql}`,
+            [notifId, ...scope.params],
         );
         if (!exists) return res.status(404).json({ error: "Уведомление не найдено" });
 
-        const createdAt = exists.created_at as Date;
         await pool.execute(
-            `UPDATE users
-             SET notifications_last_seen_at =
-                CASE
-                    WHEN notifications_last_seen_at IS NULL THEN ?
-                    WHEN notifications_last_seen_at < ? THEN ?
-                    ELSE notifications_last_seen_at
-                END
-             WHERE id = ?`,
-            [createdAt, createdAt, createdAt, userId],
+            `INSERT INTO user_notification_reads (user_id, notification_id, read_at)
+             VALUES (?, ?, NOW())
+             ON DUPLICATE KEY UPDATE read_at = read_at`,
+            [userId, notifId],
         );
         return res.json({ ok: true });
     } catch (err) {
@@ -76,9 +79,16 @@ router.post("/:id/read", requireAuth, async (req: AuthRequest, res) => {
 router.post("/read-all", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     try {
+        const buildingKey = await getActiveBuildingKey(userId);
+        const scope = notificationScopeSql(buildingKey);
+
         await pool.execute(
-            `UPDATE users SET notifications_last_seen_at = NOW() WHERE id = ?`,
-            [userId],
+            `INSERT INTO user_notification_reads (user_id, notification_id, read_at)
+             SELECT ?, n.id, NOW()
+             FROM notifications n
+             WHERE ${scope.sql}
+             ON DUPLICATE KEY UPDATE read_at = VALUES(read_at)`,
+            [userId, ...scope.params],
         );
         return res.json({ ok: true });
     } catch (err) {

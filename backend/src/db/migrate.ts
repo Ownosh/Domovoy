@@ -1,9 +1,43 @@
 import { pool } from "./client";
 import { RowDataPacket } from "mysql2";
 
-// Выполнить запрос, игнорируя ошибку (для идемпотентных ALTER на существующих БД)
+// Идемпотентный ALTER: ожидаемые ошибки (уже есть колонка/FK) — только warn
 async function exec(sql: string): Promise<void> {
-    await pool.query(sql).catch(() => {});
+    await pool.query(sql).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn("[migrate] skipped:", msg);
+    });
+}
+
+const DISTRICT_LAYER_SEED: [string, string][] = [
+    ["schools_daycare", "Школы и детсады"],
+    ["clinic_pharmacy", "Клиники и аптеки"],
+    ["grocery", "Продукты"],
+    ["parks", "Парки"],
+    ["bus_stops_city", "Остановки (город)"],
+    ["parking_city", "Парковки (город)"],
+    ["waste_yard", "Площадки ТКО"],
+    ["bus_stops_house", "Остановки (дом)"],
+    ["parking_house", "Парковки (дом)"],
+];
+
+const ADMIN_FK_LINKS: { table: string; column: string; fk: string; index: string }[] = [
+    { table: "notifications", column: "created_by_admin_id", fk: "fk_notif_admin", index: "idx_notif_admin" },
+    { table: "verification_requests", column: "reviewed_by_admin_id", fk: "fk_vr_admin", index: "idx_vr_admin" },
+    { table: "appeals", column: "handled_by_admin_id", fk: "fk_appeals_admin", index: "idx_appeals_admin" },
+    { table: "news", column: "created_by_admin_id", fk: "fk_news_admin", index: "idx_news_admin" },
+    { table: "users", column: "blocked_by_admin_id", fk: "fk_users_blocked_admin", index: "idx_users_blocked_admin" },
+];
+
+async function seedDistrictLayers(): Promise<void> {
+    for (const [layerId, title] of DISTRICT_LAYER_SEED) {
+        await pool
+            .execute(`INSERT IGNORE INTO district_layers (layer_id, title) VALUES (?, ?)`, [layerId, title])
+            .catch((err: unknown) => {
+                const msg = err instanceof Error ? err.message : String(err);
+                console.warn("[migrate] district_layers seed skipped:", msg);
+            });
+    }
 }
 
 async function columnExists(table: string, column: string): Promise<boolean> {
@@ -78,7 +112,6 @@ export async function migrate(): Promise<void> {
             notif_meetings      TINYINT(1) NOT NULL DEFAULT 1,
             notif_announcements TINYINT(1) NOT NULL DEFAULT 1,
             notif_general       TINYINT(1) NOT NULL DEFAULT 1,
-            notifications_last_seen_at DATETIME NULL,
             created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
@@ -86,7 +119,6 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
     await exec(`ALTER TABLE users MODIFY COLUMN password_hash VARCHAR(255) NOT NULL`);
-    await exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_last_seen_at DATETIME NULL`);
 
     // ============================================================
     //  КВАРТИРЫ ПОЛЬЗОВАТЕЛЯ + ПРОФИЛЬ
@@ -113,6 +145,10 @@ export async function migrate(): Promise<void> {
     `);
     // Старые установки могли создать таблицу без UNIQUE по (user_id, building_key, apartment)
     await exec(`ALTER TABLE user_apartments ADD CONSTRAINT uq_ua_user_building_apt UNIQUE (user_id, building_key, apartment)`);
+    await exec(`ALTER TABLE user_apartments DROP FOREIGN KEY fk_ua_building`);
+    await exec(
+        `ALTER TABLE user_apartments ADD CONSTRAINT fk_ua_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`,
+    );
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS user_profiles (
@@ -208,7 +244,7 @@ export async function migrate(): Promise<void> {
     `);
 
     // verification_photos — см. раздел фото ниже
-    // когда уже созданы все таблицы-владельцы для внешних ключей.
+    // verification_pending_apartments + generated column — см. блок «СТРОГАЯ НФ» ниже
 
     // --- Миграция старых установок verification_requests (user_id/building_key -> apartment_id) ---
     if (await tableExists("verification_requests") && await columnExists("verification_requests", "user_id")) {
@@ -249,36 +285,7 @@ export async function migrate(): Promise<void> {
         await exec(`ALTER TABLE verification_requests ADD INDEX idx_vr_status (status)`);
     }
 
-    // Гарантия на уровне БД: не более одной активной (pending) заявки на квартиру.
-    // Частичные индексы MySQL/MariaDB не поддерживает, поэтому используем
-    // сохраняемый генерируемый столбец (pending => apartment_id, иначе NULL) + UNIQUE.
-    if (!(await columnExists("verification_requests", "pending_apartment_id"))) {
-        // Сначала закрываем уже существующие дубли pending, оставляя самую свежую заявку
-        await exec(`
-            UPDATE verification_requests vr
-            JOIN (
-                SELECT apartment_id, MAX(id) AS keep_id
-                FROM verification_requests
-                WHERE status = 'pending'
-                GROUP BY apartment_id
-                HAVING COUNT(*) > 1
-            ) d ON d.apartment_id = vr.apartment_id
-               AND vr.status = 'pending'
-               AND vr.id <> d.keep_id
-            SET vr.status = 'rejected',
-                vr.comment = COALESCE(vr.comment, 'Закрыта автоматически: дубликат заявки')
-        `);
-        await exec(`
-            ALTER TABLE verification_requests
-              ADD COLUMN pending_apartment_id BIGINT UNSIGNED
-                AS (IF(status = 'pending', apartment_id, NULL)) STORED
-        `);
-        await exec(`ALTER TABLE verification_requests ADD UNIQUE KEY uq_vr_pending_apartment (pending_apartment_id)`);
-    }
-
-    // ============================================================
-    //  УК — КОНТАКТЫ ДОМА
-    // ============================================================
+    // verification_photos — см. раздел фото ниже
 
     // management_companies — одна УК может обслуживать несколько домов (buildings.management_company_id)
     await pool.query(`
@@ -374,8 +381,17 @@ export async function migrate(): Promise<void> {
     await exec(`ALTER TABLE notifications DROP FOREIGN KEY fk_notif_building`);
     await exec(`ALTER TABLE notifications ADD CONSTRAINT fk_notif_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
 
-    // user_notification_reads заменены на users.notifications_last_seen_at
-    await exec(`DROP TABLE IF EXISTS user_notification_reads`);
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS user_notification_reads (
+            user_id         BIGINT UNSIGNED NOT NULL,
+            notification_id BIGINT UNSIGNED NOT NULL,
+            read_at         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, notification_id),
+            CONSTRAINT fk_unr_user FOREIGN KEY (user_id)         REFERENCES users(id)          ON DELETE CASCADE,
+            CONSTRAINT fk_unr_notif FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE,
+            INDEX idx_unr_notification (notification_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
 
     // ============================================================
     //  ОБРАЩЕНИЯ
@@ -513,10 +529,14 @@ export async function migrate(): Promise<void> {
     await exec(`ALTER TABLE appeal_participants MODIFY COLUMN photo_uri TEXT DEFAULT NULL`);
     await exec(`ALTER TABLE appeal_participants MODIFY COLUMN entrance INT DEFAULT NULL`);
     await exec(`ALTER TABLE appeal_participants ADD COLUMN IF NOT EXISTS apartment_id BIGINT UNSIGNED DEFAULT NULL`);
+    // building_key в appeals уже удалён — дом берём через квартиру автора обращения
     await exec(`
         UPDATE appeal_participants ap
         JOIN appeals a ON a.id = ap.appeal_id
-        JOIN user_apartments ua ON ua.user_id = ap.user_id AND ua.building_key = a.building_key AND ua.apartment = ap.apartment
+        JOIN user_apartments author_ua ON author_ua.id = a.author_apartment_id
+        JOIN user_apartments ua ON ua.user_id = ap.user_id
+            AND ua.building_key = author_ua.building_key
+            AND ua.apartment = ap.apartment
         SET ap.apartment_id = ua.id
         WHERE ap.apartment_id IS NULL
     `);
@@ -620,9 +640,10 @@ export async function migrate(): Promise<void> {
         await exec(`ALTER TABLE neighbor_ads DROP COLUMN pending_moderation`);
         await exec(`ALTER TABLE neighbor_ads DROP COLUMN archived`);
     }
+    await exec(`UPDATE neighbor_ads SET status = 'published' WHERE status = 'new'`);
     await exec(`
         ALTER TABLE neighbor_ads MODIFY COLUMN status
-        ENUM('new','under_review','published','archived','rejected','under_review_appeal')
+        ENUM('under_review','published','archived','rejected','under_review_appeal')
         NOT NULL DEFAULT 'published'
     `);
     await exec(`ALTER TABLE neighbor_ads ADD INDEX idx_na_status (status)`);
@@ -670,7 +691,7 @@ export async function migrate(): Promise<void> {
     await exec(`UPDATE votes SET status = 'active' WHERE status = 'new'`);
     await exec(`
         ALTER TABLE votes MODIFY COLUMN status
-        ENUM('new','under_review','active','completed','cancelled')
+        ENUM('under_review','active','completed','cancelled')
         NOT NULL DEFAULT 'active'
     `);
     await exec(`ALTER TABLE votes ADD INDEX idx_votes_status (status)`);
@@ -782,6 +803,16 @@ export async function migrate(): Promise<void> {
         await exec(`ALTER TABLE environment_ratings DROP COLUMN feedback_tags`);
     }
 
+    await exec(
+        `ALTER TABLE environment_ratings MODIFY COLUMN courtyard_stars TINYINT NOT NULL CHECK (courtyard_stars BETWEEN 1 AND 5)`,
+    );
+    await exec(
+        `ALTER TABLE environment_ratings MODIFY COLUMN entrance_stars TINYINT NOT NULL CHECK (entrance_stars BETWEEN 1 AND 5)`,
+    );
+    await exec(
+        `ALTER TABLE environment_ratings MODIFY COLUMN uk_stars TINYINT NOT NULL CHECK (uk_stars BETWEEN 1 AND 5)`,
+    );
+
     // Старые установки: одна оценка в месяц на пользователя суммарно — расширяем до «на дом»
     if (await columnExists("environment_ratings", "month_key") && await columnExists("environment_ratings", "user_id")) {
         await exec(`ALTER TABLE environment_ratings DROP INDEX uq_er_user_month`);
@@ -792,8 +823,15 @@ export async function migrate(): Promise<void> {
     //  РАЙОН (КАРТА)
     // ============================================================
 
-    // district_layers удалены — метаданные слоёв фиксированы на клиенте/сервере (VALID_LAYER_IDS)
-    await exec(`DROP TABLE IF EXISTS district_layers`);
+    // district_layers — справочник слоёв карты района
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS district_layers (
+            layer_id VARCHAR(40)  NOT NULL,
+            title    VARCHAR(255) NOT NULL DEFAULT '',
+            PRIMARY KEY (layer_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    await seedDistrictLayers();
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS district_pois (
@@ -821,15 +859,19 @@ export async function migrate(): Promise<void> {
     // Старые установки: layer_id был ENUM — переводим на VARCHAR
     await exec(`ALTER TABLE district_pois MODIFY COLUMN layer_id VARCHAR(40) NOT NULL`);
     await exec(`ALTER TABLE district_pois DROP FOREIGN KEY fk_dp_layer`);
+    await exec(`DELETE FROM district_pois WHERE layer_id NOT IN (
+        'schools_daycare','clinic_pharmacy','grocery','parks',
+        'bus_stops_city','parking_city','waste_yard','bus_stops_house','parking_house'
+    )`);
+    await exec(
+        `ALTER TABLE district_pois ADD CONSTRAINT fk_dp_layer FOREIGN KEY (layer_id) REFERENCES district_layers(layer_id) ON UPDATE CASCADE`,
+    );
 
     // ============================================================
     //  АДМИНКА И PUSH-ТОКЕНЫ
     // ============================================================
 
-    // Администраторы. Ролевая модель: admin (полный доступ) и moderator
-    // (новости, уведомления, обработка жалоб, модерация контента).
-    // Управление администраторами и проверки прав реализованы в админ-панели,
-    // здесь поддерживается только согласованность схемы общей БД.
+    // Администраторы (отдельно от users). admin — все дома; moderator — свой дом (building_key).
     await pool.query(`
         CREATE TABLE IF NOT EXISTS admin_users (
             id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -837,6 +879,7 @@ export async function migrate(): Promise<void> {
             password_hash VARCHAR(255)    NOT NULL,
             full_name     VARCHAR(255)    NOT NULL DEFAULT '',
             role          ENUM('admin','moderator') NOT NULL DEFAULT 'admin',
+            building_key  VARCHAR(120)    DEFAULT NULL COMMENT 'moderator: дом; admin: NULL = все дома',
             is_active     TINYINT(1)      NOT NULL DEFAULT 1,
             created_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -846,29 +889,20 @@ export async function migrate(): Promise<void> {
     `);
     await exec(`ALTER TABLE admin_users MODIFY COLUMN password_hash VARCHAR(255) NOT NULL`);
     await exec(`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS role ENUM('admin','moderator') NOT NULL DEFAULT 'admin'`);
-
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS admin_user_permissions (
-            admin_user_id BIGINT UNSIGNED NOT NULL,
-            permission    VARCHAR(64)     NOT NULL,
-            PRIMARY KEY (admin_user_id, permission),
-            CONSTRAINT fk_aup_admin FOREIGN KEY (admin_user_id) REFERENCES admin_users(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    `);
+    await exec(`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS building_key VARCHAR(120) DEFAULT NULL COMMENT 'moderator: дом; admin: NULL = все дома'`);
+    await exec(`ALTER TABLE admin_users DROP FOREIGN KEY fk_admin_users_building`);
+    await exec(`ALTER TABLE admin_users ADD CONSTRAINT fk_admin_users_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
+    await exec(`ALTER TABLE admin_users ADD INDEX idx_admin_users_building (building_key)`);
 
     // Связи admin_users с сущностями, которые создаёт/обрабатывает админка
-    const adminFkLinks: [string, string][] = [
-        ["notifications", "created_by_admin_id"],
-        ["verification_requests", "reviewed_by_admin_id"],
-        ["appeals", "handled_by_admin_id"],
-        ["news", "created_by_admin_id"],
-        ["users", "blocked_by_admin_id"],
-    ];
-    for (const [table, column] of adminFkLinks) {
+    for (const { table, column, fk, index } of ADMIN_FK_LINKS) {
         await exec(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} BIGINT UNSIGNED DEFAULT NULL`);
-        await exec(`ALTER TABLE ${table} ADD INDEX idx_${table}_${column} (${column})`);
+        await exec(`ALTER TABLE ${table} DROP FOREIGN KEY fk_${table}_${column}`);
+        await exec(`ALTER TABLE ${table} DROP FOREIGN KEY ${fk}`);
+        await exec(`ALTER TABLE ${table} DROP INDEX idx_${table}_${column}`);
+        await exec(`ALTER TABLE ${table} ADD INDEX ${index} (${column})`);
         await exec(
-            `ALTER TABLE ${table} ADD CONSTRAINT fk_${table}_${column} FOREIGN KEY (${column}) REFERENCES admin_users(id) ON DELETE SET NULL`,
+            `ALTER TABLE ${table} ADD CONSTRAINT ${fk} FOREIGN KEY (${column}) REFERENCES admin_users(id) ON DELETE SET NULL`,
         );
     }
 
@@ -1220,35 +1254,251 @@ export async function migrate(): Promise<void> {
     }
 
     if (await columnExists("admin_users", "permissions")) {
-        const [permRows] = await pool.query<RowDataPacket[]>(
-            `SELECT id, permissions FROM admin_users WHERE permissions IS NOT NULL`,
-        );
-        for (const row of permRows) {
-            let perms: unknown;
-            try {
-                const raw = row.permissions;
-                perms = typeof raw === "string" ? JSON.parse(raw) : raw;
-            } catch {
-                continue;
-            }
-            const keys: string[] = [];
-            if (Array.isArray(perms)) {
-                for (const p of perms) if (typeof p === "string" && p) keys.push(p);
-            } else if (perms && typeof perms === "object") {
-                for (const [k, v] of Object.entries(perms as Record<string, unknown>)) {
-                    if (v) keys.push(k);
-                }
-            }
-            for (const key of keys) {
-                await pool
-                    .execute(
-                        `INSERT IGNORE INTO admin_user_permissions (admin_user_id, permission) VALUES (?, ?)`,
-                        [row.id, key.slice(0, 64)],
-                    )
-                    .catch(() => {});
-            }
-        }
         await exec(`ALTER TABLE admin_users DROP COLUMN permissions`);
+    }
+
+    // neighbor_ads: author_apartment_id вместо author_user_id + building_key
+    if (!(await columnExists("neighbor_ads", "author_apartment_id"))) {
+        await exec(`ALTER TABLE neighbor_ads ADD COLUMN author_apartment_id BIGINT UNSIGNED DEFAULT NULL`);
+    }
+    if (await columnExists("neighbor_ads", "author_user_id")) {
+        await exec(`
+            UPDATE neighbor_ads na
+            JOIN user_profiles up ON up.user_id = na.author_user_id
+            JOIN user_apartments ua ON ua.id = up.active_apartment_id AND ua.building_key = na.building_key
+            SET na.author_apartment_id = ua.id
+            WHERE na.author_apartment_id IS NULL
+        `);
+        await exec(`
+            UPDATE neighbor_ads na
+            JOIN user_apartments ua ON ua.user_id = na.author_user_id AND ua.building_key = na.building_key
+            SET na.author_apartment_id = (
+                SELECT MIN(ua2.id) FROM user_apartments ua2
+                WHERE ua2.user_id = na.author_user_id AND ua2.building_key = na.building_key
+            )
+            WHERE na.author_apartment_id IS NULL
+        `);
+        await exec(`DELETE FROM neighbor_ads WHERE author_apartment_id IS NULL`);
+        await exec(`ALTER TABLE neighbor_ads DROP FOREIGN KEY fk_na_user`);
+        await exec(`ALTER TABLE neighbor_ads DROP FOREIGN KEY fk_na_building`);
+        await exec(`ALTER TABLE neighbor_ads DROP INDEX idx_na_author_created`);
+        await exec(`ALTER TABLE neighbor_ads DROP INDEX idx_na_building_created`);
+        await exec(`ALTER TABLE neighbor_ads DROP COLUMN author_user_id`);
+        await exec(`ALTER TABLE neighbor_ads DROP COLUMN building_key`);
+        await exec(`ALTER TABLE neighbor_ads MODIFY COLUMN author_apartment_id BIGINT UNSIGNED NOT NULL`);
+        await exec(`ALTER TABLE neighbor_ads ADD CONSTRAINT fk_na_apartment FOREIGN KEY (author_apartment_id) REFERENCES user_apartments(id) ON DELETE CASCADE`);
+        await exec(`ALTER TABLE neighbor_ads ADD INDEX idx_na_apartment_created (author_apartment_id, created_at DESC)`);
+    }
+
+    // appeal_participants: user_id убираем, apartment_id обязателен
+    if (await columnExists("appeal_participants", "user_id")) {
+        await exec(`DELETE FROM appeal_participants WHERE apartment_id IS NULL`);
+        await exec(`ALTER TABLE appeal_participants DROP FOREIGN KEY fk_ap_user`);
+        await exec(`ALTER TABLE appeal_participants DROP INDEX uq_ap_appeal_user`);
+        await exec(`ALTER TABLE appeal_participants DROP COLUMN user_id`);
+        await exec(`ALTER TABLE appeal_participants MODIFY COLUMN apartment_id BIGINT UNSIGNED NOT NULL`);
+        await exec(`ALTER TABLE appeal_participants DROP FOREIGN KEY fk_ap_apartment`);
+        await exec(`ALTER TABLE appeal_participants ADD CONSTRAINT fk_ap_apartment FOREIGN KEY (apartment_id) REFERENCES user_apartments(id) ON DELETE CASCADE`);
+        await exec(`ALTER TABLE appeal_participants ADD UNIQUE KEY uq_ap_appeal_apartment (appeal_id, apartment_id)`);
+    }
+
+    // vote_casts: user_id убираем, apartment_id обязателен
+    if (await columnExists("vote_casts", "user_id")) {
+        await exec(`DELETE FROM vote_casts WHERE apartment_id IS NULL`);
+        await exec(`ALTER TABLE vote_casts DROP FOREIGN KEY fk_vc_user`);
+        await exec(`ALTER TABLE vote_casts DROP INDEX uq_vc_vote_user`);
+        await exec(`ALTER TABLE vote_casts DROP COLUMN user_id`);
+        await exec(`ALTER TABLE vote_casts MODIFY COLUMN apartment_id BIGINT UNSIGNED NOT NULL`);
+        await exec(`ALTER TABLE vote_casts DROP FOREIGN KEY fk_vc_apartment`);
+        await exec(`ALTER TABLE vote_casts ADD CONSTRAINT fk_vc_apartment FOREIGN KEY (apartment_id) REFERENCES user_apartments(id) ON DELETE CASCADE`);
+        await exec(`ALTER TABLE vote_casts ADD UNIQUE KEY uq_vc_vote_apartment (vote_id, apartment_id)`);
+    }
+
+    // votes: author_apartment_id вместо user_id
+    if (!(await columnExists("votes", "author_apartment_id"))) {
+        await exec(`ALTER TABLE votes ADD COLUMN author_apartment_id BIGINT UNSIGNED DEFAULT NULL`);
+    }
+    if (await columnExists("votes", "user_id")) {
+        await exec(`
+            UPDATE votes v
+            JOIN user_profiles up ON up.user_id = v.user_id
+            JOIN user_apartments ua ON ua.id = up.active_apartment_id AND ua.building_key = v.building_key
+            SET v.author_apartment_id = ua.id
+            WHERE v.user_id IS NOT NULL AND v.author_apartment_id IS NULL
+        `);
+        await exec(`
+            UPDATE votes v
+            JOIN user_apartments ua ON ua.user_id = v.user_id AND ua.building_key = v.building_key
+            SET v.author_apartment_id = (
+                SELECT MIN(ua2.id) FROM user_apartments ua2
+                WHERE ua2.user_id = v.user_id AND ua2.building_key = v.building_key
+            )
+            WHERE v.user_id IS NOT NULL AND v.author_apartment_id IS NULL
+        `);
+        await exec(`ALTER TABLE votes DROP FOREIGN KEY fk_votes_user`);
+        await exec(`ALTER TABLE votes DROP COLUMN user_id`);
+        await exec(`ALTER TABLE votes ADD CONSTRAINT fk_votes_author_apartment FOREIGN KEY (author_apartment_id) REFERENCES user_apartments(id) ON DELETE SET NULL`);
+    }
+
+    await seedDistrictLayers();
+
+    // permission_codes / admin_user_permissions заменены на role + building_key в admin_users
+    await exec(`DROP TABLE IF EXISTS admin_user_permissions`);
+    await exec(`DROP TABLE IF EXISTS permission_codes`);
+
+    // active_apartment_id должна принадлежать user_id профиля
+    await exec(`DROP TRIGGER IF EXISTS trg_up_active_apartment_bi`);
+    await exec(`DROP TRIGGER IF EXISTS trg_up_active_apartment_bu`);
+    await pool.query(`
+        CREATE TRIGGER trg_up_active_apartment_bi
+        BEFORE INSERT ON user_profiles
+        FOR EACH ROW
+        BEGIN
+            IF NEW.active_apartment_id IS NOT NULL AND NOT EXISTS (
+                SELECT 1 FROM user_apartments ua
+                WHERE ua.id = NEW.active_apartment_id AND ua.user_id = NEW.user_id
+            ) THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'active_apartment_id does not belong to user';
+            END IF;
+        END
+    `);
+    await pool.query(`
+        CREATE TRIGGER trg_up_active_apartment_bu
+        BEFORE UPDATE ON user_profiles
+        FOR EACH ROW
+        BEGIN
+            IF NEW.active_apartment_id IS NOT NULL AND NOT EXISTS (
+                SELECT 1 FROM user_apartments ua
+                WHERE ua.id = NEW.active_apartment_id AND ua.user_id = NEW.user_id
+            ) THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'active_apartment_id does not belong to user';
+            END IF;
+        END
+    `);
+
+    // ============================================================
+    //  СТРОГАЯ НФ + ЦЕЛОСТНОСТЬ
+    // ============================================================
+
+    if (await columnExists("votes", "status")) {
+        if (!(await columnExists("votes", "moderation_status"))) {
+            await exec(
+                `ALTER TABLE votes ADD COLUMN moderation_status ENUM('none','under_review','cancelled') NOT NULL DEFAULT 'none'`,
+            );
+            await exec(`UPDATE votes SET moderation_status = 'under_review' WHERE status = 'under_review'`);
+            await exec(`UPDATE votes SET moderation_status = 'cancelled' WHERE status = 'cancelled'`);
+        }
+        await exec(`ALTER TABLE votes DROP INDEX idx_votes_status`);
+        await exec(`ALTER TABLE votes DROP COLUMN status`);
+    }
+    if (!(await columnExists("votes", "moderation_status"))) {
+        await exec(
+            `ALTER TABLE votes ADD COLUMN moderation_status ENUM('none','under_review','cancelled') NOT NULL DEFAULT 'none'`,
+        );
+    }
+    await exec(`ALTER TABLE votes ADD INDEX idx_votes_moderation (moderation_status)`);
+
+    if (await columnExists("votes", "building_key")) {
+        await exec(`UPDATE votes SET building_key = NULL WHERE author_apartment_id IS NOT NULL`);
+        await exec(`ALTER TABLE votes MODIFY COLUMN building_key VARCHAR(120) NULL`);
+        await exec(`ALTER TABLE votes DROP FOREIGN KEY fk_votes_building`);
+        await exec(
+            `ALTER TABLE votes ADD CONSTRAINT fk_votes_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`,
+        );
+        await exec(`ALTER TABLE votes DROP CONSTRAINT IF EXISTS chk_votes_building_source`);
+        await exec(`
+            ALTER TABLE votes ADD CONSTRAINT chk_votes_building_source CHECK (
+                (author_apartment_id IS NOT NULL AND building_key IS NULL)
+                OR
+                (author_apartment_id IS NULL AND building_key IS NOT NULL)
+            )
+        `);
+    }
+
+    await exec(`DROP TRIGGER IF EXISTS trg_vr_pending_ai`);
+    await exec(`DROP TRIGGER IF EXISTS trg_vr_pending_au`);
+    await exec(`DROP TABLE IF EXISTS verification_pending_apartments`);
+    await exec(`
+        UPDATE verification_requests vr
+        JOIN (
+            SELECT apartment_id, MAX(id) AS keep_id
+            FROM verification_requests
+            WHERE status = 'pending'
+            GROUP BY apartment_id
+            HAVING COUNT(*) > 1
+        ) d ON d.apartment_id = vr.apartment_id
+           AND vr.status = 'pending'
+           AND vr.id <> d.keep_id
+        SET vr.status = 'rejected',
+            vr.comment = COALESCE(vr.comment, 'Закрыта автоматически: дубликат заявки')
+    `);
+    if (!(await columnExists("verification_requests", "pending_apartment_id"))) {
+        await exec(`
+            ALTER TABLE verification_requests
+              ADD COLUMN pending_apartment_id BIGINT UNSIGNED
+                AS (IF(status = 'pending', apartment_id, NULL)) STORED
+        `);
+        await exec(`ALTER TABLE verification_requests ADD UNIQUE KEY uq_vr_pending_apartment (pending_apartment_id)`);
+    }
+
+    await exec(`ALTER TABLE admin_users DROP CONSTRAINT IF EXISTS chk_admin_users_role_building`);
+    await exec(`
+        ALTER TABLE admin_users ADD CONSTRAINT chk_admin_users_role_building CHECK (
+            (role = 'admin' AND building_key IS NULL)
+            OR
+            (role = 'moderator' AND building_key IS NOT NULL)
+        )
+    `);
+
+    await exec(`DROP TRIGGER IF EXISTS trg_votes_building_bi`);
+    await exec(`DROP TRIGGER IF EXISTS trg_votes_building_bu`);
+
+    await exec(`DROP TRIGGER IF EXISTS trg_vc_building_bi`);
+    await pool.query(`
+        CREATE TRIGGER trg_vc_building_bi
+        BEFORE INSERT ON vote_casts
+        FOR EACH ROW
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM votes v
+                JOIN user_apartments voter ON voter.id = NEW.apartment_id
+                LEFT JOIN user_apartments author_ua ON author_ua.id = v.author_apartment_id
+                WHERE v.id = NEW.vote_id
+                  AND LOWER(COALESCE(author_ua.building_key, v.building_key)) = LOWER(voter.building_key)
+            ) THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'voter apartment is not in vote building';
+            END IF;
+        END
+    `);
+
+    await exec(`DROP TRIGGER IF EXISTS trg_ap_participant_building_bi`);
+    await pool.query(`
+        CREATE TRIGGER trg_ap_participant_building_bi
+        BEFORE INSERT ON appeal_participants
+        FOR EACH ROW
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM appeals a
+                JOIN user_apartments author_ua ON author_ua.id = a.author_apartment_id
+                JOIN user_apartments participant ON participant.id = NEW.apartment_id
+                WHERE a.id = NEW.appeal_id
+                  AND LOWER(author_ua.building_key) = LOWER(participant.building_key)
+            ) THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'participant apartment is not in appeal building';
+            END IF;
+        END
+    `);
+
+    // user_notification_reads вместо users.notifications_last_seen_at
+    if (await columnExists("users", "notifications_last_seen_at")) {
+        await exec(`
+            INSERT IGNORE INTO user_notification_reads (user_id, notification_id, read_at)
+            SELECT u.id, n.id, u.notifications_last_seen_at
+            FROM users u
+            JOIN notifications n ON n.created_at <= u.notifications_last_seen_at
+            WHERE u.notifications_last_seen_at IS NOT NULL
+        `);
+        await exec(`ALTER TABLE users DROP COLUMN notifications_last_seen_at`);
     }
 
     console.log("Migration complete");

@@ -63,9 +63,9 @@ router.post("/submit", requireAuth, async (req: AuthRequest, res) => {
         const apt = await getActiveApartment(userId);
         if (!apt) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
-        // Проверяем — нет ли активной заявки
+        // Проверяем — нет ли активной заявки (UNIQUE на pending_apartment_id)
         const [[existing]] = await pool.query<RowDataPacket[]>(
-            `SELECT id, status FROM verification_requests
+            `SELECT id FROM verification_requests
              WHERE apartment_id = ? AND status = 'pending'
              LIMIT 1`,
             [apt.apartmentId],
@@ -93,7 +93,10 @@ router.post("/submit", requireAuth, async (req: AuthRequest, res) => {
             docType,
             submittedAt: new Date().toISOString(),
         });
-    } catch (err) {
+    } catch (err: any) {
+        if (err?.code === "ER_DUP_ENTRY") {
+            return res.status(409).json({ error: "Заявка уже на рассмотрении" });
+        }
         console.error("[verification POST]", err);
         return res.status(500).json({ error: "Ошибка сервера" });
     }

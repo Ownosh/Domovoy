@@ -3,7 +3,7 @@ import { pool } from "../db/client";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
 import { moderateContent } from "../utils/moderation";
-import { getActiveApartment, getActiveBuildingKey } from "../db/helpers";
+import { getActiveApartment, getActiveBuildingKey, voteEffectiveStatus, VOTE_BUILDING_KEY_EXPR } from "../db/helpers";
 
 const router = Router();
 
@@ -15,14 +15,14 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
         if (!buildingKey) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
         const [voteRows] = await pool.query<RowDataPacket[]>(
-            `SELECT v.id, v.building_key, v.user_id, v.sponsor, v.topic, v.description,
-                    v.visibility, v.ends_at, v.closed, v.trial, v.status, v.created_at,
+            `SELECT v.id, ${VOTE_BUILDING_KEY_EXPR} AS building_key, author_ua.user_id, v.sponsor, v.topic, v.description,
+                    v.visibility, v.ends_at, v.closed, v.trial, v.moderation_status, v.created_at,
                     p.full_name AS author_name, p.profile_photo AS author_photo,
-                    ua.apartment AS author_apartment
+                    author_ua.apartment AS author_apartment
              FROM votes v
-             LEFT JOIN user_profiles p ON p.user_id = v.user_id
-             LEFT JOIN user_apartments ua ON ua.id = p.active_apartment_id
-             WHERE LOWER(v.building_key) = ?
+             LEFT JOIN user_apartments author_ua ON author_ua.id = v.author_apartment_id
+             LEFT JOIN user_profiles p ON p.user_id = author_ua.user_id
+             WHERE LOWER(${VOTE_BUILDING_KEY_EXPR}) = ?
              ORDER BY v.created_at DESC`,
             [buildingKey.toLowerCase()],
         );
@@ -46,7 +46,11 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
                 visibility,
                 endsAt: (v.ends_at as Date).toISOString(),
                 closed: Boolean(v.closed),
-                status: v.status as string,
+                status: voteEffectiveStatus({
+                    moderation_status: v.moderation_status as string,
+                    closed: v.closed,
+                    ends_at: v.ends_at as Date,
+                }),
                 trial: Boolean(v.trial),
                 createdAt: (v.created_at as Date).toISOString(),
                 options: opts.map((o) => ({ id: String(o.id), label: String(o.label) })),
@@ -62,27 +66,23 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
             });
         }
 
-        // Голоса:
-        // - Для открытых голосований отдаём голоса всех участников (чтобы показывать «кто как проголосовал»)
-        // - Для тайных — только голос текущего пользователя (чтобы не раскрывать выборы)
         const hasOpen = openVoteIds.length > 0;
         const [castRows] = await pool.query<RowDataPacket[]>(
             hasOpen
-                ? `SELECT vc.vote_id, vc.user_id, vc.option_id, ua.apartment_area_sqm AS area_sqm, vc.voted_at
+                ? `SELECT vc.vote_id, ua.user_id, vc.option_id, vc.voted_at
                    FROM vote_casts vc
-                   LEFT JOIN user_apartments ua ON ua.id = vc.apartment_id
-                   WHERE vc.vote_id IN (?) OR vc.user_id = ?`
-                : `SELECT vc.vote_id, vc.user_id, vc.option_id, ua.apartment_area_sqm AS area_sqm, vc.voted_at
+                   JOIN user_apartments ua ON ua.id = vc.apartment_id
+                   WHERE vc.vote_id IN (?) OR ua.user_id = ?`
+                : `SELECT vc.vote_id, ua.user_id, vc.option_id, vc.voted_at
                    FROM vote_casts vc
-                   LEFT JOIN user_apartments ua ON ua.id = vc.apartment_id
-                   WHERE vc.user_id = ?`,
+                   JOIN user_apartments ua ON ua.id = vc.apartment_id
+                   WHERE ua.user_id = ?`,
             hasOpen ? [openVoteIds, userId] : [userId],
         );
         const casts = castRows.map((c) => ({
             voteId: String(c.vote_id),
-            userId: String((c as any).user_id ?? userId),
+            userId: String((c as { user_id?: number }).user_id ?? userId),
             optionId: String(c.option_id),
-            areaSqm: Number(c.area_sqm),
             votedAt: (c.voted_at as Date).toISOString(),
         }));
 
@@ -124,14 +124,17 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         const buildingKey = await getActiveBuildingKey(userId);
         if (!buildingKey) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
+        const apt = await getActiveApartment(userId);
+        if (!apt) return res.status(400).json({ error: "Профиль не привязан к дому" });
+
         const endsAt = new Date(Date.now() + Number(durationDays) * 86400_000);
         const conn = await pool.getConnection();
         try {
             await conn.beginTransaction();
             const [vr] = await conn.execute<ResultSetHeader>(
-                `INSERT INTO votes (building_key, user_id, sponsor, topic, description, visibility, ends_at, status)
-                 VALUES (?, ?, 'residents', ?, ?, ?, ?, 'active')`,
-                [buildingKey, userId, topic.trim(), description.trim(), visibility ?? "open", endsAt],
+                `INSERT INTO votes (author_apartment_id, sponsor, topic, description, visibility, ends_at)
+                 VALUES (?, 'residents', ?, ?, ?, ?)`,
+                [apt.apartmentId, topic.trim(), description.trim(), visibility ?? "open", endsAt],
             );
             const voteId = vr.insertId;
             const optionIds: number[] = [];
@@ -146,10 +149,10 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 
             const [[authorRow]] = await pool.query<RowDataPacket[]>(
                 `SELECT p.full_name AS author_name, ua.apartment AS author_apartment
-                 FROM user_profiles p
-                 LEFT JOIN user_apartments ua ON ua.id = p.active_apartment_id
-                 WHERE p.user_id = ?`,
-                [userId],
+                 FROM user_apartments ua
+                 LEFT JOIN user_profiles p ON p.user_id = ua.user_id
+                 WHERE ua.id = ?`,
+                [apt.apartmentId],
             );
             const authorName = (authorRow?.author_name as string | null) ?? null;
             const authorApartment = (authorRow?.author_apartment as string | null) ?? null;
@@ -214,10 +217,12 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
         }
 
         const [[vote]] = await pool.query<RowDataPacket[]>(
-            `SELECT id, user_id FROM votes WHERE id = ?`, [voteId],
+            `SELECT v.id FROM votes v
+             JOIN user_apartments ua ON ua.id = v.author_apartment_id
+             WHERE v.id = ? AND ua.user_id = ?`,
+            [voteId, userId],
         );
         if (!vote) return res.status(404).json({ error: "Голосование не найдено" });
-        if (Number(vote.user_id) !== userId) return res.status(403).json({ error: "Нет прав" });
 
         const conn = await pool.getConnection();
         try {
@@ -245,12 +250,12 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
         }
 
         const [[updated]] = await pool.query<RowDataPacket[]>(
-            `SELECT v.id, v.building_key, v.user_id, v.sponsor, v.topic, v.description,
-                    v.visibility, v.ends_at, v.closed, v.trial, v.status, v.created_at,
-                    p.full_name AS author_name, ua.apartment AS author_apartment
+            `SELECT v.id, ${VOTE_BUILDING_KEY_EXPR} AS building_key, author_ua.user_id, v.sponsor, v.topic, v.description,
+                    v.visibility, v.ends_at, v.closed, v.trial, v.moderation_status, v.created_at,
+                    p.full_name AS author_name, author_ua.apartment AS author_apartment
              FROM votes v
-             LEFT JOIN user_profiles p ON p.user_id = v.user_id
-             LEFT JOIN user_apartments ua ON ua.id = p.active_apartment_id
+             LEFT JOIN user_apartments author_ua ON author_ua.id = v.author_apartment_id
+             LEFT JOIN user_profiles p ON p.user_id = author_ua.user_id
              WHERE v.id=?`,
             [voteId],
         );
@@ -278,7 +283,11 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
             visibility: updated.visibility as string,
             endsAt: (updated.ends_at as Date).toISOString(),
             closed: false,
-            status: updated.status as string,
+            status: voteEffectiveStatus({
+                moderation_status: updated.moderation_status as string,
+                closed: false,
+                ends_at: updated.ends_at as Date,
+            }),
             trial: Boolean(updated.trial),
             createdAt: (updated.created_at as Date).toISOString(),
             options: opts.map((o) => ({ id: String(o.id), label: String(o.label) })),
@@ -294,8 +303,8 @@ router.post("/:id/report", requireAuth, async (req: AuthRequest, res) => {
     const voteId = Number(req.params.id);
     try {
         await pool.execute(
-            `UPDATE votes SET status = 'under_review'
-             WHERE id = ? AND status NOT IN ('under_review', 'cancelled')`,
+            `UPDATE votes SET moderation_status = 'under_review'
+             WHERE id = ? AND moderation_status NOT IN ('under_review', 'cancelled')`,
             [voteId],
         );
         return res.json({ ok: true });
@@ -311,10 +320,12 @@ router.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
     const voteId = Number(req.params.id);
     try {
         const [[vote]] = await pool.query<RowDataPacket[]>(
-            `SELECT user_id FROM votes WHERE id=?`, [voteId],
+            `SELECT v.id FROM votes v
+             JOIN user_apartments ua ON ua.id = v.author_apartment_id
+             WHERE v.id=? AND ua.user_id=?`,
+            [voteId, userId],
         );
-        if (!vote) return res.status(404).json({ error: "Голосование не найдено" });
-        if (Number(vote.user_id) !== userId) return res.status(403).json({ error: "Нет прав" });
+        if (!vote) return res.status(404).json({ error: "Голосование не найдено или нет прав" });
         await pool.execute(`DELETE FROM votes WHERE id=?`, [voteId]);
         return res.json({ ok: true });
     } catch (err) {
@@ -335,9 +346,15 @@ router.post("/:id/cast", requireAuth, async (req: AuthRequest, res) => {
         if (!apt) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
         const [[vote]] = await pool.query<RowDataPacket[]>(
-            `SELECT ends_at, closed FROM votes WHERE id = ?`, [voteId],
+            `SELECT v.ends_at, v.closed, v.moderation_status
+             FROM votes v
+             LEFT JOIN user_apartments author_ua ON author_ua.id = v.author_apartment_id
+             WHERE v.id = ? AND LOWER(${VOTE_BUILDING_KEY_EXPR}) = LOWER(?)`,
+            [voteId, apt.buildingKey],
         );
         if (!vote) return res.status(404).json({ error: "Голосование не найдено" });
+        if (vote.moderation_status === "cancelled")
+            return res.status(400).json({ error: "Голосование отменено" });
         if (vote.closed || new Date(vote.ends_at as string) <= new Date())
             return res.status(400).json({ error: "Срок голосования истёк" });
 
@@ -346,14 +363,25 @@ router.post("/:id/cast", requireAuth, async (req: AuthRequest, res) => {
         );
         if (!opt) return res.status(400).json({ error: "Некорректный вариант" });
 
+        const [[existingCast]] = await pool.query<RowDataPacket[]>(
+            `SELECT vc.id FROM vote_casts vc
+             JOIN user_apartments ua ON ua.id = vc.apartment_id
+             WHERE vc.vote_id = ? AND ua.user_id = ?`,
+            [voteId, userId],
+        );
+        if (existingCast) return res.status(409).json({ error: "Вы уже проголосовали" });
+
         await pool.execute(
-            `INSERT INTO vote_casts (vote_id, user_id, option_id, apartment_id) VALUES (?, ?, ?, ?)`,
-            [voteId, userId, optionId, apt.apartmentId],
+            `INSERT INTO vote_casts (vote_id, option_id, apartment_id) VALUES (?, ?, ?)`,
+            [voteId, optionId, apt.apartmentId],
         );
         return res.json({ ok: true });
-    } catch (err: any) {
-        if (err?.code === "ER_DUP_ENTRY")
+    } catch (err: unknown) {
+        const code = (err as { code?: string })?.code;
+        if (code === "ER_DUP_ENTRY")
             return res.status(409).json({ error: "Вы уже проголосовали" });
+        if (code === "45000")
+            return res.status(400).json({ error: "Голосование недоступно для вашего дома" });
         console.error("[votes/cast POST]", err);
         return res.status(500).json({ error: "Ошибка сервера" });
     }

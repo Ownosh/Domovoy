@@ -4,14 +4,18 @@ import { requireAuth, AuthRequest } from "../middleware/auth";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
 import { moderateContent } from "../utils/moderation";
 import { getActiveApartment, isApartmentOwner } from "../db/helpers";
+import {
+    isValidAppealCategory,
+    OWNERS_MEETING_CATEGORY,
+    appealCategoryLabel,
+} from "../constants/appealCategories";
 
 const router = Router();
 const MASS_APPEAL_THRESHOLD = 5;
-const OWNERS_MEETING_CATEGORY = "Инициатива собрания собственников";
-const VALID_CATEGORIES = [
-    "Аварийная ситуация", "Сантехника", "Электрика", "Отопление", "Вентиляция",
-    "Уборка и благоустройство", "Нарушение порядка", OWNERS_MEETING_CATEGORY, "Другое",
-];
+
+const AUTHOR_BUILDING_EXPR = "COALESCE(author_ua.building_key, a.author_building_key)";
+const AUTHOR_USER_EXPR = "COALESCE(author_ua.user_id, a.author_user_id)";
+const AUTHOR_APARTMENT_EXPR = "COALESCE(author_ua.apartment, a.author_apartment_snapshot)";
 
 async function getProfile(userId: number): Promise<{ apartmentId: number; buildingKey: string; apartment: string } | null> {
     const apt = await getActiveApartment(userId);
@@ -67,6 +71,7 @@ function mapAppealRow(v: RowDataPacket, parts: RowDataPacket[], photoUrls: strin
         title: String(v.title),
         body: String(v.body),
         category: String(v.category ?? ""),
+        categoryLabel: appealCategoryLabel(String(v.category ?? "")),
         kind: v.kind as string,
         status: normalizeStatus(v.status as string),
         entrance: v.entrance ? String(v.entrance) : undefined,
@@ -99,13 +104,14 @@ function mapAppealRow(v: RowDataPacket, parts: RowDataPacket[], photoUrls: strin
 async function fetchWithParticipants(appealIds: number[]): Promise<object[]> {
     if (appealIds.length === 0) return [];
     const [rows] = await pool.query<RowDataPacket[]>(
-        `SELECT a.id, author_ua.user_id, author_ua.building_key, a.title, a.body, a.category, a.kind, a.status,
-                author_ua.entrance, author_ua.apartment AS author_apartment, a.escalated_to_uk, a.created_at,
+        `SELECT a.id, ${AUTHOR_USER_EXPR} AS user_id, ${AUTHOR_BUILDING_EXPR} AS building_key,
+                a.title, a.body, a.category, a.kind, a.status,
+                author_ua.entrance, ${AUTHOR_APARTMENT_EXPR} AS author_apartment, a.escalated_to_uk, a.created_at,
                 a.resolved_at, a.manually_archived, a.admin_comment, a.admin_comment_at, a.admin_comment_read_at,
                 p.full_name AS author_name, p.profile_photo AS author_photo
          FROM appeals a
-         JOIN user_apartments author_ua ON author_ua.id = a.author_apartment_id
-         LEFT JOIN user_profiles p ON p.user_id = author_ua.user_id
+         LEFT JOIN user_apartments author_ua ON author_ua.id = a.author_apartment_id
+         LEFT JOIN user_profiles p ON p.user_id = ${AUTHOR_USER_EXPR}
          WHERE a.id IN (?) ORDER BY a.created_at DESC`,
         [appealIds],
     );
@@ -135,8 +141,8 @@ async function fetchWithParticipants(appealIds: number[]): Promise<object[]> {
 async function isAppealAuthor(appealId: number, userId: number): Promise<boolean> {
     const [[row]] = await pool.query<RowDataPacket[]>(
         `SELECT 1 FROM appeals a
-         JOIN user_apartments ua ON ua.id = a.author_apartment_id
-         WHERE a.id = ? AND ua.user_id = ?`,
+         LEFT JOIN user_apartments ua ON ua.id = a.author_apartment_id
+         WHERE a.id = ? AND COALESCE(ua.user_id, a.author_user_id) = ?`,
         [appealId, userId],
     );
     return Boolean(row);
@@ -151,9 +157,9 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
 
         const [rows] = await pool.query<RowDataPacket[]>(
             `SELECT a.id FROM appeals a
-             JOIN user_apartments author_ua ON author_ua.id = a.author_apartment_id
-             WHERE (a.kind = 'personal' AND author_ua.user_id = ?)
-                OR (a.kind = 'collective' AND author_ua.building_key = ?)
+             LEFT JOIN user_apartments author_ua ON author_ua.id = a.author_apartment_id
+             WHERE (a.kind = 'personal' AND COALESCE(author_ua.user_id, a.author_user_id) = ?)
+                OR (a.kind = 'collective' AND COALESCE(author_ua.building_key, a.author_building_key) = ?)
              ORDER BY a.created_at DESC`,
             [userId, prof.buildingKey],
         );
@@ -178,7 +184,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         return res.status(400).json({ error: "Тема и описание обязательны" });
     if (!["personal", "collective"].includes(kind ?? ""))
         return res.status(400).json({ error: "Некорректный тип обращения" });
-    if (!VALID_CATEGORIES.includes(category?.trim() ?? ""))
+    if (!isValidAppealCategory(category?.trim() ?? ""))
         return res.status(400).json({ error: "Некорректная категория обращения" });
 
     try {
@@ -233,10 +239,11 @@ router.post("/:id/join", requireAuth, async (req: AuthRequest, res) => {
         if (!prof) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
         const [[appeal]] = await pool.query<RowDataPacket[]>(
-            `SELECT a.id, author_ua.building_key, author_ua.user_id AS author_user_id,
+            `SELECT a.id, COALESCE(author_ua.building_key, a.author_building_key) AS building_key,
+                    COALESCE(author_ua.user_id, a.author_user_id) AS author_user_id,
                     author_ua.entrance, a.category, a.kind, a.status, a.escalated_to_uk
              FROM appeals a
-             JOIN user_apartments author_ua ON author_ua.id = a.author_apartment_id
+             LEFT JOIN user_apartments author_ua ON author_ua.id = a.author_apartment_id
              WHERE a.id = ?`,
             [appealId],
         );
@@ -267,9 +274,9 @@ router.post("/:id/join", requireAuth, async (req: AuthRequest, res) => {
                 : "";
             const [[countRow]] = await pool.query<RowDataPacket[]>(
                 `SELECT COUNT(DISTINCT apt) AS cnt FROM (
-                    SELECT author_ua.apartment AS apt
+                    SELECT COALESCE(author_ua.apartment, a.author_apartment_snapshot) AS apt
                     FROM appeals a
-                    JOIN user_apartments author_ua ON author_ua.id = a.author_apartment_id
+                    LEFT JOIN user_apartments author_ua ON author_ua.id = a.author_apartment_id
                     WHERE a.id = ?
                     UNION ALL
                     SELECT uap.apartment AS apt
@@ -304,7 +311,7 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     };
     if (!title?.trim() || !body?.trim())
         return res.status(400).json({ error: "Тема и описание обязательны" });
-    if (!VALID_CATEGORIES.includes(category?.trim() ?? ""))
+    if (!isValidAppealCategory(category?.trim() ?? ""))
         return res.status(400).json({ error: "Некорректная категория обращения" });
     try {
         const mod = await moderateContent("appeal", {
@@ -319,9 +326,11 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
 
         const [result] = await pool.execute<ResultSetHeader>(
             `UPDATE appeals a
-             JOIN user_apartments ua ON ua.id = a.author_apartment_id
              SET a.title=?, a.body=?, a.category=?, a.status='new', a.escalated_to_uk=0
-             WHERE a.id=? AND ua.user_id=?`,
+             WHERE a.id=? AND COALESCE(
+                 (SELECT ua.user_id FROM user_apartments ua WHERE ua.id = a.author_apartment_id),
+                 a.author_user_id
+             ) = ?`,
             [title.trim(), body.trim(), category?.trim() ?? "", appealId, userId],
         );
         if (result.affectedRows === 0)
@@ -348,8 +357,10 @@ router.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
     try {
         const [result] = await pool.execute<ResultSetHeader>(
             `DELETE a FROM appeals a
-             JOIN user_apartments ua ON ua.id = a.author_apartment_id
-             WHERE a.id = ? AND ua.user_id = ?`,
+             WHERE a.id = ? AND COALESCE(
+                 (SELECT ua.user_id FROM user_apartments ua WHERE ua.id = a.author_apartment_id),
+                 a.author_user_id
+             ) = ?`,
             [appealId, userId],
         );
         if (result.affectedRows === 0)
@@ -368,8 +379,10 @@ router.post("/:id/archive", requireAuth, async (req: AuthRequest, res) => {
     try {
         const [[appeal]] = await pool.query<RowDataPacket[]>(
             `SELECT a.id, a.status FROM appeals a
-             JOIN user_apartments ua ON ua.id = a.author_apartment_id
-             WHERE a.id = ? AND ua.user_id = ?`,
+             WHERE a.id = ? AND COALESCE(
+                 (SELECT ua.user_id FROM user_apartments ua WHERE ua.id = a.author_apartment_id),
+                 a.author_user_id
+             ) = ?`,
             [appealId, userId],
         );
         if (!appeal) return res.status(404).json({ error: "Обращение не найдено" });

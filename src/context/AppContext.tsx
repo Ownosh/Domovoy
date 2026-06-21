@@ -421,7 +421,7 @@ function reducer(state: AppState, action: Action): AppState {
             const exists = state.voteCasts.some(
                 (c) =>
                     c.voteId === action.payload.voteId &&
-                    c.userId === action.payload.userId,
+                    c.apartmentId === action.payload.apartmentId,
             );
             if (exists) return state;
             return {
@@ -478,8 +478,20 @@ function reducer(state: AppState, action: Action): AppState {
             appeals[idx] = action.payload;
             return { ...state, appeals };
         }
-        case "SET_APARTMENTS":
-            return { ...state, apartments: action.payload };
+        case "SET_APARTMENTS": {
+            const active = action.payload.find((a) => a.isActive);
+            const account =
+                state.account && active && !state.account.profile.apartmentId
+                    ? {
+                          ...state.account,
+                          profile: {
+                              ...state.account.profile,
+                              apartmentId: active.id,
+                          },
+                      }
+                    : state.account;
+            return { ...state, apartments: action.payload, account };
+        }
         case "ADD_APARTMENT":
             return { ...state, apartments: [...state.apartments, action.payload] };
         case "ACTIVATE_APARTMENT":
@@ -723,6 +735,7 @@ function normalizeProfile(p: Profile | undefined): Profile {
     }
     const entrance = typeof p.entrance === "number" && p.entrance > 0 ? p.entrance : undefined;
     return {
+        apartmentId: p.apartmentId || undefined,
         name: p.name ?? "",
         phone: p.phone ?? "",
         building: p.building ?? "",
@@ -733,6 +746,7 @@ function normalizeProfile(p: Profile | undefined): Profile {
             typeof p.apartmentAreaSqm === "number" && !Number.isNaN(p.apartmentAreaSqm)
                 ? p.apartmentAreaSqm
                 : undefined,
+        profilePhoto: p.profilePhoto || undefined,
     };
 }
 
@@ -958,6 +972,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 const account: Account = {
                     user: { id: res.user.id, email: res.user.email },
                     profile: {
+                        apartmentId: res.profile.apartmentId,
                         name: res.profile.name,
                         phone: res.profile.phone,
                         building: res.profile.building,
@@ -995,6 +1010,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             const account: Account = {
                 user: { id: res.user.id, email: res.user.email },
                 profile: {
+                    apartmentId: res.profile.apartmentId,
                     name: res.profile.name,
                     phone: res.profile.phone,
                     building: res.profile.building,
@@ -1335,8 +1351,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ) {
                 return { ok: false, reason: "Некорректный вариант" };
             }
+            const apartmentId = state.account.profile.apartmentId;
+            if (!apartmentId) {
+                return { ok: false, reason: "Профиль не привязан к квартире" };
+            }
             const cast = {
                 voteId: input.voteId,
+                apartmentId,
                 userId: String(state.account.user.id),
                 optionId: input.optionId,
                 votedAt: new Date().toISOString(),
@@ -1470,6 +1491,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     dispatch({
                         type: "UPDATE_PROFILE",
                         payload: {
+                            apartmentId: active.id,
                             building: active.buildingKey,
                             buildingName: active.buildingName,
                             apartment: active.apartment,

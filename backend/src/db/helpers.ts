@@ -50,11 +50,9 @@ export function voteEffectiveStatus(row: {
 }
 
 export async function isApartmentOwner(apartmentId: number): Promise<boolean> {
-    const [[verif]] = await pool.query<RowDataPacket[]>(
-        `SELECT doc_type FROM verification_requests
-         WHERE apartment_id = ? AND status = 'approved'
-         ORDER BY reviewed_at DESC LIMIT 1`,
+    const [[row]] = await pool.query<RowDataPacket[]>(
+        `SELECT verification_status FROM user_apartments WHERE id = ?`,
         [apartmentId],
     );
-    return !!verif && verif.doc_type === "ownership";
+    return row?.verification_status === "ownership";
 }

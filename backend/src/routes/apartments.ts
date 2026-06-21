@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { normalizeBuildingKey, normalizeApartment } from "../db/normalize";
 import { pool } from "../db/client";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
@@ -20,8 +21,8 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
                 ua.entrance,
                 ua.apartment_area_sqm,
                 ua.created_at,
+                ua.verification_status,
                 vr.doc_type,
-                COALESCE(vr.status, 'none')  AS verification_status,
                 vr.comment                   AS reviewer_comment,
                 vr.submitted_at,
                 up.active_apartment_id
@@ -82,34 +83,45 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         return res.status(400).json({ error: "Фото документа обязательно" });
     }
 
+    const normBuilding = normalizeBuildingKey(buildingKey);
+    const normApartment = normalizeApartment(apartment);
+    if (!normApartment) {
+        return res.status(400).json({ error: "Некорректный номер квартиры" });
+    }
+
     try {
-        // Проверяем, что здание существует
         const [[building]] = await pool.query<RowDataPacket[]>(
             `SELECT building_key, short_name FROM buildings WHERE building_key = ? AND is_active = 1`,
-            [buildingKey],
+            [normBuilding],
         );
         if (!building) {
             return res.status(404).json({ error: "Дом не найден" });
         }
 
-        // Нельзя добавить ту же квартиру дважды
-        const [[dup]] = await pool.query<RowDataPacket[]>(
-            `SELECT id FROM user_apartments WHERE user_id = ? AND building_key = ? AND apartment = ?`,
-            [userId, buildingKey, apartment.trim()],
+        const [[dupUser]] = await pool.query<RowDataPacket[]>(
+            `SELECT id FROM user_apartments WHERE user_id = ? AND building_key = ? AND apartment_norm = ?`,
+            [userId, normBuilding, normApartment],
         );
-        if (dup) {
+        if (dupUser) {
             return res.status(409).json({ error: "Эта квартира уже добавлена" });
+        }
+
+        const [[dupGlobal]] = await pool.query<RowDataPacket[]>(
+            `SELECT id FROM user_apartments WHERE building_key = ? AND apartment_norm = ?`,
+            [normBuilding, normApartment],
+        );
+        if (dupGlobal) {
+            return res.status(409).json({ error: "Эта квартира уже зарегистрирована другим пользователем" });
         }
 
         const conn = await pool.getConnection();
         try {
             await conn.beginTransaction();
 
-            // 1. Создаём запись квартиры
             const [aptResult] = await conn.execute<ResultSetHeader>(
                 `INSERT INTO user_apartments (user_id, building_key, apartment, entrance, apartment_area_sqm)
                  VALUES (?, ?, ?, ?, ?)`,
-                [userId, buildingKey, apartment.trim(), entrance ?? null, apartmentAreaSqm ?? null],
+                [userId, normBuilding, apartment.trim(), entrance ?? null, apartmentAreaSqm ?? null],
             );
             const newAptId = aptResult.insertId;
 
@@ -132,7 +144,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 
             return res.status(201).json({
                 id: String(newAptId),
-                buildingKey,
+                buildingKey: normBuilding,
                 buildingName: building.short_name as string,
                 apartment: apartment.trim(),
                 entrance: entrance ?? null,
@@ -149,7 +161,11 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         } finally {
             conn.release();
         }
-    } catch (err) {
+    } catch (err: unknown) {
+        const code = (err as { code?: string })?.code;
+        if (code === "ER_DUP_ENTRY") {
+            return res.status(409).json({ error: "Эта квартира уже зарегистрирована" });
+        }
         console.error("[apartments POST]", err);
         return res.status(500).json({ error: "Ошибка сервера" });
     }
@@ -211,19 +227,7 @@ router.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
             return res.status(404).json({ error: "Квартира не найдена" });
         }
 
-        // Дом обращения выводится из квартиры автора (author_apartment_id, ON DELETE RESTRICT),
-        // поэтому квартиру с обращениями удалить нельзя — проверяем до любых изменений.
-        const [[appealCnt]] = await pool.query<RowDataPacket[]>(
-            `SELECT COUNT(*) AS cnt FROM appeals WHERE author_apartment_id = ?`,
-            [aptId],
-        );
-        if ((appealCnt?.cnt as number) > 0) {
-            return res.status(409).json({
-                error: "Нельзя удалить квартиру: по ней есть обращения. Сначала удалите свои обращения по этой квартире.",
-            });
-        }
-
-        // Если удаляемая — активная, переключаем на другую
+        // Квартиру можно удалить: обращения сохраняются в снимке author_* полей
         const [[profile]] = await pool.query<RowDataPacket[]>(
             `SELECT active_apartment_id FROM user_profiles WHERE user_id = ?`,
             [userId],

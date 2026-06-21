@@ -49,6 +49,8 @@ export type Profile = {
     building: string;
     /** Читаемый адрес для отображения в UI (например "ул. Кирова, д. 1") */
     buildingName?: string;
+    /** ID активной квартиры (user_apartments.id) */
+    apartmentId?: string;
     /** Номер квартиры */
     apartment: string;
     /** Номер подъезда */
@@ -71,6 +73,7 @@ export type Appeal = {
     title: string;
     body: string;
     category: string;
+    categoryLabel?: string;
     status: AppealStatus;
     createdAt: string;
     kind: AppealKind;
@@ -263,6 +266,7 @@ export type ResidentVoteCreateInput = {
 
 export type VoteCast = {
     voteId: string;
+    apartmentId: string;
     userId: string;
     optionId: string;
     votedAt: string;

@@ -78,12 +78,15 @@ CREATE TABLE IF NOT EXISTS user_apartments (
   user_id            BIGINT UNSIGNED NOT NULL,
   building_key       VARCHAR(120)    NOT NULL,
   apartment          VARCHAR(20)     NOT NULL DEFAULT '',
+  apartment_norm     VARCHAR(20)     NOT NULL,
   entrance           INT             DEFAULT NULL,
   apartment_area_sqm DECIMAL(6,2)    DEFAULT NULL,
+  verification_status ENUM('none','pending','lease','ownership','rejected') NOT NULL DEFAULT 'none',
   created_at         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_ua_user_building_apt (user_id, building_key, apartment),
+  UNIQUE KEY uq_ua_user_building_norm (user_id, building_key, apartment_norm),
+  UNIQUE KEY uq_ua_building_apartment_norm (building_key, apartment_norm),
   CONSTRAINT fk_ua_user     FOREIGN KEY (user_id)      REFERENCES users(id)               ON DELETE CASCADE,
   CONSTRAINT fk_ua_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE,
   INDEX idx_ua_user     (user_id),
@@ -223,10 +226,13 @@ CREATE TABLE IF NOT EXISTS appeals (
   id                     BIGINT UNSIGNED                                                                          NOT NULL AUTO_INCREMENT,
   title                  VARCHAR(500)                                                                             NOT NULL,
   body                   TEXT                                                                                     NOT NULL,
-  category               ENUM('Аварийная ситуация','Сантехника','Электрика','Отопление','Вентиляция','Уборка и благоустройство','Нарушение порядка','Инициатива собрания собственников','Другое') NOT NULL DEFAULT 'Другое',
+  category               ENUM('emergency','plumbing','electrical','heating','ventilation','cleaning','order_violation','owners_meeting','other') NOT NULL DEFAULT 'other',
   kind                   ENUM('personal','collective')                                                            NOT NULL DEFAULT 'personal',
   status                 ENUM('new','collecting_signatures','in_progress','resolved','closed','rejected')        NOT NULL DEFAULT 'new',
-  author_apartment_id    BIGINT UNSIGNED                                                                          NOT NULL,
+  author_apartment_id    BIGINT UNSIGNED                                                                          DEFAULT NULL,
+  author_building_key    VARCHAR(120)                                                                             NOT NULL DEFAULT '',
+  author_apartment_snapshot VARCHAR(20)                                                                           NOT NULL DEFAULT '',
+  author_user_id         BIGINT UNSIGNED                                                                          NOT NULL DEFAULT 0,
   escalated_to_uk        BOOLEAN                                                                                  NOT NULL DEFAULT FALSE,
   manually_archived      BOOLEAN                                                                                  NOT NULL DEFAULT FALSE,
   admin_comment          TEXT                                                                                     DEFAULT NULL,
@@ -237,7 +243,7 @@ CREATE TABLE IF NOT EXISTS appeals (
   updated_at             DATETIME                                                                                 NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   resolved_at            DATETIME                                                                                 DEFAULT NULL,
   PRIMARY KEY (id),
-  CONSTRAINT fk_appeals_apartment FOREIGN KEY (author_apartment_id) REFERENCES user_apartments(id)     ON DELETE RESTRICT,
+  CONSTRAINT fk_appeals_apartment FOREIGN KEY (author_apartment_id) REFERENCES user_apartments(id)     ON DELETE SET NULL,
   INDEX idx_appeals_status_created (status, created_at DESC),
   INDEX idx_appeals_apartment      (author_apartment_id),
   INDEX idx_appeals_admin          (handled_by_admin_id)
@@ -333,9 +339,9 @@ CREATE TABLE IF NOT EXISTS neighbor_ads (
 --  ГОЛОСОВАНИЯ
 -- ============================================================
 
--- status: active -> идёт голосование; under_review -> пожаловались, ждёт проверки админом;
---         completed -> завершено (closed=1 или истёк ends_at); cancelled -> отменено админом.
--- closed — отдельная характеристика: автор закрыл голосование вручную до истечения срока.
+-- moderation_status: none | under_review | cancelled (active/completed выводятся из closed и ends_at)
+-- closed — автор закрыл голосование вручную до истечения срока.
+-- Одна квартира = один голос (vote_casts.uq_vc_vote_apartment).
 CREATE TABLE IF NOT EXISTS votes (
   id                   BIGINT UNSIGNED                                              NOT NULL AUTO_INCREMENT,
   building_key         VARCHAR(120)                                                 DEFAULT NULL COMMENT 'только голосование УК без author_apartment_id',
@@ -602,19 +608,187 @@ BEGIN
   END IF;
 END;
 
+DROP TRIGGER IF EXISTS trg_ua_normalize_bi;
+CREATE TRIGGER trg_ua_normalize_bi
+BEFORE INSERT ON user_apartments
+FOR EACH ROW
+BEGIN
+  SET NEW.building_key = LOWER(TRIM(NEW.building_key));
+  SET NEW.apartment = TRIM(NEW.apartment);
+  SET NEW.apartment_norm = LOWER(
+    REGEXP_REPLACE(
+      REGEXP_REPLACE(TRIM(NEW.apartment), '^(кв\\.?|№|#)[[:space:]]*', '', 1, 0, 'i'),
+      '[^0-9a-zа-яё]', '', 1, 0, 'i'
+    )
+  );
+  IF NEW.apartment_norm = '' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'apartment number is empty after normalization';
+  END IF;
+END;
+
+DROP TRIGGER IF EXISTS trg_ua_normalize_bu;
+CREATE TRIGGER trg_ua_normalize_bu
+BEFORE UPDATE ON user_apartments
+FOR EACH ROW
+BEGIN
+  SET NEW.building_key = LOWER(TRIM(NEW.building_key));
+  SET NEW.apartment = TRIM(NEW.apartment);
+  SET NEW.apartment_norm = LOWER(
+    REGEXP_REPLACE(
+      REGEXP_REPLACE(TRIM(NEW.apartment), '^(кв\\.?|№|#)[[:space:]]*', '', 1, 0, 'i'),
+      '[^0-9a-zа-яё]', '', 1, 0, 'i'
+    )
+  );
+  IF NEW.apartment_norm = '' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'apartment number is empty after normalization';
+  END IF;
+END;
+
+DROP TRIGGER IF EXISTS trg_ua_before_delete;
+CREATE TRIGGER trg_ua_before_delete
+BEFORE DELETE ON user_apartments
+FOR EACH ROW
+BEGIN
+  UPDATE votes
+  SET building_key = OLD.building_key
+  WHERE author_apartment_id = OLD.id AND building_key IS NULL;
+END;
+
+DROP TRIGGER IF EXISTS trg_appeals_snapshot_bi;
+CREATE TRIGGER trg_appeals_snapshot_bi
+BEFORE INSERT ON appeals
+FOR EACH ROW
+BEGIN
+  IF NEW.author_apartment_id IS NOT NULL THEN
+    SELECT ua.building_key, ua.apartment, ua.user_id
+    INTO @bk, @apt, @uid
+    FROM user_apartments ua
+    WHERE ua.id = NEW.author_apartment_id;
+    SET NEW.author_building_key = COALESCE(@bk, NEW.author_building_key);
+    SET NEW.author_apartment_snapshot = COALESCE(@apt, NEW.author_apartment_snapshot);
+    SET NEW.author_user_id = COALESCE(@uid, NEW.author_user_id);
+  END IF;
+END;
+
+DROP TRIGGER IF EXISTS trg_vr_sync_ua_ai;
+CREATE TRIGGER trg_vr_sync_ua_ai
+AFTER INSERT ON verification_requests
+FOR EACH ROW
+BEGIN
+  UPDATE user_apartments ua SET verification_status = (
+    SELECT CASE
+      WHEN vr.status = 'pending' THEN 'pending'
+      WHEN vr.status = 'approved' AND vr.doc_type = 'ownership' THEN 'ownership'
+      WHEN vr.status = 'approved' THEN 'lease'
+      WHEN vr.status = 'rejected' THEN 'rejected'
+      ELSE 'none'
+    END
+    FROM verification_requests vr
+    WHERE vr.apartment_id = NEW.apartment_id
+    ORDER BY vr.submitted_at DESC
+    LIMIT 1
+  )
+  WHERE ua.id = NEW.apartment_id;
+END;
+
+DROP TRIGGER IF EXISTS trg_vr_sync_ua_au;
+CREATE TRIGGER trg_vr_sync_ua_au
+AFTER UPDATE ON verification_requests
+FOR EACH ROW
+BEGIN
+  UPDATE user_apartments ua SET verification_status = (
+    SELECT CASE
+      WHEN vr.status = 'pending' THEN 'pending'
+      WHEN vr.status = 'approved' AND vr.doc_type = 'ownership' THEN 'ownership'
+      WHEN vr.status = 'approved' THEN 'lease'
+      WHEN vr.status = 'rejected' THEN 'rejected'
+      ELSE 'none'
+    END
+    FROM verification_requests vr
+    WHERE vr.apartment_id = NEW.apartment_id
+    ORDER BY vr.submitted_at DESC
+    LIMIT 1
+  )
+  WHERE ua.id = NEW.apartment_id;
+END;
+
+DROP TRIGGER IF EXISTS trg_na_expiry_bi;
+CREATE TRIGGER trg_na_expiry_bi
+BEFORE INSERT ON neighbor_ads
+FOR EACH ROW
+BEGIN
+  IF NEW.status = 'published' AND NEW.expires_at <= NOW() THEN
+    SET NEW.status = 'archived';
+  END IF;
+END;
+
+DROP TRIGGER IF EXISTS trg_na_expiry_bu;
+CREATE TRIGGER trg_na_expiry_bu
+BEFORE UPDATE ON neighbor_ads
+FOR EACH ROW
+BEGIN
+  IF NEW.status = 'published' AND NEW.expires_at <= NOW() THEN
+    SET NEW.status = 'archived';
+  END IF;
+END;
+
 DROP TRIGGER IF EXISTS trg_vc_building_bi;
-CREATE TRIGGER trg_vc_building_bi
+DROP TRIGGER IF EXISTS trg_vc_validate_bi;
+CREATE TRIGGER trg_vc_validate_bi
 BEFORE INSERT ON vote_casts
 FOR EACH ROW
 BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM vote_options WHERE id = NEW.option_id AND vote_id = NEW.vote_id
+  ) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'option does not belong to vote';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM user_apartments WHERE id = NEW.apartment_id AND verification_status = 'ownership'
+  ) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'only verified owners can vote';
+  END IF;
   IF NOT EXISTS (
     SELECT 1 FROM votes v
     JOIN user_apartments voter ON voter.id = NEW.apartment_id
     LEFT JOIN user_apartments author_ua ON author_ua.id = v.author_apartment_id
     WHERE v.id = NEW.vote_id
+      AND v.moderation_status NOT IN ('cancelled')
+      AND v.closed = 0 AND v.ends_at > NOW()
       AND LOWER(COALESCE(author_ua.building_key, v.building_key)) = LOWER(voter.building_key)
   ) THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'voter apartment is not in vote building';
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'vote is not active or apartment mismatch';
+  END IF;
+END;
+
+DROP TRIGGER IF EXISTS trg_vc_building_bu;
+DROP TRIGGER IF EXISTS trg_vc_validate_bu;
+CREATE TRIGGER trg_vc_validate_bu
+BEFORE UPDATE ON vote_casts
+FOR EACH ROW
+BEGIN
+  IF NEW.vote_id <> OLD.vote_id OR NEW.apartment_id <> OLD.apartment_id OR NEW.option_id <> OLD.option_id THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM vote_options WHERE id = NEW.option_id AND vote_id = NEW.vote_id
+    ) THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'option does not belong to vote';
+    END IF;
+    IF NOT EXISTS (
+      SELECT 1 FROM user_apartments WHERE id = NEW.apartment_id AND verification_status = 'ownership'
+    ) THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'only verified owners can vote';
+    END IF;
+    IF NOT EXISTS (
+      SELECT 1 FROM votes v
+      JOIN user_apartments voter ON voter.id = NEW.apartment_id
+      LEFT JOIN user_apartments author_ua ON author_ua.id = v.author_apartment_id
+      WHERE v.id = NEW.vote_id
+        AND v.moderation_status NOT IN ('cancelled')
+        AND v.closed = 0 AND v.ends_at > NOW()
+        AND LOWER(COALESCE(author_ua.building_key, v.building_key)) = LOWER(voter.building_key)
+    ) THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'vote is not active or apartment mismatch';
+    END IF;
   END IF;
 END;
 
@@ -625,12 +799,30 @@ FOR EACH ROW
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM appeals a
-    JOIN user_apartments author_ua ON author_ua.id = a.author_apartment_id
+    LEFT JOIN user_apartments author_ua ON author_ua.id = a.author_apartment_id
     JOIN user_apartments participant ON participant.id = NEW.apartment_id
     WHERE a.id = NEW.appeal_id
-      AND LOWER(author_ua.building_key) = LOWER(participant.building_key)
+      AND LOWER(COALESCE(author_ua.building_key, a.author_building_key)) = LOWER(participant.building_key)
   ) THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'participant apartment is not in appeal building';
+  END IF;
+END;
+
+DROP TRIGGER IF EXISTS trg_ap_participant_building_bu;
+CREATE TRIGGER trg_ap_participant_building_bu
+BEFORE UPDATE ON appeal_participants
+FOR EACH ROW
+BEGIN
+  IF NEW.appeal_id <> OLD.appeal_id OR NEW.apartment_id <> OLD.apartment_id THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM appeals a
+      LEFT JOIN user_apartments author_ua ON author_ua.id = a.author_apartment_id
+      JOIN user_apartments participant ON participant.id = NEW.apartment_id
+      WHERE a.id = NEW.appeal_id
+        AND LOWER(COALESCE(author_ua.building_key, a.author_building_key)) = LOWER(participant.building_key)
+    ) THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'participant apartment is not in appeal building';
+    END IF;
   END IF;
 END;
 

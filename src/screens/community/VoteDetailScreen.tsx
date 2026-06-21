@@ -13,7 +13,7 @@ import { Button, Card, ScreenLayout, StatusTimeline, VerificationWall, VoteStatu
 import { voteLabels, voteStatusColor } from "../../components/ui/StatusBadge";
 import type { TimelineStep } from "../../components/ui/StatusTimeline";
 import { voteEffectiveStatus } from "../../utils/appeals";
-import { useApp, isVerifiedResident } from "../../context/AppContext";
+import { useApp, isVerifiedOwner } from "../../context/AppContext";
 import type { Vote, VoteCast, VoteStatus } from "../../types";
 import { voteSourceLine } from "../../utils/voteSponsor";
 import { colors, radius, spacing, textStyles } from "../../theme";
@@ -75,7 +75,7 @@ function formatRemaining(endsAt: string): string {
 
 export function VoteDetailScreen({ route }: Props) {
     const goBack = useModalBack();
-    const { votes, voteCasts, castVote, verification, user } = useApp();
+    const { votes, voteCasts, castVote, verification, profile } = useApp();
     const vote = votes.find((v) => v.id === route.params.id);
     const [tick, setTick] = useState(0);
 
@@ -87,7 +87,12 @@ export function VoteDetailScreen({ route }: Props) {
     void tick;
 
     const ended = vote ? voteEnded(vote) : true;
-    const myCast = vote ? voteCasts.find((c) => c.voteId === vote.id && String(c.userId) === String(user?.id)) : undefined;
+    const activeApartmentId = profile.apartmentId;
+    const myCast = vote && activeApartmentId
+        ? voteCasts.find(
+              (c) => c.voteId === vote.id && c.apartmentId === activeApartmentId,
+          )
+        : undefined;
     const agg = useMemo(() => vote ? aggregate(vote, voteCasts) : [], [vote, voteCasts]);
     const totalVotes = useMemo(() => agg.reduce((s, a) => s + a.count, 0), [agg]);
 
@@ -101,7 +106,7 @@ export function VoteDetailScreen({ route }: Props) {
 
     const voteStatus = voteEffectiveStatus(vote);
     const sc = voteStatusColor[voteStatus] ?? colors.textMuted;
-    const canVote = isVerifiedResident(verification) && !ended && !myCast;
+    const canVote = isVerifiedOwner(verification) && !ended && !myCast;
     const myOption = myCast ? vote.options.find((o) => o.id === myCast.optionId) : undefined;
     const myVoteCasts = voteCasts.filter((c) => c.voteId === vote.id);
 
@@ -240,10 +245,10 @@ export function VoteDetailScreen({ route }: Props) {
                     <Card style={[styles.castsCard, { borderLeftColor: sc }]}>
                         {myVoteCasts.map((c, idx) => {
                             const label = vote.options.find((o) => o.id === c.optionId)?.label ?? "—";
-                            const isMe = String(c.userId) === String(user?.id);
+                            const isMe = c.apartmentId === activeApartmentId;
                             const isLast = idx === myVoteCasts.length - 1;
                             return (
-                                <View key={`${c.userId}_${c.votedAt}`} style={[styles.castRow, !isLast && styles.castRowBorder, isMe && { backgroundColor: `${sc}0a` }]}>
+                                <View key={`${c.apartmentId}_${c.votedAt}`} style={[styles.castRow, !isLast && styles.castRowBorder, isMe && { backgroundColor: `${sc}0a` }]}>
                                     <View style={[styles.castAvatar, { backgroundColor: `${sc}18`, borderColor: `${sc}33` }]}>
                                         <Ionicons name="person-outline" size={13} color={sc} />
                                     </View>

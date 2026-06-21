@@ -30,7 +30,7 @@ import {
 } from "../../components/ui";
 import { appealLabels, appealStatusColor } from "../../components/ui/StatusBadge";
 import type { TimelineStep } from "../../components/ui/StatusTimeline";
-import { useApp, isVerifiedResident, isVerifiedOwner } from "../../context/AppContext";
+import { APPEAL_CATEGORY_LABELS } from "../../constants/appealCategories";
 import { buildBuildingKey } from "../../utils/buildingKey";
 import {
     collectiveUniqueApartmentCount,
@@ -155,7 +155,9 @@ export function AppealDetailScreen({ route, navigation }: Props) {
                 )}
 
                 <View style={styles.divider} />
-                <Text style={[textStyles.caption, styles.meta]}>{item.category}</Text>
+                <Text style={[textStyles.caption, styles.meta]}>
+                    {item.categoryLabel ?? APPEAL_CATEGORY_LABELS[item.category as keyof typeof APPEAL_CATEGORY_LABELS] ?? item.category}
+                </Text>
                 <Text style={[textStyles.body, styles.body]}>{item.body}</Text>
 
                 {item.escalatedToUk && (

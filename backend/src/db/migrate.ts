@@ -1,11 +1,20 @@
 import { pool } from "./client";
 import { RowDataPacket } from "mysql2";
+import { SQL_NORMALIZE_APARTMENT_NORM } from "./normalize";
+import { LEGACY_APPEAL_CATEGORY_MAP } from "../constants/appealCategories";
 
-// Идемпотентный ALTER: ожидаемые ошибки (уже есть колонка/FK) — только warn
+// Идемпотентный ALTER: только ожидаемые «уже есть» ошибки — warn, остальные — throw
+const SKIPPABLE_MIGRATE = /Duplicate|already exists|check that column\/key exists|Can't DROP|Unknown column|check that it exists|Multiple primary key/i;
+
 async function exec(sql: string): Promise<void> {
     await pool.query(sql).catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn("[migrate] skipped:", msg);
+        if (SKIPPABLE_MIGRATE.test(msg)) {
+            console.warn("[migrate] skipped:", msg);
+            return;
+        }
+        console.error("[migrate] failed:", msg);
+        throw err;
     });
 }
 
@@ -1450,23 +1459,255 @@ export async function migrate(): Promise<void> {
         )
     `);
 
+    // ============================================================
+    //  ЦЕЛОСТНОСТЬ: квартиры, верификация, обращения, ключи домов
+    // ============================================================
+
+    await exec(`UPDATE buildings SET building_key = LOWER(TRIM(building_key))`);
+    await exec(`UPDATE user_apartments SET building_key = LOWER(TRIM(building_key))`);
+
+    await exec(`ALTER TABLE user_apartments ADD COLUMN IF NOT EXISTS apartment_norm VARCHAR(20) DEFAULT NULL`);
+    await exec(`ALTER TABLE user_apartments ADD COLUMN IF NOT EXISTS verification_status ENUM('none','pending','lease','ownership','rejected') NOT NULL DEFAULT 'none'`);
+    await exec(`
+        UPDATE user_apartments ua
+        SET apartment_norm = ${SQL_NORMALIZE_APARTMENT_NORM.replace(/\bapartment\b/g, "ua.apartment")}
+        WHERE apartment_norm IS NULL OR apartment_norm = ''
+    `);
+    await exec(`UPDATE user_apartments SET apartment = TRIM(apartment) WHERE apartment <> TRIM(apartment)`);
+
+  // Синхронизация verification_status из последней заявки
+    await exec(`
+        UPDATE user_apartments ua
+        JOIN (
+            SELECT vr.apartment_id,
+                   CASE
+                       WHEN vr.status = 'pending' THEN 'pending'
+                       WHEN vr.status = 'approved' AND vr.doc_type = 'ownership' THEN 'ownership'
+                       WHEN vr.status = 'approved' THEN 'lease'
+                       WHEN vr.status = 'rejected' THEN 'rejected'
+                       ELSE 'none'
+                   END AS vs,
+                   vr.submitted_at
+            FROM verification_requests vr
+            JOIN (
+                SELECT apartment_id, MAX(submitted_at) AS max_submitted
+                FROM verification_requests
+                GROUP BY apartment_id
+            ) latest ON latest.apartment_id = vr.apartment_id AND latest.max_submitted = vr.submitted_at
+        ) x ON x.apartment_id = ua.id
+        SET ua.verification_status = x.vs
+    `);
+
+    await exec(`ALTER TABLE user_apartments MODIFY COLUMN apartment_norm VARCHAR(20) NOT NULL`);
+    await exec(`ALTER TABLE user_apartments DROP INDEX IF EXISTS uq_ua_user_building_apt`);
+    await exec(`ALTER TABLE user_apartments ADD UNIQUE KEY uq_ua_user_building_norm (user_id, building_key, apartment_norm)`);
+    await exec(`ALTER TABLE user_apartments ADD UNIQUE KEY IF NOT EXISTS uq_ua_building_apartment_norm (building_key, apartment_norm)`);
+
+    // Обращения: снимок автора + категории по ключам
+    await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS author_building_key VARCHAR(120) NOT NULL DEFAULT ''`);
+    await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS author_apartment_snapshot VARCHAR(20) NOT NULL DEFAULT ''`);
+    await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS author_user_id BIGINT UNSIGNED NOT NULL DEFAULT 0`);
+    await exec(`
+        UPDATE appeals a
+        JOIN user_apartments ua ON ua.id = a.author_apartment_id
+        SET a.author_building_key = ua.building_key,
+            a.author_apartment_snapshot = ua.apartment,
+            a.author_user_id = ua.user_id
+        WHERE a.author_building_key = '' OR a.author_user_id = 0
+    `);
+
+    if (await columnExists("appeals", "category")) {
+        await exec(`ALTER TABLE appeals MODIFY COLUMN category VARCHAR(80) NOT NULL DEFAULT 'other'`);
+        for (const [legacy, key] of Object.entries(LEGACY_APPEAL_CATEGORY_MAP)) {
+            const esc = legacy.replace(/'/g, "''");
+            await exec(`UPDATE appeals SET category = '${key}' WHERE category = '${esc}'`);
+        }
+        await exec(`
+            ALTER TABLE appeals MODIFY COLUMN category
+            ENUM('emergency','plumbing','electrical','heating','ventilation','cleaning','order_violation','owners_meeting','other')
+            NOT NULL DEFAULT 'other'
+        `);
+    }
+
+    await exec(`ALTER TABLE appeals DROP FOREIGN KEY fk_appeals_apartment`);
+    await exec(`ALTER TABLE appeals MODIFY COLUMN author_apartment_id BIGINT UNSIGNED NULL`);
+    await exec(`
+        ALTER TABLE appeals ADD CONSTRAINT fk_appeals_apartment
+        FOREIGN KEY (author_apartment_id) REFERENCES user_apartments(id) ON DELETE SET NULL
+    `);
+
+    await exec(`DELETE FROM refresh_tokens WHERE expires_at < NOW()`);
+
     await exec(`DROP TRIGGER IF EXISTS trg_votes_building_bi`);
     await exec(`DROP TRIGGER IF EXISTS trg_votes_building_bu`);
 
-    await exec(`DROP TRIGGER IF EXISTS trg_vc_building_bi`);
+    await exec(`DROP TRIGGER IF EXISTS trg_ua_normalize_bi`);
     await pool.query(`
-        CREATE TRIGGER trg_vc_building_bi
+        CREATE TRIGGER trg_ua_normalize_bi
+        BEFORE INSERT ON user_apartments
+        FOR EACH ROW
+        BEGIN
+            SET NEW.building_key = LOWER(TRIM(NEW.building_key));
+            SET NEW.apartment = TRIM(NEW.apartment);
+            SET NEW.apartment_norm = LOWER(
+                REGEXP_REPLACE(
+                    REGEXP_REPLACE(TRIM(NEW.apartment), '^(кв\\\\.?|№|#)[[:space:]]*', '', 1, 0, 'i'),
+                    '[^0-9a-zа-яё]', '', 1, 0, 'i'
+                )
+            );
+            IF NEW.apartment_norm = '' THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'apartment number is empty after normalization';
+            END IF;
+        END
+    `);
+
+    await exec(`DROP TRIGGER IF EXISTS trg_ua_normalize_bu`);
+    await pool.query(`
+        CREATE TRIGGER trg_ua_normalize_bu
+        BEFORE UPDATE ON user_apartments
+        FOR EACH ROW
+        BEGIN
+            SET NEW.building_key = LOWER(TRIM(NEW.building_key));
+            SET NEW.apartment = TRIM(NEW.apartment);
+            SET NEW.apartment_norm = LOWER(
+                REGEXP_REPLACE(
+                    REGEXP_REPLACE(TRIM(NEW.apartment), '^(кв\\\\.?|№|#)[[:space:]]*', '', 1, 0, 'i'),
+                    '[^0-9a-zа-яё]', '', 1, 0, 'i'
+                )
+            );
+            IF NEW.apartment_norm = '' THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'apartment number is empty after normalization';
+            END IF;
+        END
+    `);
+
+    await exec(`DROP TRIGGER IF EXISTS trg_ua_before_delete`);
+    await pool.query(`
+        CREATE TRIGGER trg_ua_before_delete
+        BEFORE DELETE ON user_apartments
+        FOR EACH ROW
+        BEGIN
+            UPDATE votes
+            SET building_key = OLD.building_key
+            WHERE author_apartment_id = OLD.id AND building_key IS NULL;
+        END
+    `);
+
+    await exec(`DROP TRIGGER IF EXISTS trg_appeals_snapshot_bi`);
+    await pool.query(`
+        CREATE TRIGGER trg_appeals_snapshot_bi
+        BEFORE INSERT ON appeals
+        FOR EACH ROW
+        BEGIN
+            IF NEW.author_apartment_id IS NOT NULL THEN
+                SELECT ua.building_key, ua.apartment, ua.user_id
+                INTO @bk, @apt, @uid
+                FROM user_apartments ua
+                WHERE ua.id = NEW.author_apartment_id;
+                SET NEW.author_building_key = COALESCE(@bk, NEW.author_building_key);
+                SET NEW.author_apartment_snapshot = COALESCE(@apt, NEW.author_apartment_snapshot);
+                SET NEW.author_user_id = COALESCE(@uid, NEW.author_user_id);
+            END IF;
+        END
+    `);
+
+    await exec(`DROP TRIGGER IF EXISTS trg_vr_sync_ua_ai`);
+    await pool.query(`
+        CREATE TRIGGER trg_vr_sync_ua_ai
+        AFTER INSERT ON verification_requests
+        FOR EACH ROW
+        BEGIN
+            UPDATE user_apartments ua SET verification_status = (
+                SELECT CASE
+                    WHEN vr.status = 'pending' THEN 'pending'
+                    WHEN vr.status = 'approved' AND vr.doc_type = 'ownership' THEN 'ownership'
+                    WHEN vr.status = 'approved' THEN 'lease'
+                    WHEN vr.status = 'rejected' THEN 'rejected'
+                    ELSE 'none'
+                END
+                FROM verification_requests vr
+                WHERE vr.apartment_id = NEW.apartment_id
+                ORDER BY vr.submitted_at DESC
+                LIMIT 1
+            )
+            WHERE ua.id = NEW.apartment_id;
+        END
+    `);
+
+    await exec(`DROP TRIGGER IF EXISTS trg_vr_sync_ua_au`);
+    await pool.query(`
+        CREATE TRIGGER trg_vr_sync_ua_au
+        AFTER UPDATE ON verification_requests
+        FOR EACH ROW
+        BEGIN
+            UPDATE user_apartments ua SET verification_status = (
+                SELECT CASE
+                    WHEN vr.status = 'pending' THEN 'pending'
+                    WHEN vr.status = 'approved' AND vr.doc_type = 'ownership' THEN 'ownership'
+                    WHEN vr.status = 'approved' THEN 'lease'
+                    WHEN vr.status = 'rejected' THEN 'rejected'
+                    ELSE 'none'
+                END
+                FROM verification_requests vr
+                WHERE vr.apartment_id = NEW.apartment_id
+                ORDER BY vr.submitted_at DESC
+                LIMIT 1
+            )
+            WHERE ua.id = NEW.apartment_id;
+        END
+    `);
+
+    await exec(`DROP TRIGGER IF EXISTS trg_na_expiry_bi`);
+    await pool.query(`
+        CREATE TRIGGER trg_na_expiry_bi
+        BEFORE INSERT ON neighbor_ads
+        FOR EACH ROW
+        BEGIN
+            IF NEW.status = 'published' AND NEW.expires_at <= NOW() THEN
+                SET NEW.status = 'archived';
+            END IF;
+        END
+    `);
+
+    await exec(`DROP TRIGGER IF EXISTS trg_na_expiry_bu`);
+    await pool.query(`
+        CREATE TRIGGER trg_na_expiry_bu
+        BEFORE UPDATE ON neighbor_ads
+        FOR EACH ROW
+        BEGIN
+            IF NEW.status = 'published' AND NEW.expires_at <= NOW() THEN
+                SET NEW.status = 'archived';
+            END IF;
+        END
+    `);
+
+    await exec(`DROP TRIGGER IF EXISTS trg_vc_building_bi`);
+    await exec(`DROP TRIGGER IF EXISTS trg_vc_validate_bi`);
+    await pool.query(`
+        CREATE TRIGGER trg_vc_validate_bi
         BEFORE INSERT ON vote_casts
         FOR EACH ROW
         BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM vote_options WHERE id = NEW.option_id AND vote_id = NEW.vote_id
+            ) THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'option does not belong to vote';
+            END IF;
+            IF NOT EXISTS (
+                SELECT 1 FROM user_apartments WHERE id = NEW.apartment_id AND verification_status = 'ownership'
+            ) THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'only verified owners can vote';
+            END IF;
             IF NOT EXISTS (
                 SELECT 1 FROM votes v
                 JOIN user_apartments voter ON voter.id = NEW.apartment_id
                 LEFT JOIN user_apartments author_ua ON author_ua.id = v.author_apartment_id
                 WHERE v.id = NEW.vote_id
+                  AND v.moderation_status NOT IN ('cancelled')
+                  AND v.closed = 0 AND v.ends_at > NOW()
                   AND LOWER(COALESCE(author_ua.building_key, v.building_key)) = LOWER(voter.building_key)
             ) THEN
-                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'voter apartment is not in vote building';
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'vote is not active or apartment mismatch';
             END IF;
         END
     `);
@@ -1479,12 +1720,65 @@ export async function migrate(): Promise<void> {
         BEGIN
             IF NOT EXISTS (
                 SELECT 1 FROM appeals a
-                JOIN user_apartments author_ua ON author_ua.id = a.author_apartment_id
+                LEFT JOIN user_apartments author_ua ON author_ua.id = a.author_apartment_id
                 JOIN user_apartments participant ON participant.id = NEW.apartment_id
                 WHERE a.id = NEW.appeal_id
-                  AND LOWER(author_ua.building_key) = LOWER(participant.building_key)
+                  AND LOWER(COALESCE(author_ua.building_key, a.author_building_key)) = LOWER(participant.building_key)
             ) THEN
                 SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'participant apartment is not in appeal building';
+            END IF;
+        END
+    `);
+
+    await exec(`DROP TRIGGER IF EXISTS trg_vc_building_bu`);
+    await exec(`DROP TRIGGER IF EXISTS trg_vc_validate_bu`);
+    await pool.query(`
+        CREATE TRIGGER trg_vc_validate_bu
+        BEFORE UPDATE ON vote_casts
+        FOR EACH ROW
+        BEGIN
+            IF NEW.vote_id <> OLD.vote_id OR NEW.apartment_id <> OLD.apartment_id OR NEW.option_id <> OLD.option_id THEN
+                IF NOT EXISTS (
+                    SELECT 1 FROM vote_options WHERE id = NEW.option_id AND vote_id = NEW.vote_id
+                ) THEN
+                    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'option does not belong to vote';
+                END IF;
+                IF NOT EXISTS (
+                    SELECT 1 FROM user_apartments WHERE id = NEW.apartment_id AND verification_status = 'ownership'
+                ) THEN
+                    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'only verified owners can vote';
+                END IF;
+                IF NOT EXISTS (
+                    SELECT 1 FROM votes v
+                    JOIN user_apartments voter ON voter.id = NEW.apartment_id
+                    LEFT JOIN user_apartments author_ua ON author_ua.id = v.author_apartment_id
+                    WHERE v.id = NEW.vote_id
+                      AND v.moderation_status NOT IN ('cancelled')
+                      AND v.closed = 0 AND v.ends_at > NOW()
+                      AND LOWER(COALESCE(author_ua.building_key, v.building_key)) = LOWER(voter.building_key)
+                ) THEN
+                    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'vote is not active or apartment mismatch';
+                END IF;
+            END IF;
+        END
+    `);
+
+    await exec(`DROP TRIGGER IF EXISTS trg_ap_participant_building_bu`);
+    await pool.query(`
+        CREATE TRIGGER trg_ap_participant_building_bu
+        BEFORE UPDATE ON appeal_participants
+        FOR EACH ROW
+        BEGIN
+            IF NEW.appeal_id <> OLD.appeal_id OR NEW.apartment_id <> OLD.apartment_id THEN
+                IF NOT EXISTS (
+                    SELECT 1 FROM appeals a
+                    LEFT JOIN user_apartments author_ua ON author_ua.id = a.author_apartment_id
+                    JOIN user_apartments participant ON participant.id = NEW.apartment_id
+                    WHERE a.id = NEW.appeal_id
+                      AND LOWER(COALESCE(author_ua.building_key, a.author_building_key)) = LOWER(participant.building_key)
+                ) THEN
+                    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'participant apartment is not in appeal building';
+                END IF;
             END IF;
         END
     `);
@@ -1500,6 +1794,8 @@ export async function migrate(): Promise<void> {
         `);
         await exec(`ALTER TABLE users DROP COLUMN notifications_last_seen_at`);
     }
+
+    await exec(`UPDATE neighbor_ads SET status = 'archived' WHERE status = 'published' AND expires_at <= NOW()`);
 
     console.log("Migration complete");
 }

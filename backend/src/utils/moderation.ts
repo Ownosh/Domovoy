@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { appealCategoryLabel, APPEAL_CATEGORY_LABELS } from "../constants/appealCategories";
 
 let _client: OpenAI | null = null;
 
@@ -265,8 +266,9 @@ async function moderateCategorized(
     defaultIssue: string,
     fields: { title: string; body: string; category?: string },
 ): Promise<ModerationResult> {
-    const systemPrompt = systemPromptTemplate.replace(/\{КАТЕГОРИЯ\}/g, fields.category ?? "");
-    const userMessage = `Категория: ${fields.category ?? ""}\nТема: ${fields.title}\nОписание: ${fields.body}`;
+    const categoryLabel = fields.category ? appealCategoryLabel(fields.category) : "";
+    const systemPrompt = systemPromptTemplate.replace(/\{КАТЕГОРИЯ\}/g, categoryLabel);
+    const userMessage = `Категория: ${categoryLabel}\nТема: ${fields.title}\nОписание: ${fields.body}`;
 
     const raw    = await callModel(model, systemPrompt, userMessage);
     const parsed = extractJson<AppealResponse>(raw);

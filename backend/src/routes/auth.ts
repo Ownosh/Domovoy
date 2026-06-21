@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { normalizeBuildingKey } from "../db/normalize";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
@@ -96,7 +97,7 @@ router.post("/register", async (req: Request, res: Response) => {
 
         let buildingKey: string;
         if (explicitKey?.trim()) {
-            buildingKey = explicitKey.trim();
+            buildingKey = normalizeBuildingKey(explicitKey);
         } else {
             const [[existing]] = await conn.query<RowDataPacket[]>(
                 `SELECT building_key FROM buildings
@@ -140,7 +141,10 @@ router.post("/register", async (req: Request, res: Response) => {
             accessToken,
             refreshToken,
             user: { id: userId, email: email.toLowerCase() },
-            profile: { name, phone, building: buildingKey, buildingName: buildingLabel, apartment, entrance: entrance ?? undefined },
+            profile: {
+                apartmentId: String(aptResult.insertId),
+                name, phone, building: buildingKey, buildingName: buildingLabel, apartment, entrance: entrance ?? undefined
+            },
         });
     } catch (err) {
         await conn.rollback();
@@ -163,7 +167,7 @@ router.post("/login", async (req: Request, res: Response) => {
         const [rows] = await pool.execute<RowDataPacket[]>(
             `SELECT u.id, u.email, u.password_hash,
                     p.full_name, p.phone, p.profile_photo,
-                    ua.building_key, ua.apartment, ua.entrance, ua.apartment_area_sqm,
+                    ua.id AS apartment_id, ua.building_key, ua.apartment, ua.entrance, ua.apartment_area_sqm,
                     COALESCE(b.short_name, ua.building_key) AS building_name
              FROM users u
              LEFT JOIN user_profiles p ON p.user_id = u.id
@@ -193,6 +197,7 @@ router.post("/login", async (req: Request, res: Response) => {
             refreshToken,
             user: { id: user.id, email: user.email },
             profile: {
+                apartmentId: String(user.apartment_id ?? ""),
                 name: (user.full_name as string) ?? "",
                 phone: (user.phone as string) ?? "",
                 building: (user.building_key as string) ?? "",
@@ -298,7 +303,7 @@ router.patch("/profile", requireAuth, async (req: AuthRequest, res: Response) =>
             const buildingLabel = building.trim();
             const normalizedAddress = buildingLabel.toLowerCase().replace(/\s+/g, " ");
             if (explicitKey?.trim()) {
-                buildingKey = explicitKey.trim();
+                buildingKey = normalizeBuildingKey(explicitKey);
             } else {
                 const [[existing]] = await pool.query<RowDataPacket[]>(
                     `SELECT building_key FROM buildings

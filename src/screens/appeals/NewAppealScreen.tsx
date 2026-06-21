@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Button, Card, CollapsibleHint, Input, ScreenLayout, VerificationWall } from "../../components/ui";
 import { uploadFile } from "../../api/files";
 import { appealCategories } from "../../data/mockData";
+import { appealCategoryOptions } from "../../constants/appealCategories";
 import { useApp, isVerifiedResident, isVerifiedOwner } from "../../context/AppContext";
 import { OWNERS_MEETING_CATEGORY } from "../../utils/appeals";
 import type { ModerationData } from "../../api/client";
@@ -161,14 +162,14 @@ export function NewAppealScreen({ navigation, route }: Props) {
                     </View>
                     <Text style={[textStyles.label, styles.sectionLabel]}>Категория</Text>
                     <View style={[styles.chips, styles.rowGap]}>
-                        {appealCategories.map((c) => (
+                        {appealCategoryOptions.map((opt) => (
                             <Pressable
-                                key={c}
-                                onPress={() => selectCategory(c)}
-                                style={[styles.chip, category === c && styles.chipActive]}
+                                key={opt.key}
+                                onPress={() => selectCategory(opt.key)}
+                                style={[styles.chip, category === opt.key && styles.chipActive]}
                             >
-                                <Text style={[textStyles.caption, category === c ? styles.chipTextActive : styles.chipText]} numberOfLines={1}>
-                                    {c}
+                                <Text style={[textStyles.caption, category === opt.key ? styles.chipTextActive : styles.chipText]} numberOfLines={1}>
+                                    {opt.label}
                                 </Text>
                             </Pressable>
                         ))}

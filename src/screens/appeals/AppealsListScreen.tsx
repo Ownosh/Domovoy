@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { AppealStatusBadge, VoteStatusBadge, AdStatusBadge, appealStatusColor, voteStatusColor, adStatusColor, Card, NotificationBell, ScreenLayout } from "../../components/ui";
 import { voteEffectiveStatus, adEffectiveStatus } from "../../utils/appeals";
-import { useApp, isVerifiedResident } from "../../context/AppContext";
+import { APPEAL_CATEGORY_LABELS } from "../../constants/appealCategories";
 import type {
     AppealsStackParamList,
     MainTabNavigationProp,
@@ -71,7 +71,9 @@ function AppealCard({ item, onPress }: { item: Appeal; onPress: () => void }) {
                     <Text style={styles.cardDate}>{formatDate(item.createdAt)}</Text>
                 </View>
                 <Text style={[textStyles.subtitle, styles.feedTitle]}>{item.title}</Text>
-                <Text style={[styles.cardMeta, { marginTop: spacing.xs }]} numberOfLines={1}>{item.category}</Text>
+                <Text style={[styles.cardMeta, { marginTop: spacing.xs }]} numberOfLines={1}>
+                    {item.categoryLabel ?? APPEAL_CATEGORY_LABELS[item.category as keyof typeof APPEAL_CATEGORY_LABELS] ?? item.category}
+                </Text>
                 <View style={styles.cardBottom}>
                     <AppealStatusBadge status={item.status} />
                     {item.entrance ? (

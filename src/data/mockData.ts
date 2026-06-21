@@ -131,7 +131,7 @@ export const seedAppeals: Appeal[] = [
         id: "a1",
         title: "Протечка с верхнего этажа",
         body: "Потолок в санузле, пятно увеличивается третий день.",
-        category: "Аварийная ситуация",
+        category: "emergency",
         status: "in_progress",
         createdAt: "2026-03-28T14:20:00",
         kind: "personal",
@@ -145,7 +145,7 @@ export const seedAppeals: Appeal[] = [
         id: "a2",
         title: "Не работает домофон",
         body: "Подъезд 3, панель не реагирует на ключи.",
-        category: "Оборудование",
+        category: "electrical",
         status: "accepted",
         createdAt: "2026-03-25T11:00:00",
         kind: "personal",
@@ -159,7 +159,7 @@ export const seedAppeals: Appeal[] = [
         id: "a3",
         title: "Шум от соседей",
         body: "Громкая музыка после 23:00, кв. 84.",
-        category: "Нарушение порядка",
+        category: "order_violation",
         status: "resolved",
         createdAt: "2026-03-10T09:30:00",
         kind: "personal",
@@ -173,7 +173,7 @@ export const seedAppeals: Appeal[] = [
         id: "a_col_demo",
         title: "Коллективно: сквозняк в подъезде 2",
         body: "Дверь на этаже не закрывается, холодный воздух. Просим УК устранить.",
-        category: "Оборудование",
+        category: "electrical",
         status: "new",
         createdAt: "2026-05-01T10:00:00",
         kind: "collective",
@@ -328,12 +328,14 @@ export const seedVotes: Vote[] = [
 export const seedVoteCasts: VoteCast[] = [
     {
         voteId: "v2",
+        apartmentId: "seed-apt-1",
         userId: "seed",
         optionId: "v2o1",
         votedAt: "2026-03-25T14:00:00",
     },
     {
         voteId: "v2",
+        apartmentId: "seed-apt-2",
         userId: "seed_owner2",
         optionId: "v2o2",
         votedAt: "2026-03-26T10:30:00",
@@ -382,17 +384,9 @@ export const trashPickupSchedule: TrashPickupRow[] = [
     },
 ];
 
-export const appealCategories = [
-    "Аварийная ситуация",
-    "Сантехника",
-    "Электрика",
-    "Отопление",
-    "Вентиляция",
-    "Уборка и благоустройство",
-    "Нарушение порядка",
-    OWNERS_MEETING_CATEGORY,
-    "Другое",
-];
+import { appealCategoryOptions } from "../constants/appealCategories";
+
+export const appealCategories = appealCategoryOptions.map((o) => o.key);
 
 /** Публичные метрики УК (имитация снимка раз в сутки, без ручной правки в приложении) */
 export const ukTransparencyStats: UkTransparencyStats = {

@@ -3,7 +3,7 @@ import { pool } from "../db/client";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
 import { moderateContent } from "../utils/moderation";
-import { getActiveApartment, getActiveBuildingKey, voteEffectiveStatus, VOTE_BUILDING_KEY_EXPR } from "../db/helpers";
+import { getActiveApartment, getActiveBuildingKey, voteEffectiveStatus, VOTE_BUILDING_KEY_EXPR, isApartmentOwner } from "../db/helpers";
 
 const router = Router();
 
@@ -69,11 +69,11 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
         const hasOpen = openVoteIds.length > 0;
         const [castRows] = await pool.query<RowDataPacket[]>(
             hasOpen
-                ? `SELECT vc.vote_id, ua.user_id, vc.option_id, vc.voted_at
+                ? `SELECT vc.vote_id, vc.apartment_id, ua.user_id, vc.option_id, vc.voted_at
                    FROM vote_casts vc
                    JOIN user_apartments ua ON ua.id = vc.apartment_id
                    WHERE vc.vote_id IN (?) OR ua.user_id = ?`
-                : `SELECT vc.vote_id, ua.user_id, vc.option_id, vc.voted_at
+                : `SELECT vc.vote_id, vc.apartment_id, ua.user_id, vc.option_id, vc.voted_at
                    FROM vote_casts vc
                    JOIN user_apartments ua ON ua.id = vc.apartment_id
                    WHERE ua.user_id = ?`,
@@ -81,6 +81,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
         );
         const casts = castRows.map((c) => ({
             voteId: String(c.vote_id),
+            apartmentId: String(c.apartment_id),
             userId: String((c as { user_id?: number }).user_id ?? userId),
             optionId: String(c.option_id),
             votedAt: (c.voted_at as Date).toISOString(),
@@ -345,6 +346,12 @@ router.post("/:id/cast", requireAuth, async (req: AuthRequest, res) => {
         const apt = await getActiveApartment(userId);
         if (!apt) return res.status(400).json({ error: "Профиль не привязан к дому" });
 
+        if (!(await isApartmentOwner(apt.apartmentId))) {
+            return res.status(403).json({
+                error: "Голосовать могут только собственники с подтверждённым правом собственности",
+            });
+        }
+
         const [[vote]] = await pool.query<RowDataPacket[]>(
             `SELECT v.ends_at, v.closed, v.moderation_status
              FROM votes v
@@ -364,12 +371,12 @@ router.post("/:id/cast", requireAuth, async (req: AuthRequest, res) => {
         if (!opt) return res.status(400).json({ error: "Некорректный вариант" });
 
         const [[existingCast]] = await pool.query<RowDataPacket[]>(
-            `SELECT vc.id FROM vote_casts vc
-             JOIN user_apartments ua ON ua.id = vc.apartment_id
-             WHERE vc.vote_id = ? AND ua.user_id = ?`,
-            [voteId, userId],
+            `SELECT id FROM vote_casts WHERE vote_id = ? AND apartment_id = ?`,
+            [voteId, apt.apartmentId],
         );
-        if (existingCast) return res.status(409).json({ error: "Вы уже проголосовали" });
+        if (existingCast) {
+            return res.status(409).json({ error: "Эта квартира уже проголосовала в данном голосовании" });
+        }
 
         await pool.execute(
             `INSERT INTO vote_casts (vote_id, option_id, apartment_id) VALUES (?, ?, ?)`,
@@ -379,7 +386,7 @@ router.post("/:id/cast", requireAuth, async (req: AuthRequest, res) => {
     } catch (err: unknown) {
         const code = (err as { code?: string })?.code;
         if (code === "ER_DUP_ENTRY")
-            return res.status(409).json({ error: "Вы уже проголосовали" });
+            return res.status(409).json({ error: "Эта квартира уже проголосовала в данном голосовании" });
         if (code === "45000")
             return res.status(400).json({ error: "Голосование недоступно для вашего дома" });
         console.error("[votes/cast POST]", err);

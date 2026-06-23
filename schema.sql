@@ -254,13 +254,11 @@ CREATE TABLE IF NOT EXISTS appeals (
 
 -- appeal_photos — см. ниже в разделе фото
 
+-- Подпись на коллективное обращение: квартира + дата (имя/фото — через JOIN user_profiles).
 CREATE TABLE IF NOT EXISTS appeal_participants (
   id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   appeal_id    BIGINT UNSIGNED NOT NULL,
   apartment_id BIGINT UNSIGNED NOT NULL,
-  anonymous    BOOLEAN         NOT NULL DEFAULT FALSE,
-  comment      TEXT            DEFAULT NULL,
-  photo_uri    TEXT            DEFAULT NULL,
   joined_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_ap_appeal_apartment (appeal_id, apartment_id),
@@ -414,13 +412,6 @@ CREATE TABLE IF NOT EXISTS environment_ratings (
   UNIQUE KEY uq_er_apartment_month (apartment_id, month_key),
   CONSTRAINT fk_er_apartment FOREIGN KEY (apartment_id) REFERENCES user_apartments(id) ON DELETE CASCADE,
   INDEX idx_er_apartment_month (apartment_id, month_key DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS environment_rating_feedback_tags (
-  rating_id BIGINT UNSIGNED NOT NULL,
-  tag_id    ENUM('yard','entrance','uk_comm','uk_work','contractors','safety','other') NOT NULL,
-  PRIMARY KEY (rating_id, tag_id),
-  CONSTRAINT fk_erft_rating FOREIGN KEY (rating_id) REFERENCES environment_ratings(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================

@@ -187,12 +187,16 @@ router.get("/chats", requireAuth, async (req: AuthRequest, res) => {
         );
         if (!b) return res.json([]);
         const out: { platform: "telegram" | "vk" | "max"; url: string }[] = [];
-        const tg = String(b.chat_telegram_url ?? "").trim();
-        const vk = String(b.chat_vk_url ?? "").trim();
-        const mx = String(b.chat_max_url ?? "").trim();
-        if (tg) out.push({ platform: "telegram", url: tg });
-        if (vk) out.push({ platform: "vk", url: vk });
-        if (mx) out.push({ platform: "max", url: mx });
+        for (const [platform, raw] of [
+            ["telegram", b.chat_telegram_url],
+            ["vk", b.chat_vk_url],
+            ["max", b.chat_max_url],
+        ] as const) {
+            const url = String(raw ?? "").trim();
+            if (url.startsWith("http://") || url.startsWith("https://")) {
+                out.push({ platform, url });
+            }
+        }
         return res.json(out);
     } catch (err) {
         console.error("buildings/chats error:", err);

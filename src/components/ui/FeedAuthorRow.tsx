@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import React from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { colors, spacing, textStyles } from "../../theme";
+import { imageAvatarUrl } from "../../utils/imageUrl";
 
 type Props = {
     name: string;
@@ -33,7 +35,13 @@ export function FeedAuthorRow({ name, photo, sub }: Props) {
     return (
         <View style={styles.row}>
             {photo ? (
-                <Image source={{ uri: photo }} style={styles.avatar} />
+                <Image
+                    source={{ uri: imageAvatarUrl(photo, 56) }}
+                    style={styles.avatar}
+                    contentFit="cover"
+                    cachePolicy="none"
+                    transition={100}
+                />
             ) : name === "УК" ? (
                 <View style={[styles.avatar, styles.avatarUk]}>
                     <Ionicons name="business-outline" size={16} color="#1a5f9a" />
@@ -55,7 +63,15 @@ export function AvatarThumb({ name, photo, size = 52 }: { name: string; photo?: 
     const bgColor = avatarColor(name);
     const r = size / 2;
     if (photo) {
-        return <Image source={{ uri: photo }} style={{ width: size, height: size, borderRadius: r }} />;
+        return (
+            <Image
+                source={{ uri: imageAvatarUrl(photo, size * 2) }}
+                style={{ width: size, height: size, borderRadius: r, backgroundColor: colors.border }}
+                contentFit="cover"
+                cachePolicy="none"
+                transition={100}
+            />
+        );
     }
     if (name === "УК") {
         return (

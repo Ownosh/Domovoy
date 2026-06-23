@@ -1,5 +1,18 @@
 import { apiRequest } from "./client";
-import type { AppNotification } from "../types";
+import type { AppNotification, NotificationPrefs } from "../types";
+
+export async function apiFetchNotificationPrefs(): Promise<NotificationPrefs> {
+    return apiRequest<NotificationPrefs>("/notifications/prefs");
+}
+
+export async function apiUpdateNotificationPrefs(
+    prefs: Partial<NotificationPrefs>,
+): Promise<NotificationPrefs> {
+    return apiRequest<NotificationPrefs>("/notifications/prefs", {
+        method: "PATCH",
+        body: JSON.stringify(prefs),
+    });
+}
 
 export async function apiFetchNotifications(): Promise<AppNotification[]> {
     return apiRequest<AppNotification[]>("/notifications");

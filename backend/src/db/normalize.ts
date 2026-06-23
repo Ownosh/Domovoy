@@ -11,14 +11,10 @@ export function normalizeApartment(apartment: string): string {
     return s;
 }
 
-/** SQL-выражение для migrate/триггеров (MariaDB REGEXP_REPLACE). */
+/** SQL-выражение для migrate/триггеров (MySQL 8 REGEXP_REPLACE — 3 аргумента). */
 export const SQL_NORMALIZE_APARTMENT_NORM = `
-LOWER(
-  REGEXP_REPLACE(
-    REGEXP_REPLACE(TRIM(apartment), '^(кв\\\\.?|№|#)[[:space:]]*', '', 1, 0, 'i'),
-    '[^0-9a-zа-яё]',
-    '',
-    1, 0, 'i'
-  )
+REGEXP_REPLACE(
+  REGEXP_REPLACE(LOWER(TRIM(apartment)), '^(кв\\\\.?|№|#)[[:space:]]*', ''),
+  '[^0-9a-zа-яё]', ''
 )
 `;

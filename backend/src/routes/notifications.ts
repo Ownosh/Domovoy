@@ -6,6 +6,22 @@ import { getActiveBuildingKey } from "../db/helpers";
 
 const router = Router();
 
+type NotificationPrefsBody = {
+    outages?: boolean;
+    meetings?: boolean;
+    announcements?: boolean;
+    general?: boolean;
+};
+
+function prefsFromRow(r: RowDataPacket) {
+    return {
+        outages: Boolean(r.notif_outages),
+        meetings: Boolean(r.notif_meetings),
+        announcements: Boolean(r.notif_announcements),
+        general: Boolean(r.notif_general),
+    };
+}
+
 function notificationScopeSql(buildingKey: string | null): { sql: string; params: string[] } {
     return {
         sql: `(n.building_key IS NULL OR LOWER(n.building_key) = LOWER(?))`,
@@ -42,6 +58,77 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
         })));
     } catch (err) {
         console.error("[notifications GET]", err);
+        return res.status(500).json({ error: "Ошибка сервера" });
+    }
+});
+
+// GET /api/notifications/prefs
+router.get("/prefs", requireAuth, async (req: AuthRequest, res) => {
+    try {
+        const [rows] = await pool.query<RowDataPacket[]>(
+            `SELECT notif_outages, notif_meetings, notif_announcements, notif_general
+             FROM users WHERE id = ? AND is_active = 1`,
+            [req.userId!],
+        );
+        if (!rows[0]) return res.status(404).json({ error: "Пользователь не найден" });
+        return res.json(prefsFromRow(rows[0]));
+    } catch (err) {
+        console.error("[notifications prefs GET]", err);
+        return res.status(500).json({ error: "Ошибка сервера" });
+    }
+});
+
+// PATCH /api/notifications/prefs
+router.patch("/prefs", requireAuth, async (req: AuthRequest, res) => {
+    const body = req.body as NotificationPrefsBody;
+    const fields: Array<keyof NotificationPrefsBody> = [
+        "outages",
+        "meetings",
+        "announcements",
+        "general",
+    ];
+    const updates: string[] = [];
+    const params: boolean[] = [];
+
+    for (const key of fields) {
+        if (body[key] !== undefined) {
+            if (typeof body[key] !== "boolean") {
+                return res.status(400).json({ error: `Поле ${key} должно быть boolean` });
+            }
+            const column =
+                key === "outages"
+                    ? "notif_outages"
+                    : key === "meetings"
+                      ? "notif_meetings"
+                      : key === "announcements"
+                        ? "notif_announcements"
+                        : "notif_general";
+            updates.push(`${column} = ?`);
+            params.push(body[key]!);
+        }
+    }
+
+    if (updates.length === 0) {
+        return res.status(400).json({ error: "Нет полей для обновления" });
+    }
+
+    try {
+        const [result] = await pool.execute(
+            `UPDATE users SET ${updates.join(", ")} WHERE id = ? AND is_active = 1`,
+            [...params, req.userId!],
+        );
+        if ((result as { affectedRows: number }).affectedRows === 0) {
+            return res.status(404).json({ error: "Пользователь не найден" });
+        }
+
+        const [rows] = await pool.query<RowDataPacket[]>(
+            `SELECT notif_outages, notif_meetings, notif_announcements, notif_general
+             FROM users WHERE id = ?`,
+            [req.userId!],
+        );
+        return res.json(prefsFromRow(rows[0]));
+    } catch (err) {
+        console.error("[notifications prefs PATCH]", err);
         return res.status(500).json({ error: "Ошибка сервера" });
     }
 });

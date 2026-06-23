@@ -5,11 +5,17 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc --outDir dist",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "loadtest:health": "autocannon -c 20 -d 10 http://127.0.0.1:3001/health",
+    "loadtest:app": "node loadtests/run-app-startup.mjs",
+    "loadtest:k6:smoke": "k6 run loadtests/smoke.js",
+    "loadtest:k6:app": "k6 run loadtests/app-startup.js",
+    "loadtest:k6:stress": "k6 run loadtests/stress.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.102.0",
     "@aws-sdk/client-s3": "^3.1062.0",
+    "@aws-sdk/s3-request-presigner": "^3.1074.0",
     "@types/multer": "^2.1.0",
     "bcrypt": "*",
     "cors": "*",
@@ -24,6 +30,7 @@
     "zod": "*"
   },
   "devDependencies": {
+    "autocannon": "^8.0.0",
     "@types/bcrypt": "*",
     "@types/cors": "*",
     "@types/express": "*",

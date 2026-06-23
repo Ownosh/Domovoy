@@ -9,7 +9,13 @@ import { clearTokens, ApiError } from "../api/client";
 import { apiSubmitRating, apiFetchMyRating, apiFetchRatingStats } from "../api/ratings";
 import { apiFetchBuildingInfo, apiFetchBuildingPhotos, apiFetchBuildingSpecs, apiFetchBuildingSchedule, apiFetchBuildingCalendar, apiFetchBuildingContacts, apiFetchBuildingChats, type BuildingInfo, type BuildingSpec, type HouseScheduleItem } from "../api/buildings";
 import { apiFetchDistrictPois } from "../api/district";
-import { apiFetchNotifications, apiMarkNotificationRead, apiMarkAllNotificationsRead } from "../api/notifications";
+import {
+    apiFetchNotifications,
+    apiFetchNotificationPrefs,
+    apiUpdateNotificationPrefs,
+    apiMarkNotificationRead,
+    apiMarkAllNotificationsRead,
+} from "../api/notifications";
 import { apiFetchVerificationStatus, apiSubmitVerification } from "../api/verification";
 import { apiFetchApartments, apiAddApartment, apiActivateApartment, apiDeleteApartment } from "../api/apartments";
 import React, {
@@ -33,7 +39,6 @@ import type {
     AppealParticipant,
     AppNotification,
     DistrictPoi,
-    EnvironmentRatingFeedbackTagId,
     EnvironmentRatingSnapshot,
     EnvironmentRatingSubmitInput,
     UkTransparencyStats,
@@ -175,6 +180,7 @@ type Action =
       }
     | { type: "MARK_NOTIF_READ"; payload: string }
     | { type: "TOGGLE_PREF"; payload: keyof NotificationPrefs }
+    | { type: "SET_NOTIFICATION_PREFS"; payload: NotificationPrefs }
     | { type: "DELETE_ACCOUNT" }
     | { type: "SET_VERIFICATION_STATUS"; payload: VerificationState }
     | { type: "ARCHIVE_EXPIRED_NEIGHBOR_ADS" }
@@ -232,13 +238,20 @@ function reducer(state: AppState, action: Action): AppState {
         case "SESSION_START":
             return { ...state, sessionActive: true };
         case "SESSION_END":
-            return { ...state, account: null, sessionActive: false, voteCasts: [] };
+            return {
+                ...state,
+                account: null,
+                sessionActive: false,
+                voteCasts: [],
+                notificationPrefs: defaultPrefs,
+            };
         case "LOGIN":
             return {
                 ...state,
                 account: action.payload,
                 sessionActive: true,
                 voteCasts: [],
+                notificationPrefs: defaultPrefs,
             };
         case "REGISTER":
             return {
@@ -246,6 +259,7 @@ function reducer(state: AppState, action: Action): AppState {
                 account: action.payload,
                 sessionActive: true,
                 voteCasts: [],
+                notificationPrefs: defaultPrefs,
             };
         case "UPDATE_PROFILE":
             if (!state.account) return state;
@@ -355,6 +369,11 @@ function reducer(state: AppState, action: Action): AppState {
                     [action.payload]:
                         !state.notificationPrefs[action.payload],
                 },
+            };
+        case "SET_NOTIFICATION_PREFS":
+            return {
+                ...state,
+                notificationPrefs: action.payload,
             };
         case "DELETE_ACCOUNT":
             return {
@@ -469,7 +488,7 @@ function reducer(state: AppState, action: Action): AppState {
                 houseSchedule: action.payload.schedule ?? state.houseSchedule,
                 houseCalendar: action.payload.calendar ?? state.houseCalendar,
                 ukContacts: action.payload.contacts !== undefined ? action.payload.contacts : state.ukContacts,
-                houseChats: action.payload.chats ?? state.houseChats,
+                houseChats: action.payload.chats !== undefined ? action.payload.chats : state.houseChats,
             };
         case "REPLACE_APPEAL": {
             const idx = state.appeals.findIndex((a) => a.id === action.payload.id);
@@ -657,34 +676,12 @@ function mergeHydrated(parsed: Partial<AppState>): AppState {
     };
 }
 
-const ALLOWED_RATING_FEEDBACK_TAGS: EnvironmentRatingFeedbackTagId[] = [
-    "yard",
-    "entrance",
-    "uk_comm",
-    "uk_work",
-    "contractors",
-    "safety",
-    "other",
-];
-
 function monthKeyFromSubmittedAt(iso: string): string | null {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return null;
     const y = d.getFullYear();
     const m = d.getMonth() + 1;
     return `${y}-${m < 10 ? `0${m}` : m}`;
-}
-
-function normalizeFeedbackTagIds(
-    raw: unknown,
-): EnvironmentRatingFeedbackTagId[] | undefined {
-    if (!Array.isArray(raw)) return undefined;
-    const set = new Set(ALLOWED_RATING_FEEDBACK_TAGS);
-    const out = raw.filter(
-        (id): id is EnvironmentRatingFeedbackTagId =>
-            typeof id === "string" && set.has(id as EnvironmentRatingFeedbackTagId),
-    );
-    return out.length > 0 ? out : undefined;
 }
 
 function normalizeEnvironmentRating(
@@ -712,7 +709,6 @@ function normalizeEnvironmentRating(
         typeof mkRaw === "string" && /^\d{4}-\d{2}$/.test(mkRaw)
             ? mkRaw
             : monthKeyFromSubmittedAt(submittedAt) ?? "1970-01";
-    const feedbackTagIds = normalizeFeedbackTagIds(o.feedbackTagIds);
     const otherRaw = o.feedbackOther;
     const feedbackOther =
         typeof otherRaw === "string" && otherRaw.trim().length > 0
@@ -723,7 +719,6 @@ function normalizeEnvironmentRating(
         entranceStars: e as EnvironmentRatingSnapshot["entranceStars"],
         ukStars: u as EnvironmentRatingSnapshot["ukStars"],
         monthKey,
-        feedbackTagIds,
         feedbackOther,
         submittedAt,
     };
@@ -747,6 +742,11 @@ function normalizeProfile(p: Profile | undefined): Profile {
                 ? p.apartmentAreaSqm
                 : undefined,
         profilePhoto: p.profilePhoto || undefined,
+        profilePhotoPreviewUri:
+            typeof p.profilePhotoPreviewUri === "string" &&
+            p.profilePhotoPreviewUri.startsWith("file:")
+                ? p.profilePhotoPreviewUri
+                : undefined,
     };
 }
 
@@ -913,6 +913,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         apiFetchNotifications()
             .then((items) => dispatch({ type: "SET_NOTIFICATIONS", payload: items }))
             .catch(() => {});
+        apiFetchNotificationPrefs()
+            .then((prefs) => dispatch({ type: "SET_NOTIFICATION_PREFS", payload: prefs }))
+            .catch((err) => { onUnauthorized(err); });
         apiFetchVerificationStatus()
             .then((v) => dispatch({ type: "SET_VERIFICATION_STATUS", payload: v }))
             .catch(() => {});
@@ -937,8 +940,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 specs:    specs.status    === "fulfilled" ? specs.value    : undefined,
                 schedule: schedule.status === "fulfilled" ? schedule.value : undefined,
                 calendar: calendar.status === "fulfilled" ? calendar.value : undefined,
-                contacts: contacts.status === "fulfilled" ? contacts.value : undefined,
-                chats:    chats.status    === "fulfilled" ? chats.value    : undefined,
+                contacts: contacts.status === "fulfilled" ? contacts.value : null,
+                chats:    chats.status    === "fulfilled" ? chats.value    : [],
             }});
         });
     }, []);
@@ -1117,13 +1120,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                         entrance: state.account.profile.entrance != null
                             ? String(state.account.profile.entrance) : undefined,
                         displayName,
-                        anonymous: false,
+                        profilePhoto: state.account.profile.profilePhoto,
                         joinedAt: new Date().toISOString(),
                     },
                 },
             });
             // Синхронизация с сервером в фоне
-            apiJoinAppeal(appealId, { anonymous: false, displayName })
+            apiJoinAppeal(appealId)
                 .then(() => apiFetchAppeals())
                 .then((updated) => dispatch({ type: "SET_APPEALS", payload: updated }))
                 .catch(() => {
@@ -1174,9 +1177,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const toggleNotificationPref = useCallback(
         (key: keyof NotificationPrefs) => {
-            dispatch({ type: "TOGGLE_PREF", payload: key });
+            const prev = state.notificationPrefs;
+            const next: NotificationPrefs = {
+                ...prev,
+                [key]: !prev[key],
+            };
+            dispatch({ type: "SET_NOTIFICATION_PREFS", payload: next });
+            apiUpdateNotificationPrefs({ [key]: next[key] }).catch(() => {
+                dispatch({ type: "SET_NOTIFICATION_PREFS", payload: prev });
+            });
         },
-        [],
+        [state.notificationPrefs],
     );
 
     const deleteAccount = useCallback(() => {
@@ -1425,16 +1436,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const y = now.getFullYear();
         const m = now.getMonth() + 1;
         const monthKey = `${y}-${m < 10 ? `0${m}` : m}`;
-        const tags = input.feedbackTagIds?.filter((id) =>
-            ALLOWED_RATING_FEEDBACK_TAGS.includes(id),
-        );
         const otherTrim = input.feedbackOther?.trim();
         const snapshot = {
             courtyardStars: input.courtyardStars,
             entranceStars: input.entranceStars,
             ukStars: input.ukStars,
             monthKey,
-            feedbackTagIds: tags && tags.length > 0 ? tags : undefined,
             feedbackOther: otherTrim && otherTrim.length > 0 ? otherTrim : undefined,
             submittedAt: now.toISOString(),
         };
@@ -1444,7 +1451,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             courtyardStars: input.courtyardStars,
             entranceStars: input.entranceStars,
             ukStars: input.ukStars,
-            feedbackTagIds: tags && tags.length > 0 ? (tags as string[]) : undefined,
             feedbackOther: otherTrim && otherTrim.length > 0 ? otherTrim : undefined,
         }).catch(() => {});
     }, []);
@@ -1500,12 +1506,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                         },
                     });
                 }
+                fetchAllData();
                 return { ok: true };
             } catch (e: any) {
                 return { ok: false, reason: e?.message ?? "Ошибка переключения квартиры" };
             }
         },
-        [],
+        [fetchAllData],
     );
 
     const removeApartment = useCallback(

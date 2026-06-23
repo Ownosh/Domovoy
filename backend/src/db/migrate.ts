@@ -5,7 +5,7 @@ import { LEGACY_APPEAL_CATEGORY_MAP } from "../constants/appealCategories";
 import { runMaintenance, installMaintenanceEvents } from "./maintenance";
 
 // Идемпотентный ALTER: только ожидаемые «уже есть» ошибки — warn, остальные — throw
-const SKIPPABLE_MIGRATE = /Duplicate|already exists|check that column\/key exists|Can't DROP|Unknown column|check that it exists|Multiple primary key/i;
+const SKIPPABLE_MIGRATE = /Duplicate|already exists|check that column\/key exists|Can't DROP|Cannot drop index|needed in a foreign key constraint|cannot be used in the CHECK clause|Unknown column|check that it exists|Multiple primary key/i;
 
 async function exec(sql: string): Promise<void> {
     await pool.query(sql).catch((err: unknown) => {
@@ -59,6 +59,27 @@ async function columnExists(table: string, column: string): Promise<boolean> {
     return rows.length > 0;
 }
 
+async function indexExists(table: string, indexName: string): Promise<boolean> {
+    const [rows] = await pool.query<RowDataPacket[]>(
+        `SELECT 1 FROM information_schema.STATISTICS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?
+         LIMIT 1`,
+        [table, indexName],
+    );
+    return rows.length > 0;
+}
+
+async function foreignKeyExists(table: string, constraintName: string): Promise<boolean> {
+    const [rows] = await pool.query<RowDataPacket[]>(
+        `SELECT 1 FROM information_schema.TABLE_CONSTRAINTS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_NAME = ?
+           AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+         LIMIT 1`,
+        [table, constraintName],
+    );
+    return rows.length > 0;
+}
+
 async function tableExists(table: string): Promise<boolean> {
     const [rows] = await pool.query<RowDataPacket[]>(
         `SELECT 1 FROM information_schema.TABLES
@@ -108,6 +129,9 @@ export async function migrate(): Promise<void> {
                 ADD PRIMARY KEY (building_key),
                 DROP COLUMN id
         `);
+    }
+    // uq_buildings_key дублирует PK(building_key); FK могут быть привязаны к нему — drop необязателен
+    if (await indexExists("buildings", "uq_buildings_key")) {
         await exec(`ALTER TABLE buildings DROP INDEX uq_buildings_key`);
     }
 
@@ -365,8 +389,14 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
     await exec(`ALTER TABLE news ADD COLUMN IF NOT EXISTS is_published TINYINT(1) NOT NULL DEFAULT 1`);
-    await exec(`ALTER TABLE news DROP FOREIGN KEY fk_news_building`);
-    await exec(`ALTER TABLE news ADD CONSTRAINT fk_news_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
+    if (await columnExists("news", "building_key")) {
+        if (await foreignKeyExists("news", "fk_news_building")) {
+            await exec(`ALTER TABLE news DROP FOREIGN KEY fk_news_building`);
+        }
+        if (!(await foreignKeyExists("news", "fk_news_building"))) {
+            await exec(`ALTER TABLE news ADD CONSTRAINT fk_news_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
+        }
+    }
 
     // news_photos — см. раздел фото ниже
 
@@ -388,8 +418,14 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
     await exec(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS building_key VARCHAR(120) NULL COMMENT 'NULL = всем домам'`);
-    await exec(`ALTER TABLE notifications DROP FOREIGN KEY fk_notif_building`);
-    await exec(`ALTER TABLE notifications ADD CONSTRAINT fk_notif_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
+    if (await columnExists("notifications", "building_key")) {
+        if (await foreignKeyExists("notifications", "fk_notif_building")) {
+            await exec(`ALTER TABLE notifications DROP FOREIGN KEY fk_notif_building`);
+        }
+        if (!(await foreignKeyExists("notifications", "fk_notif_building"))) {
+            await exec(`ALTER TABLE notifications ADD CONSTRAINT fk_notif_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
+        }
+    }
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS user_notification_reads (
@@ -441,16 +477,37 @@ export async function migrate(): Promise<void> {
     await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_comment TEXT DEFAULT NULL`);
     await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_comment_at DATETIME DEFAULT NULL`);
     await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_comment_read_at DATETIME DEFAULT NULL`);
-    await exec(`ALTER TABLE appeals ADD CONSTRAINT fk_appeals_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
+    if (await columnExists("appeals", "building_key")) {
+        await exec(`ALTER TABLE appeals ADD CONSTRAINT fk_appeals_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
+    }
     await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS author_apartment_id BIGINT UNSIGNED DEFAULT NULL`);
-    await exec(`
-        UPDATE appeals a
-        JOIN user_apartments ua ON ua.user_id = a.user_id AND ua.building_key = a.building_key AND ua.apartment = a.author_apartment
-        SET a.author_apartment_id = ua.id
-        WHERE a.author_apartment_id IS NULL
-    `);
-    await exec(`ALTER TABLE appeals ADD CONSTRAINT fk_appeals_apartment FOREIGN KEY (author_apartment_id) REFERENCES user_apartments(id) ON DELETE SET NULL`);
-    await exec(`ALTER TABLE appeals ADD INDEX idx_appeals_apartment (author_apartment_id)`);
+    if (
+        await columnExists("appeals", "building_key") &&
+        await columnExists("appeals", "author_apartment")
+    ) {
+        await exec(`
+            UPDATE appeals a
+            JOIN user_apartments ua ON ua.user_id = a.user_id AND ua.building_key = a.building_key AND ua.apartment = a.author_apartment
+            SET a.author_apartment_id = ua.id
+            WHERE a.author_apartment_id IS NULL
+        `);
+    }
+    // Legacy appeals (ещё с user_id): промежуточный FK. На новой схеме — см. блок ниже (~author_building_key).
+    if (await columnExists("appeals", "user_id")) {
+        await exec(`
+            UPDATE appeals a
+            LEFT JOIN user_apartments ua ON ua.id = a.author_apartment_id
+            SET a.author_apartment_id = NULL
+            WHERE a.author_apartment_id IS NOT NULL
+              AND (ua.id IS NULL OR a.author_apartment_id = 0)
+        `);
+        await exec(`ALTER TABLE appeals MODIFY COLUMN author_apartment_id BIGINT UNSIGNED NULL`);
+        if (await foreignKeyExists("appeals", "fk_appeals_apartment")) {
+            await exec(`ALTER TABLE appeals DROP FOREIGN KEY fk_appeals_apartment`);
+        }
+        await exec(`ALTER TABLE appeals ADD CONSTRAINT fk_appeals_apartment FOREIGN KEY (author_apartment_id) REFERENCES user_apartments(id) ON DELETE SET NULL`);
+    }
+    await exec(`ALTER TABLE appeals ADD INDEX IF NOT EXISTS idx_appeals_apartment (author_apartment_id)`);
     // author_apartment (snapshot) удаляем — значение берём через JOIN user_apartments
     await exec(`ALTER TABLE appeals DROP COLUMN IF EXISTS author_apartment`);
 
@@ -491,26 +548,28 @@ export async function migrate(): Promise<void> {
     //  колонку building_key и делаем привязку к квартире обязательной (ON DELETE RESTRICT),
     //  чтобы дом всегда был разрешим через JOIN, а не хранился отдельной копией.
     // ============================================================
-    // Подстраховка: добиваем author_apartment_id там, где он ещё не проставлен —
-    // берём активную квартиру пользователя в том же доме (колонка building_key ещё есть).
-    await exec(`
-        UPDATE appeals a
-        JOIN user_profiles p ON p.user_id = a.user_id
-        JOIN user_apartments ua ON ua.id = p.active_apartment_id AND ua.building_key = a.building_key
-        SET a.author_apartment_id = ua.id
-        WHERE a.author_apartment_id IS NULL
-    `);
-    // Осиротевшие обращения (без разрешимой квартиры) в нормализованной модели
-    // представить нельзя — удаляем (обычно их нет).
-    await exec(`DELETE FROM appeals WHERE author_apartment_id IS NULL`);
-    // Привязка к квартире автора обязательна и защищена от удаления квартиры.
-    await exec(`ALTER TABLE appeals MODIFY COLUMN author_apartment_id BIGINT UNSIGNED NOT NULL`);
-    await exec(`ALTER TABLE appeals DROP FOREIGN KEY fk_appeals_apartment`);
-    await exec(`ALTER TABLE appeals ADD CONSTRAINT fk_appeals_apartment FOREIGN KEY (author_apartment_id) REFERENCES user_apartments(id) ON DELETE RESTRICT`);
-    // Удаляем дублирующую building_key — дом берём через JOIN user_apartments.
-    await exec(`ALTER TABLE appeals DROP FOREIGN KEY fk_appeals_building`);
-    await exec(`ALTER TABLE appeals DROP INDEX idx_appeals_building_key`);
-    await exec(`ALTER TABLE appeals DROP COLUMN building_key`);
+    if (await columnExists("appeals", "building_key")) {
+        // Подстраховка: добиваем author_apartment_id там, где он ещё не проставлен —
+        // берём активную квартиру пользователя в том же доме (колонка building_key ещё есть).
+        await exec(`
+            UPDATE appeals a
+            JOIN user_profiles p ON p.user_id = a.user_id
+            JOIN user_apartments ua ON ua.id = p.active_apartment_id AND ua.building_key = a.building_key
+            SET a.author_apartment_id = ua.id
+            WHERE a.author_apartment_id IS NULL
+        `);
+        // Осиротевшие обращения (без разрешимой квартиры) в нормализованной модели
+        // представить нельзя — удаляем (обычно их нет).
+        await exec(`DELETE FROM appeals WHERE author_apartment_id IS NULL`);
+        // Привязка к квартире автора обязательна и защищена от удаления квартиры.
+        await exec(`ALTER TABLE appeals MODIFY COLUMN author_apartment_id BIGINT UNSIGNED NOT NULL`);
+        await exec(`ALTER TABLE appeals DROP FOREIGN KEY fk_appeals_apartment`);
+        await exec(`ALTER TABLE appeals ADD CONSTRAINT fk_appeals_apartment FOREIGN KEY (author_apartment_id) REFERENCES user_apartments(id) ON DELETE RESTRICT`);
+        // Удаляем дублирующую building_key — дом берём через JOIN user_apartments.
+        await exec(`ALTER TABLE appeals DROP FOREIGN KEY fk_appeals_building`);
+        await exec(`ALTER TABLE appeals DROP INDEX idx_appeals_building_key`);
+        await exec(`ALTER TABLE appeals DROP COLUMN building_key`);
+    }
 
     // appeal_photos — см. раздел фото ниже
 
@@ -523,9 +582,6 @@ export async function migrate(): Promise<void> {
             apartment_id BIGINT UNSIGNED DEFAULT NULL,
             entrance     INT             DEFAULT NULL,
             display_name VARCHAR(255)    NOT NULL DEFAULT '' COMMENT 'снепшот имени на момент присоединения, не синхронизируется с user_profiles.full_name',
-            anonymous    BOOLEAN         NOT NULL DEFAULT FALSE,
-            comment      TEXT            DEFAULT NULL,
-            photo_uri    TEXT            DEFAULT NULL,
             joined_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             UNIQUE KEY uq_ap_appeal_user (appeal_id, user_id),
@@ -536,7 +592,6 @@ export async function migrate(): Promise<void> {
     `);
     await exec(`ALTER TABLE appeal_participants MODIFY COLUMN apartment VARCHAR(20) NOT NULL COMMENT 'снепшот на момент присоединения, не синхронизируется с user_apartments.apartment'`);
     await exec(`ALTER TABLE appeal_participants MODIFY COLUMN display_name VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'снепшот имени на момент присоединения, не синхронизируется с user_profiles.full_name'`);
-    await exec(`ALTER TABLE appeal_participants MODIFY COLUMN photo_uri TEXT DEFAULT NULL`);
     await exec(`ALTER TABLE appeal_participants MODIFY COLUMN entrance INT DEFAULT NULL`);
     await exec(`ALTER TABLE appeal_participants ADD COLUMN IF NOT EXISTS apartment_id BIGINT UNSIGNED DEFAULT NULL`);
     // building_key в appeals уже удалён — дом берём через квартиру автора обращения
@@ -640,7 +695,11 @@ export async function migrate(): Promise<void> {
         ENUM('new','under_review','published','archived','rejected','under_review_appeal')
         NOT NULL DEFAULT 'new'
     `);
-    await exec(`ALTER TABLE neighbor_ads ADD CONSTRAINT fk_na_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
+    if (await columnExists("neighbor_ads", "building_key")) {
+        if (!(await foreignKeyExists("neighbor_ads", "fk_na_building"))) {
+            await exec(`ALTER TABLE neighbor_ads ADD CONSTRAINT fk_na_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
+        }
+    }
 
     // pending_moderation/archived заменены единым полем status (single source of truth)
     if (await columnExists("neighbor_ads", "pending_moderation")) {
@@ -694,7 +753,11 @@ export async function migrate(): Promise<void> {
         ENUM('new','under_review','active','completed','cancelled')
         NOT NULL DEFAULT 'new'
     `);
-    await exec(`ALTER TABLE votes ADD CONSTRAINT fk_votes_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
+    if (await columnExists("votes", "building_key")) {
+        if (!(await foreignKeyExists("votes", "fk_votes_building"))) {
+            await exec(`ALTER TABLE votes ADD CONSTRAINT fk_votes_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
+        }
+    }
 
     // Существующие голосования создавались до появления status — переносим их в active/completed
     await exec(`UPDATE votes SET status = 'completed' WHERE status = 'new' AND (closed = 1 OR ends_at <= NOW())`);
@@ -775,41 +838,7 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS environment_rating_feedback_tags (
-            rating_id BIGINT UNSIGNED NOT NULL,
-            tag_id    ENUM('yard','entrance','uk_comm','uk_work','contractors','safety','other') NOT NULL,
-            PRIMARY KEY (rating_id, tag_id),
-            CONSTRAINT fk_erft_rating FOREIGN KEY (rating_id) REFERENCES environment_ratings(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    `);
-
     if (await columnExists("environment_ratings", "feedback_tags")) {
-        const VALID_RATING_FEEDBACK_TAGS = new Set([
-            "yard", "entrance", "uk_comm", "uk_work", "contractors", "safety", "other",
-        ]);
-        const [legacyRows] = await pool.query<RowDataPacket[]>(
-            `SELECT id, feedback_tags FROM environment_ratings WHERE feedback_tags IS NOT NULL`,
-        );
-        for (const row of legacyRows) {
-            let tags: unknown;
-            try {
-                const raw = row.feedback_tags;
-                tags = typeof raw === "string" ? JSON.parse(raw) : raw;
-            } catch {
-                continue;
-            }
-            if (!Array.isArray(tags)) continue;
-            for (const tag of tags) {
-                if (typeof tag !== "string" || !VALID_RATING_FEEDBACK_TAGS.has(tag)) continue;
-                await pool
-                    .execute(
-                        `INSERT IGNORE INTO environment_rating_feedback_tags (rating_id, tag_id) VALUES (?, ?)`,
-                        [row.id, tag],
-                    )
-                    .catch(() => {});
-            }
-        }
         await exec(`ALTER TABLE environment_ratings DROP COLUMN feedback_tags`);
     }
 
@@ -1545,12 +1574,23 @@ export async function migrate(): Promise<void> {
         `);
     }
 
-    await exec(`ALTER TABLE appeals DROP FOREIGN KEY fk_appeals_apartment`);
-    await exec(`ALTER TABLE appeals MODIFY COLUMN author_apartment_id BIGINT UNSIGNED NULL`);
     await exec(`
-        ALTER TABLE appeals ADD CONSTRAINT fk_appeals_apartment
-        FOREIGN KEY (author_apartment_id) REFERENCES user_apartments(id) ON DELETE SET NULL
+        UPDATE appeals a
+        LEFT JOIN user_apartments ua ON ua.id = a.author_apartment_id
+        SET a.author_apartment_id = NULL
+        WHERE a.author_apartment_id IS NOT NULL
+          AND (ua.id IS NULL OR a.author_apartment_id = 0)
     `);
+    await exec(`ALTER TABLE appeals MODIFY COLUMN author_apartment_id BIGINT UNSIGNED NULL`);
+    if (await foreignKeyExists("appeals", "fk_appeals_apartment")) {
+        await exec(`ALTER TABLE appeals DROP FOREIGN KEY fk_appeals_apartment`);
+    }
+    if (!(await foreignKeyExists("appeals", "fk_appeals_apartment"))) {
+        await exec(`
+            ALTER TABLE appeals ADD CONSTRAINT fk_appeals_apartment
+            FOREIGN KEY (author_apartment_id) REFERENCES user_apartments(id) ON DELETE SET NULL
+        `);
+    }
 
     await exec(`DELETE FROM refresh_tokens WHERE expires_at < NOW()`);
 
@@ -1565,12 +1605,7 @@ export async function migrate(): Promise<void> {
         BEGIN
             SET NEW.building_key = LOWER(TRIM(NEW.building_key));
             SET NEW.apartment = TRIM(NEW.apartment);
-            SET NEW.apartment_norm = LOWER(
-                REGEXP_REPLACE(
-                    REGEXP_REPLACE(TRIM(NEW.apartment), '^(кв\\\\.?|№|#)[[:space:]]*', '', 1, 0, 'i'),
-                    '[^0-9a-zа-яё]', '', 1, 0, 'i'
-                )
-            );
+            SET NEW.apartment_norm = ${SQL_NORMALIZE_APARTMENT_NORM.replace(/\bapartment\b/g, "NEW.apartment")};
             IF NEW.apartment_norm = '' THEN
                 SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'apartment number is empty after normalization';
             END IF;
@@ -1585,12 +1620,7 @@ export async function migrate(): Promise<void> {
         BEGIN
             SET NEW.building_key = LOWER(TRIM(NEW.building_key));
             SET NEW.apartment = TRIM(NEW.apartment);
-            SET NEW.apartment_norm = LOWER(
-                REGEXP_REPLACE(
-                    REGEXP_REPLACE(TRIM(NEW.apartment), '^(кв\\\\.?|№|#)[[:space:]]*', '', 1, 0, 'i'),
-                    '[^0-9a-zа-яё]', '', 1, 0, 'i'
-                )
-            );
+            SET NEW.apartment_norm = ${SQL_NORMALIZE_APARTMENT_NORM.replace(/\bapartment\b/g, "NEW.apartment")};
             IF NEW.apartment_norm = '' THEN
                 SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'apartment number is empty after normalization';
             END IF;
@@ -1874,6 +1904,13 @@ export async function migrate(): Promise<void> {
             SET NEW.building_key = LOWER(TRIM(NEW.building_key));
         END
     `);
+
+    // appeal_participants: только подпись (квартира + дата), без анонимности/комментария/фото
+    await exec(`ALTER TABLE appeal_participants DROP COLUMN IF EXISTS anonymous`);
+    await exec(`ALTER TABLE appeal_participants DROP COLUMN IF EXISTS comment`);
+    await exec(`ALTER TABLE appeal_participants DROP COLUMN IF EXISTS photo_uri`);
+
+    await exec(`DROP TABLE IF EXISTS environment_rating_feedback_tags`);
 
     console.log("Migration complete");
 }

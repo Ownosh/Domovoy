@@ -93,9 +93,7 @@ function mapAppealRow(v: RowDataPacket, parts: RowDataPacket[], photoUrls: strin
             apartment: String(p.apartment ?? ""),
             entrance: p.entrance ? String(p.entrance) : undefined,
             displayName: String(p.display_name ?? ""),
-            anonymous: Boolean(p.anonymous),
-            comment: p.comment ? String(p.comment) : undefined,
-            photoUri: p.photo_uri ? String(p.photo_uri) : undefined,
+            profilePhoto: p.profile_photo ? String(p.profile_photo) : undefined,
             joinedAt: (p.joined_at as Date).toISOString(),
         })),
     };
@@ -117,7 +115,7 @@ async function fetchWithParticipants(appealIds: number[]): Promise<object[]> {
     );
     const [parts] = await pool.query<RowDataPacket[]>(
         `SELECT ap.appeal_id, uap.user_id, uap.apartment, uap.entrance, p.full_name AS display_name,
-                ap.anonymous, ap.comment, ap.photo_uri, ap.joined_at
+                p.profile_photo, ap.joined_at
          FROM appeal_participants ap
          JOIN user_apartments uap ON uap.id = ap.apartment_id
          LEFT JOIN user_profiles p ON p.user_id = uap.user_id
@@ -230,10 +228,6 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 router.post("/:id/join", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     const appealId = Number(req.params.id);
-    const { anonymous, comment, photoUri } = req.body as {
-        anonymous?: boolean; comment?: string; photoUri?: string;
-    };
-
     try {
         const prof = await getProfile(userId);
         if (!prof) return res.status(400).json({ error: "Профиль не привязан к дому" });
@@ -258,9 +252,8 @@ router.post("/:id/join", requireAuth, async (req: AuthRequest, res) => {
 
         try {
             await pool.execute(
-                `INSERT INTO appeal_participants (appeal_id, apartment_id, anonymous, comment, photo_uri)
-                 VALUES (?, ?, ?, ?, ?)`,
-                [appealId, prof.apartmentId, anonymous ? 1 : 0, comment?.trim() || null, photoUri || null],
+                `INSERT INTO appeal_participants (appeal_id, apartment_id) VALUES (?, ?)`,
+                [appealId, prof.apartmentId],
             );
         } catch (e: any) {
             if (e?.code === "ER_DUP_ENTRY") return res.status(409).json({ error: "Вы уже присоединились" });

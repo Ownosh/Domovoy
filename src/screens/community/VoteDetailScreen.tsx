@@ -13,7 +13,7 @@ import { Button, Card, ScreenLayout, StatusTimeline, VerificationWall, VoteStatu
 import { voteLabels, voteStatusColor } from "../../components/ui/StatusBadge";
 import type { TimelineStep } from "../../components/ui/StatusTimeline";
 import { voteEffectiveStatus } from "../../utils/appeals";
-import { useApp, isVerifiedOwner } from "../../context/AppContext";
+import { useApp, isVerifiedOwner, isVerifiedResident } from "../../context/AppContext";
 import type { Vote, VoteCast, VoteStatus } from "../../types";
 import { voteSourceLine } from "../../utils/voteSponsor";
 import { colors, radius, spacing, textStyles } from "../../theme";

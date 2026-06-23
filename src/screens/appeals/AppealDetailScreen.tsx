@@ -31,6 +31,7 @@ import {
 import { appealLabels, appealStatusColor } from "../../components/ui/StatusBadge";
 import type { TimelineStep } from "../../components/ui/StatusTimeline";
 import { APPEAL_CATEGORY_LABELS } from "../../constants/appealCategories";
+import { isVerifiedOwner, isVerifiedResident, useApp } from "../../context/AppContext";
 import { buildBuildingKey } from "../../utils/buildingKey";
 import {
     collectiveUniqueApartmentCount,
@@ -214,8 +215,8 @@ export function AppealDetailScreen({ route, navigation }: Props) {
                                         isMe && { backgroundColor: `${statusColor}08` },
                                     ]}>
                                         {/* Аватар */}
-                                        {p.photoUri ? (
-                                            <AvatarThumb name={p.displayName || "Житель"} photo={p.photoUri} size={38} />
+                                        {p.profilePhoto ? (
+                                            <AvatarThumb name={p.displayName || "Житель"} photo={p.profilePhoto} size={38} />
                                         ) : (
                                             <View style={[
                                                 styles.avatarCircle,
@@ -229,7 +230,6 @@ export function AppealDetailScreen({ route, navigation }: Props) {
                                             </View>
                                         )}
 
-                                        {/* Имя + комментарий */}
                                         <View style={styles.participantInfo}>
                                             <View style={styles.participantNameRow}>
                                                 <Text style={[textStyles.body, styles.participantName, isMe && { color: statusColor }]}>
@@ -239,11 +239,6 @@ export function AppealDetailScreen({ route, navigation }: Props) {
                                                     <Ionicons name="checkmark-circle" size={14} color={statusColor} />
                                                 )}
                                             </View>
-                                            {p.comment ? (
-                                                <Text style={[textStyles.caption, styles.participantComment]} numberOfLines={1}>
-                                                    {p.comment}
-                                                </Text>
-                                            ) : null}
                                         </View>
 
                                         {/* Кв + дата */}

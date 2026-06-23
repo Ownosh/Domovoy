@@ -1,9 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Image as ExpoImage } from "expo-image";
 import { useNavigation } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Dimensions,
-    Image,
     Modal,
     Pressable,
     RefreshControl,
@@ -13,7 +13,7 @@ import {
     View,
 } from "react-native";
 
-import { AppealStatusBadge, VoteStatusBadge, AdStatusBadge, Card, FeedAuthorRow, ScreenLayout } from "../../components/ui";
+import { AppealStatusBadge, VoteStatusBadge, AdStatusBadge, CachedImage, Card, FeedAuthorRow, MarkAllNotificationsButton, ScreenLayout } from "../../components/ui";
 import { appealStatusColor, voteStatusColor, adStatusColor } from "../../components/ui/StatusBadge";
 import { voteEffectiveStatus, adEffectiveStatus, isArchivedAppeal, isArchivedNeighborAd, isArchivedVote } from "../../utils/appeals";
 import { useApp, isVerifiedResident } from "../../context/AppContext";
@@ -23,7 +23,8 @@ import type {
     MainTabNavigationProp,
 } from "../../navigation/types";
 import type { Appeal, NeighborAd, NewsItem, Vote } from "../../types";
-import { buildBuildingKey } from "../../utils/buildingKey";
+import { getProfileBuildingKey } from "../../utils/buildingKey";
+import { imageDetailUrl, imageThumbUrl } from "../../utils/imageUrl";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { colors, radius, spacing, textStyles } from "../../theme";
 
@@ -158,12 +159,13 @@ export function HomeScreen() {
         profile,
         refreshFeed,
         verification,
+        apartments,
     } = useApp();
     const verified = isVerifiedResident(verification);
 
     const onRefresh = useCallback(() => { void refreshFeed(); }, [refreshFeed]);
 
-    const buildingKey = buildBuildingKey(profile.building);
+    const buildingKey = getProfileBuildingKey(profile, apartments);
 
     const bkLower = buildingKey.toLowerCase();
 
@@ -176,6 +178,19 @@ export function HomeScreen() {
         () => neighborAds.filter((a) => a.buildingKey.toLowerCase() === bkLower && !isArchivedNeighborAd(a)),
         [neighborAds, bkLower],
     );
+
+    useEffect(() => {
+        const urls = new Set<string>();
+        for (const n of houseNews) {
+            for (const u of n.imageUrls) urls.add(imageThumbUrl(u, 520, 360));
+        }
+        for (const a of houseAds) {
+            for (const u of a.imageUrls) urls.add(imageThumbUrl(u, 520, 360));
+        }
+        [...urls].slice(0, 20).forEach((u) => {
+            ExpoImage.prefetch(u).catch(() => {});
+        });
+    }, [houseNews, houseAds]);
 
     const houseVotes = useMemo(
         () => votes.filter((v) => v.buildingKey.toLowerCase() === bkLower && !isArchivedVote(v)),
@@ -321,15 +336,10 @@ export function HomeScreen() {
                                 Уведомления
                             </Text>
                             <View style={styles.sheetHeaderRight}>
-                                {visibleNotifications.some((n) => !n.read) && (
-                                    <Pressable
-                                        onPress={markAllNotificationsRead}
-                                        hitSlop={10}
-                                        style={styles.readAllBtn}
-                                    >
-                                        <Ionicons name="checkmark-done" size={22} color={colors.primary} />
-                                    </Pressable>
-                                )}
+                                <MarkAllNotificationsButton
+                                    visible={visibleNotifications.some((n) => !n.read)}
+                                    onPress={markAllNotificationsRead}
+                                />
                                 <Pressable
                                     onPress={() => setNotifOpen(false)}
                                     hitSlop={12}
@@ -604,10 +614,12 @@ function PhotoViewer({
                 >
                     {urls.map((url, i) => (
                         <View key={i} style={viewerStyles.page}>
-                            <Image
-                                source={{ uri: url }}
+                            <ExpoImage
+                                source={{ uri: imageDetailUrl(url) }}
                                 style={viewerStyles.img}
-                                resizeMode="contain"
+                                contentFit="contain"
+                                cachePolicy="disk"
+                                transition={200}
                             />
                         </View>
                     ))}
@@ -635,38 +647,6 @@ function PhotoViewer({
     );
 }
 
-function NewsImage({
-    uri,
-    style,
-    onPress,
-}: {
-    uri: string;
-    style: object;
-    onPress?: () => void;
-}) {
-    const [failed, setFailed] = React.useState(false);
-    if (failed) return null;
-    const img = (
-        <Image
-            source={{ uri }}
-            style={style}
-            resizeMode="cover"
-            onError={() => setFailed(true)}
-        />
-    );
-    if (onPress) {
-        return (
-            <Pressable
-                onPress={onPress}
-                style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
-            >
-                {img}
-            </Pressable>
-        );
-    }
-    return img;
-}
-
 function FeedNewsRow({ item, onOpenViewer, onOpen }: { item: NewsItem; onOpenViewer: (urls: string[], index: number) => void; onOpen: () => void }) {
     const multi = item.imageUrls.length > 1;
 
@@ -689,11 +669,26 @@ function FeedNewsRow({ item, onOpenViewer, onOpen }: { item: NewsItem; onOpenVie
                             nestedScrollEnabled
                         >
                             {item.imageUrls.map((url, i) => (
-                                <NewsImage key={i} uri={url} style={styles.newsImgThumb} onPress={() => onOpenViewer(item.imageUrls, i)} />
+                                <CachedImage
+                                    key={i}
+                                    uri={url}
+                                    style={styles.newsImgThumb}
+                                    thumbWidth={520}
+                                    thumbHeight={360}
+                                    recyclingKey={`news-${item.id}-${i}`}
+                                    onPress={() => onOpenViewer(item.imageUrls, i)}
+                                />
                             ))}
                         </ScrollView>
                     ) : (
-                        <NewsImage uri={item.imageUrls[0]} style={styles.newsImg} onPress={() => onOpenViewer(item.imageUrls, 0)} />
+                        <CachedImage
+                            uri={item.imageUrls[0]}
+                            style={styles.newsImg}
+                            thumbWidth={520}
+                            thumbHeight={400}
+                            recyclingKey={`news-${item.id}-0`}
+                            onPress={() => onOpenViewer(item.imageUrls, 0)}
+                        />
                     )
                 ) : null}
                 <Text style={[textStyles.subtitle, styles.feedTitle]}>{item.title}</Text>
@@ -783,11 +778,26 @@ function FeedAdRow({ ad, onOpen }: { ad: NeighborAd; onOpen: () => void }) {
                     multi ? (
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.newsImgScroll} contentContainerStyle={styles.newsImgScrollContent} nestedScrollEnabled>
                             {ad.imageUrls.map((url, i) => (
-                                <NewsImage key={i} uri={url} style={styles.newsImgThumb} onPress={() => openViewer(i)} />
+                                <CachedImage
+                                    key={i}
+                                    uri={url}
+                                    style={styles.newsImgThumb}
+                                    thumbWidth={520}
+                                    thumbHeight={360}
+                                    recyclingKey={`ad-${ad.id}-${i}`}
+                                    onPress={() => openViewer(i)}
+                                />
                             ))}
                         </ScrollView>
                     ) : (
-                        <NewsImage uri={ad.imageUrls[0]} style={styles.newsImg} onPress={() => openViewer(0)} />
+                        <CachedImage
+                            uri={ad.imageUrls[0]}
+                            style={styles.newsImg}
+                            thumbWidth={520}
+                            thumbHeight={400}
+                            recyclingKey={`ad-${ad.id}-0`}
+                            onPress={() => openViewer(0)}
+                        />
                     )
                 ) : null}
                 <Text style={[textStyles.subtitle, styles.feedTitle]}>{ad.title}</Text>
@@ -937,7 +947,6 @@ const styles = StyleSheet.create({
     notifUnread: { borderColor: colors.primary, borderWidth: 1 },
     notifCheckRow: { alignItems: "flex-end", marginTop: spacing.xs },
     sheetHeaderRight: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-    readAllBtn: { padding: spacing.xs },
     detailCard: {
         margin: spacing.lg,
         backgroundColor: colors.bgElevated,

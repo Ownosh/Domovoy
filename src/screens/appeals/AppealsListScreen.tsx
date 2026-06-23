@@ -12,8 +12,13 @@ import {
     View,
 } from "react-native";
 import { AppealStatusBadge, VoteStatusBadge, AdStatusBadge, appealStatusColor, voteStatusColor, adStatusColor, Card, NotificationBell, ScreenLayout } from "../../components/ui";
-import { voteEffectiveStatus, adEffectiveStatus, isArchivedAppeal, isArchivedNeighborAd, isArchivedVote } from "../../utils/appeals";
+import { APPEAL_CATEGORY_LABELS } from "../../constants/appealCategories";
+import { isVerifiedResident, useApp } from "../../context/AppContext";
+import type { AppealsStackParamList } from "../../navigation/types";
+import { colors, radius, spacing, textStyles } from "../../theme";
 import type { Appeal, NeighborAd, Vote } from "../../types";
+import { buildBuildingKey } from "../../utils/buildingKey";
+import { voteEffectiveStatus, adEffectiveStatus, isArchivedAppeal, isArchivedNeighborAd, isArchivedVote } from "../../utils/appeals";
 
 type Nav = NativeStackNavigationProp<AppealsStackParamList>;
 type CommunityTab = "appeals" | "collective" | "votes" | "ads";

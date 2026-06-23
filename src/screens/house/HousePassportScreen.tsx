@@ -22,7 +22,6 @@ import { Button, Card, CollapsibleHint, Input, NotificationBell, ScreenLayout, U
 import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type { MainTabNavigationProp } from "../../navigation/types";
 import type {
-    EnvironmentRatingFeedbackTagId,
     HouseCalendarActivity,
     HouseCalendarActivityKind,
 } from "../../types";
@@ -57,23 +56,6 @@ const ACTIVITY_LABEL: Record<HouseCalendarActivityKind, string> = {
     garbage: "Мусор / вывоз",
     other: "Прочее",
 };
-
-const FEEDBACK_OPTIONS: {
-    id: EnvironmentRatingFeedbackTagId;
-    label: string;
-}[] = [
-    { id: "yard", label: "Двор и благоустройство" },
-    { id: "entrance", label: "Подъезд (чистота, освещение)" },
-    { id: "uk_comm", label: "Связь с УК, диспетчеризация" },
-    { id: "uk_work", label: "Качество и сроки работ УК" },
-    { id: "contractors", label: "Подрядчики на доме" },
-    { id: "safety", label: "Безопасность и порядок" },
-    { id: "other", label: "Другое (опишите ниже)" },
-];
-
-function feedbackLabel(id: EnvironmentRatingFeedbackTagId): string {
-    return FEEDBACK_OPTIONS.find((o) => o.id === id)?.label ?? id;
-}
 
 function formatMonthKeyRu(monthKey: string): string {
     const [y, m] = monthKey.split("-").map(Number);
@@ -163,9 +145,6 @@ export function HousePassportScreen() {
     const [courtyard, setCourtyard] = useState<1 | 2 | 3 | 4 | 5>(4);
     const [entrance, setEntrance] = useState<1 | 2 | 3 | 4 | 5>(4);
     const [ukStars, setUkStars] = useState<1 | 2 | 3 | 4 | 5>(4);
-    const [feedbackTags, setFeedbackTags] = useState<EnvironmentRatingFeedbackTagId[]>(
-        [],
-    );
     const [feedbackOther, setFeedbackOther] = useState("");
     const [agendaOpen, setAgendaOpen] = useState(false);
     const [dayDetailIso, setDayDetailIso] = useState<string | null>(null);
@@ -202,7 +181,6 @@ export function HousePassportScreen() {
         setCourtyard(4);
         setEntrance(4);
         setUkStars(4);
-        setFeedbackTags([]);
         setFeedbackOther("");
     }, [ratingOpen, ratedThisMonth]);
 
@@ -237,30 +215,13 @@ export function HousePassportScreen() {
     const minStars = Math.min(courtyard, entrance, ukStars);
     const needsNegativeDetail = minStars <= 3;
 
-    const toggleFeedbackTag = (id: EnvironmentRatingFeedbackTagId) => {
-        setFeedbackTags((prev) =>
-            prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-        );
-    };
-
     const trySubmitRating = () => {
-        if (needsNegativeDetail) {
-            const hasTags = feedbackTags.length > 0;
-            const hasText = feedbackOther.trim().length >= 3;
-            if (!hasTags && !hasText) {
-                Alert.alert(
-                    "Нужно уточнение",
-                    "При оценке 3 звезды или ниже отметьте, что не понравилось, или кратко опишите своими словами.",
-                );
-                return;
-            }
-            if (feedbackTags.includes("other") && feedbackOther.trim().length < 3) {
-                Alert.alert(
-                    "Другое",
-                    "Дополните поле «Свой комментарий» хотя бы парой слов.",
-                );
-                return;
-            }
+        if (needsNegativeDetail && feedbackOther.trim().length < 3) {
+            Alert.alert(
+                "Нужно уточнение",
+                "При оценке 3 звезды или ниже кратко опишите, что не понравилось.",
+            );
+            return;
         }
         Alert.alert(
             "Отправить оценку?",
@@ -274,10 +235,6 @@ export function HousePassportScreen() {
                             courtyardStars: courtyard,
                             entranceStars: entrance,
                             ukStars,
-                            feedbackTagIds:
-                                needsNegativeDetail && feedbackTags.length > 0
-                                    ? feedbackTags
-                                    : undefined,
                             feedbackOther:
                                 needsNegativeDetail && feedbackOther.trim().length > 0
                                     ? feedbackOther.trim()
@@ -653,22 +610,6 @@ export function HousePassportScreen() {
                                 <StarsSummary label="Двор" value={environmentRating.courtyardStars} />
                                 <StarsSummary label="Подъезд" value={environmentRating.entranceStars} />
                                 <StarsSummary label="УК" value={environmentRating.ukStars} />
-                                {environmentRating.feedbackTagIds &&
-                                environmentRating.feedbackTagIds.length > 0 ? (
-                                    <View style={styles.lockedFeedback}>
-                                        <Text style={[textStyles.caption, styles.lockedFbTitle]}>
-                                            Отмечено как неудовлетворительно:
-                                        </Text>
-                                        {environmentRating.feedbackTagIds.map((id) => (
-                                            <Text
-                                                key={id}
-                                                style={[textStyles.caption, styles.lockedFbRow]}
-                                            >
-                                                · {feedbackLabel(id)}
-                                            </Text>
-                                        ))}
-                                    </View>
-                                ) : null}
                                 {environmentRating.feedbackOther ? (
                                     <Text style={[textStyles.caption, styles.lockedOther]}>
                                         Комментарий: {environmentRating.feedbackOther}
@@ -706,43 +647,15 @@ export function HousePassportScreen() {
                                                 <Text
                                                     style={[textStyles.caption, styles.negativeTitle]}
                                                 >
-                                                    Если оценка 3 звезды или ниже — отметьте, что не
-                                                    понравилось, и/или опишите своими словами:
+                                                    Если оценка 3 звезды или ниже — кратко опишите,
+                                                    что не понравилось:
                                                 </Text>
-                                                <View style={styles.tagWrap}>
-                                                    {FEEDBACK_OPTIONS.map((opt) => {
-                                                        const on = feedbackTags.includes(opt.id);
-                                                        return (
-                                                            <Pressable
-                                                                key={opt.id}
-                                                                onPress={() =>
-                                                                    toggleFeedbackTag(opt.id)
-                                                                }
-                                                                style={[
-                                                                    styles.tagChip,
-                                                                    on && styles.tagChipOn,
-                                                                ]}
-                                                            >
-                                                                <Text
-                                                                    style={[
-                                                                        textStyles.caption,
-                                                                        on
-                                                                            ? styles.tagChipTextOn
-                                                                            : styles.tagChipText,
-                                                                    ]}
-                                                                >
-                                                                    {opt.label}
-                                                                </Text>
-                                                            </Pressable>
-                                                        );
-                                                    })}
-                                                </View>
                                                 <Input
-                                                    label="Свой комментарий"
+                                                    label="Комментарий"
                                                     value={feedbackOther}
                                                     onChangeText={setFeedbackOther}
                                                     multiline
-                                                    placeholder="Необязательно, если выбрали пункты выше"
+                                                    placeholder="Например: грязный подъезд, долго не чинят лифт"
                                                     style={styles.feedbackArea}
                                                 />
                                             </View>

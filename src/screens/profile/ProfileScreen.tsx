@@ -1,8 +1,8 @@
 import type { ProfileScreenProps } from "../../navigation/types";
-import React, { useCallback } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useMemo } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Card, ScreenLayout } from "../../components/ui";
+import { Card, ProfileAvatar, ScreenLayout } from "../../components/ui";
 import { VerificationStatusBadge } from "../../components/ui/StatusBadge";
 import { useApp } from "../../context/AppContext";
 import { colors, radius, spacing, textStyles } from "../../theme";
@@ -34,9 +34,38 @@ type Section = {
 };
 
 export function ProfileScreen({ navigation }: Props) {
-    const { profile, user, logout, verification, refreshFeed, apartments } = useApp();
+    const { profile, user, logout, verification, refreshFeed, apartments, houseChats, updateProfile } = useApp();
 
-    const sections: Section[] = [
+    const sections: Section[] = useMemo(() => {
+        const serviceRows: RowDef[] = [
+            {
+                icon: "notifications-outline",
+                title: "Уведомления",
+                subtitle: "Push и категории оповещений",
+                iconColor: colors.warning,
+                iconBg: "rgba(232, 162, 61, 0.12)",
+                target: "NotificationSettings",
+            },
+            {
+                icon: "business-outline",
+                title: "Контакты УК",
+                subtitle: "Телефон и часы работы",
+                iconColor: colors.info,
+                iconBg: "rgba(91, 159, 212, 0.12)",
+                target: "Contacts",
+            },
+        ];
+        if (houseChats.length > 0) {
+            serviceRows.push({
+                icon: "chatbubbles-outline",
+                title: "Домовой чат",
+                subtitle: "Официальные чаты жителей дома",
+                iconColor: colors.primary,
+                iconBg: colors.primarySoft,
+                target: "HouseChat",
+            });
+        }
+        return [
         {
             label: "Аккаунт",
             rows: [
@@ -87,30 +116,7 @@ export function ProfileScreen({ navigation }: Props) {
                     iconBg: "rgba(154, 165, 181, 0.12)",
                     target: "AppealHistory",
                 },
-                {
-                    icon: "notifications-outline",
-                    title: "Уведомления",
-                    subtitle: "Типы и способы оповещений",
-                    iconColor: colors.warning,
-                    iconBg: "rgba(232, 162, 61, 0.12)",
-                    target: "NotificationSettings",
-                },
-                {
-                    icon: "business-outline",
-                    title: "Контакты УК",
-                    subtitle: "Телефон и часы работы",
-                    iconColor: colors.info,
-                    iconBg: "rgba(91, 159, 212, 0.12)",
-                    target: "Contacts",
-                },
-                {
-                    icon: "chatbubbles-outline",
-                    title: "Домовой чат",
-                    subtitle: "Официальный чат жителей дома",
-                    iconColor: colors.primary,
-                    iconBg: colors.primarySoft,
-                    target: "HouseChat",
-                },
+                ...serviceRows,
             ],
         },
         {
@@ -127,16 +133,11 @@ export function ProfileScreen({ navigation }: Props) {
             ],
         },
     ];
+    }, [apartments.length, houseChats.length]);
 
     const onRefresh = useCallback(() => { void refreshFeed(); }, [refreshFeed]);
 
     const displayBuilding = profile.buildingName || profile.building;
-    const initials = (profile.name || "Ж")
-        .trim()
-        .split(/\s+/)
-        .slice(0, 2)
-        .map((w) => w[0]?.toUpperCase() ?? "")
-        .join("");
 
     return (
         <ScreenLayout
@@ -148,13 +149,18 @@ export function ProfileScreen({ navigation }: Props) {
             {/* ── Hero ── */}
             <Card style={styles.hero}>
                 <View style={styles.avatarWrap}>
-                    {profile.profilePhoto ? (
-                        <Image source={{ uri: profile.profilePhoto }} style={styles.avatar} />
-                    ) : (
-                        <View style={styles.avatarInner}>
-                            <Text style={styles.avatarInitials}>{initials}</Text>
-                        </View>
-                    )}
+                    <ProfileAvatar
+                        uri={profile.profilePhoto}
+                        previewUri={profile.profilePhotoPreviewUri}
+                        name={profile.name || "Житель"}
+                        size={80}
+                        style={styles.avatar}
+                        onRemoteReady={() => {
+                            if (profile.profilePhotoPreviewUri) {
+                                updateProfile({ profilePhotoPreviewUri: undefined });
+                            }
+                        }}
+                    />
                     {verification.status === "approved" && (
                         <View style={styles.verifyDot}>
                             <Ionicons name="checkmark" size={10} color={colors.bg} />
@@ -265,27 +271,8 @@ const styles = StyleSheet.create({
         marginBottom: spacing.sm,
     },
     avatar: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
         borderWidth: 2,
         borderColor: colors.primary,
-    },
-    avatarInner: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        backgroundColor: colors.primarySoft,
-        borderWidth: 2,
-        borderColor: colors.primary,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    avatarInitials: {
-        fontSize: 28,
-        fontWeight: "700",
-        color: colors.primary,
-        letterSpacing: -0.5,
     },
     verifyDot: {
         position: "absolute",

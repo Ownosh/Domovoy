@@ -6,7 +6,6 @@ export async function apiSubmitRating(data: {
     courtyardStars: number;
     entranceStars: number;
     ukStars: number;
-    feedbackTagIds?: string[];
     feedbackOther?: string;
 }): Promise<void> {
     await apiRequest("/ratings", { method: "POST", body: JSON.stringify(data) });

@@ -18,19 +18,8 @@ export async function apiCreateAppeal(data: {
     });
 }
 
-export async function apiJoinAppeal(
-    appealId: string,
-    data: {
-        anonymous: boolean;
-        comment?: string;
-        photoUri?: string;
-        displayName?: string;
-    },
-): Promise<Appeal> {
-    return apiRequest<Appeal>(`/appeals/${appealId}/join`, {
-        method: "POST",
-        body: JSON.stringify(data),
-    });
+export async function apiJoinAppeal(appealId: string): Promise<Appeal> {
+    return apiRequest<Appeal>(`/appeals/${appealId}/join`, { method: "POST" });
 }
 
 export async function apiDeleteAppeal(id: string): Promise<void> {

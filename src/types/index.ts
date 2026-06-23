@@ -31,9 +31,7 @@ export type AppealParticipant = {
     /** Совпадает с подъездом обращения при коллективном пороге */
     entrance?: string;
     displayName: string;
-    anonymous: boolean;
-    comment?: string;
-    photoUri?: string;
+    profilePhoto?: string;
     joinedAt: string;
 };
 
@@ -58,6 +56,8 @@ export type Profile = {
     /** Площадь квартиры, м² */
     apartmentAreaSqm?: number;
     profilePhoto?: string;
+    /** Локальный превью-uri после смены фото (только клиент) */
+    profilePhotoPreviewUri?: string;
 };
 
 export type VerificationState = {
@@ -272,16 +272,6 @@ export type VoteCast = {
     votedAt: string;
 };
 
-/** Идентификаторы тегов «что не понравилось» при оценке ≤3 звёзд */
-export type EnvironmentRatingFeedbackTagId =
-    | "yard"
-    | "entrance"
-    | "uk_comm"
-    | "uk_work"
-    | "contractors"
-    | "safety"
-    | "other";
-
 /** Оценка двора, подъезда и УК — одна на календарный месяц, без правок после отправки */
 export type EnvironmentRatingSnapshot = {
     courtyardStars: 1 | 2 | 3 | 4 | 5;
@@ -289,9 +279,7 @@ export type EnvironmentRatingSnapshot = {
     ukStars: 1 | 2 | 3 | 4 | 5;
     /** Календарный месяц оценки YYYY-MM */
     monthKey: string;
-    /** Если хотя бы одна оценка ≤3 — выбранные причины */
-    feedbackTagIds?: EnvironmentRatingFeedbackTagId[];
-    /** Свой текст, в т.ч. при выборе «Другое» */
+    /** Комментарий при оценке ≤3 звёзд */
     feedbackOther?: string;
     submittedAt: string;
 };
@@ -300,7 +288,6 @@ export type EnvironmentRatingSubmitInput = {
     courtyardStars: 1 | 2 | 3 | 4 | 5;
     entranceStars: 1 | 2 | 3 | 4 | 5;
     ukStars: 1 | 2 | 3 | 4 | 5;
-    feedbackTagIds?: EnvironmentRatingFeedbackTagId[];
     feedbackOther?: string;
 };
 

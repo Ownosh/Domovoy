@@ -327,17 +327,19 @@ router.patch("/profile", requireAuth, async (req: AuthRequest, res: Response) =>
 
         await pool.execute(
             `UPDATE user_profiles
-             SET full_name     = COALESCE(?, full_name),
-                 phone         = COALESCE(?, phone),
-                 profile_photo = COALESCE(?, profile_photo)
+             SET full_name = COALESCE(?, full_name),
+                 phone     = COALESCE(?, phone)
              WHERE user_id = ?`,
-            [
-                name?.trim() ?? null,
-                phone?.trim() ?? null,
-                profilePhoto !== undefined ? profilePhoto : null,
-                userId,
-            ],
+            [name?.trim() ?? null, phone?.trim() ?? null, userId],
         );
+
+        if (profilePhoto !== undefined) {
+            await pool.execute(
+                `UPDATE user_profiles SET profile_photo = ? WHERE user_id = ?`,
+                [profilePhoto, userId],
+            );
+            console.log(`[profile] user=${userId} profile_photo updated`);
+        }
 
         if (buildingKey != null || apartment != null || entrance != null || apartmentAreaSqm !== undefined) {
             await pool.execute(
@@ -357,7 +359,14 @@ router.patch("/profile", requireAuth, async (req: AuthRequest, res: Response) =>
                 ],
             );
         }
-        res.json({ ok: true });
+        const [[row]] = await pool.query<RowDataPacket[]>(
+            `SELECT profile_photo FROM user_profiles WHERE user_id = ? LIMIT 1`,
+            [userId],
+        );
+        res.json({
+            ok: true,
+            profilePhoto: (row?.profile_photo as string | null) ?? null,
+        });
     } catch (err) {
         console.error("[profile patch]", err);
         res.status(500).json({ error: "Ошибка сервера" });

@@ -1,5 +1,8 @@
+export { ProfileAvatar } from "./ProfileAvatar";
+export { CachedImage } from "./CachedImage";
 export { AddressAutocomplete } from "./AddressAutocomplete";
 export { FeedAuthorRow, AvatarThumb } from "./FeedAuthorRow";
+export { MarkAllNotificationsButton } from "./MarkAllNotificationsButton";
 export { NotificationBell } from "./NotificationBell";
 export { VerificationWall } from "./VerificationWall";
 export { Button } from "./Button";

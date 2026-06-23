@@ -1,14 +1,16 @@
 import type { ProfileScreenProps } from "../../navigation/types";
 import React, { useState } from "react";
-import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
-import { uploadFile } from "../../api/files";
-import { AddressAutocomplete, Button, Card, Input, ScreenLayout } from "../../components/ui";
+import { Image } from "expo-image";
+import { uploadAvatar } from "../../api/files";
+import { AddressAutocomplete, Button, Card, Input, ProfileAvatar, ScreenLayout } from "../../components/ui";
 import type { BuildingSuggestion } from "../../api/buildings";
 import { apiUpdateProfile } from "../../api/auth";
 import { useApp } from "../../context/AppContext";
 import { colors, radius, spacing, textStyles } from "../../theme";
+import { resolveProfilePhotoUrl } from "../../utils/imageUrl";
 
 type Props = ProfileScreenProps<"EditProfile">;
 
@@ -66,11 +68,11 @@ const sectionStyles = StyleSheet.create({
 });
 
 export function EditProfileScreen({ navigation }: Props) {
-    const { profile, updateProfile } = useApp();
+    const { profile, updateProfile, refreshFeed } = useApp();
     const [name, setName] = useState(profile.name);
     const [phone, setPhone] = useState(profile.phone);
     const [building, setBuilding] = useState(profile.buildingName || profile.building);
-    const [buildingKey, setBuildingKey] = useState("");
+    const [buildingKey, setBuildingKey] = useState(profile.building || "");
     const [apartment, setApartment] = useState(profile.apartment);
     const [entranceStr, setEntranceStr] = useState(
         profile.entrance != null ? String(profile.entrance) : "",
@@ -91,11 +93,12 @@ export function EditProfileScreen({ navigation }: Props) {
             mediaTypes: ["images"],
             allowsEditing: true,
             aspect: [1, 1],
-            quality: 0.8,
+            quality: 0.6,
         });
         if (!result.canceled && result.assets[0]) {
-            setPhotoUri(result.assets[0].uri);
-            setNewPhotoUri(result.assets[0].uri);
+            const raw = result.assets[0].uri;
+            setPhotoUri(raw);
+            setNewPhotoUri(raw);
         }
     };
 
@@ -119,7 +122,10 @@ export function EditProfileScreen({ navigation }: Props) {
 
         if (!building.trim()) {
             errors.building = "Введите адрес дома";
-        } else if (building.trim() !== (profile.buildingName || profile.building) && !buildingKey) {
+        } else if (
+            building.trim() !== (profile.buildingName || profile.building).trim() &&
+            !buildingKey
+        ) {
             errors.building = "Выберите дом из списка подсказок";
         }
 
@@ -136,65 +142,101 @@ export function EditProfileScreen({ navigation }: Props) {
     const save = async () => {
         setOk(false);
         if (!validate()) return;
-        setSaving(true);
+
         const entranceNum = parseInt(entranceStr.trim(), 10);
-        let profilePhotoData: string | null | undefined;
-        if (newPhotoUri) {
-            try {
-                profilePhotoData = await uploadFile(newPhotoUri);
-            } catch {
-                profilePhotoData = undefined;
-            }
-        } else if (photoUri === null) {
-            profilePhotoData = null;
+        const nextEntrance =
+            entranceStr.trim() !== "" && !Number.isNaN(entranceNum) && entranceNum > 0
+                ? entranceNum
+                : undefined;
+
+        const photoChanged = !!newPhotoUri || photoUri === null;
+        const originalBuildingLabel = (profile.buildingName || profile.building).trim();
+        const buildingLabel = building.trim();
+        const addressChanged =
+            buildingLabel !== originalBuildingLabel ||
+            apartment.trim() !== (profile.apartment ?? "").trim() ||
+            nextEntrance !== profile.entrance;
+        const resolvedBuildingKey = buildingKey || profile.building;
+        const phoneChanged = phone.trim() !== (profile.phone ?? "").trim();
+
+        const apiPayload: Parameters<typeof apiUpdateProfile>[0] = {
+            name: name.trim(),
+        };
+        if (phoneChanged) apiPayload.phone = phone.trim();
+        if (addressChanged) {
+            apiPayload.building = buildingLabel;
+            if (buildingKey) apiPayload.buildingKey = buildingKey;
+            apiPayload.apartment = apartment.trim();
+            if (nextEntrance != null) apiPayload.entrance = nextEntrance;
         }
 
-        const phoneChanged = phone.trim() !== (profile.phone ?? "").trim();
-        const profileData = {
+        const localPatch: Parameters<typeof updateProfile>[0] = {
             name: name.trim(),
-            phone: phoneChanged ? phone.trim() : undefined,
-            building: building.trim(),
-            buildingKey: buildingKey || undefined,
-            apartment: apartment.trim(),
-            entrance: entranceStr.trim() !== "" && !Number.isNaN(entranceNum) && entranceNum > 0
-                ? entranceNum
-                : undefined,
-            profilePhoto: profilePhotoData,
+            phone: phone.trim(),
         };
+        if (addressChanged) {
+            localPatch.building = resolvedBuildingKey;
+            localPatch.buildingName = buildingLabel;
+            localPatch.apartment = apartment.trim();
+            localPatch.entrance = nextEntrance;
+        }
+        if (photoChanged && photoUri === null) {
+            localPatch.profilePhoto = undefined;
+            localPatch.profilePhotoPreviewUri = undefined;
+            apiPayload.profilePhoto = null;
+        }
+
+        setSaving(true);
+
+        if (photoChanged && newPhotoUri) {
+            try {
+                const { url, localUri } = await uploadAvatar(newPhotoUri);
+                apiPayload.profilePhoto = url;
+                localPatch.profilePhoto = url;
+                localPatch.profilePhotoPreviewUri = localUri;
+                // Дождаться, пока фото реально откроется с текущего API-хоста
+                await Image.prefetch(resolveProfilePhotoUrl(url));
+            } catch (e: any) {
+                setSaving(false);
+                Alert.alert("Ошибка", e?.message ?? "Не удалось загрузить фото. Попробуйте ещё раз.");
+                return;
+            }
+        }
+
+        let savedPhoto: string | null | undefined;
         try {
-            await apiUpdateProfile(profileData);
+            const res = await apiUpdateProfile(apiPayload);
+            savedPhoto = res.profilePhoto;
         } catch (e: any) {
             setSaving(false);
             if (e?.message?.includes("телефон")) {
                 setFieldErrors((prev) => ({ ...prev, phone: e.message }));
                 return;
             }
+            Alert.alert("Ошибка", e?.message ?? "Не удалось сохранить профиль");
             return;
         }
-        updateProfile({
-            ...profileData,
-            phone: phone.trim(),
-            building: profileData.buildingKey ?? profileData.building,
-            buildingName: profileData.buildingKey ? profileData.building : undefined,
-            profilePhoto: profilePhotoData ?? profile.profilePhoto,
-        });
+
+        if (typeof savedPhoto === "string" && savedPhoto) {
+            localPatch.profilePhoto = savedPhoto;
+        }
+
+        localPatch.profilePhotoPreviewUri = undefined;
+        updateProfile(localPatch);
+        void refreshFeed();
         setSaving(false);
         setOk(true);
         setTimeout(() => navigation.goBack(), 700);
     };
 
-    const initials = (name || "Ж")
-        .trim()
-        .split(/\s+/)
-        .slice(0, 2)
-        .map((w) => w[0]?.toUpperCase() ?? "")
-        .join("");
-
     return (
         <ScreenLayout
             title="Личные данные"
             subtitle="Редактирование профиля"
-            onBack={() => navigation.goBack()}
+            onBack={() => {
+                if (saving) return;
+                navigation.goBack();
+            }}
         >
             {/* ── Аватар ── */}
             <View style={styles.avatarSection}>
@@ -202,18 +244,20 @@ export function EditProfileScreen({ navigation }: Props) {
                     onPress={() => { void pickPhoto(); }}
                     style={({ pressed }) => [styles.avatarWrap, pressed && styles.avatarPressed]}
                 >
-                    {photoUri ? (
-                        <Image source={{ uri: photoUri }} style={styles.avatar} />
-                    ) : (
-                        <View style={styles.avatarInner}>
-                            <Text style={styles.avatarInitials}>{initials}</Text>
-                        </View>
-                    )}
+                    <ProfileAvatar
+                        uri={photoUri ?? undefined}
+                        previewUri={newPhotoUri ?? undefined}
+                        name={name || "Житель"}
+                        size={88}
+                        style={styles.avatar}
+                    />
                     <View style={styles.avatarEditBadge}>
                         <Ionicons name="camera" size={14} color={colors.bg} />
                     </View>
                 </Pressable>
-                <Text style={styles.avatarHint}>Нажмите чтобы изменить фото</Text>
+                <Text style={styles.avatarHint}>
+                    Нажмите чтобы изменить фото
+                </Text>
             </View>
 
             {/* ── Личные данные ── */}
@@ -290,9 +334,16 @@ export function EditProfileScreen({ navigation }: Props) {
                 </View>
             ) : (
                 <Button
-                    title={saving ? "Сохранение..." : "Сохранить изменения"}
+                    title={
+                        saving
+                            ? newPhotoUri
+                                ? "Загрузка фото..."
+                                : "Сохранение..."
+                            : "Сохранить изменения"
+                    }
                     onPress={() => { void save(); }}
                     loading={saving}
+                    disabled={saving}
                 />
             )}
         </ScreenLayout>
@@ -310,27 +361,8 @@ const styles = StyleSheet.create({
     },
     avatarPressed: { opacity: 0.8, transform: [{ scale: 0.97 }] },
     avatar: {
-        width: 88,
-        height: 88,
-        borderRadius: 44,
         borderWidth: 2,
         borderColor: colors.primary,
-    },
-    avatarInner: {
-        width: 88,
-        height: 88,
-        borderRadius: 44,
-        backgroundColor: colors.primarySoft,
-        borderWidth: 2,
-        borderColor: colors.primary,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    avatarInitials: {
-        fontSize: 30,
-        fontWeight: "700",
-        color: colors.primary,
-        letterSpacing: -0.5,
     },
     avatarEditBadge: {
         position: "absolute",

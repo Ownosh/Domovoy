@@ -57,8 +57,8 @@ export async function apiUpdateProfile(data: {
     entrance?: number;
     apartmentAreaSqm?: number | null;
     profilePhoto?: string | null;
-}): Promise<void> {
-    await apiRequest("/auth/profile", {
+}): Promise<{ profilePhoto?: string | null }> {
+    return apiRequest<{ ok: true; profilePhoto?: string | null }>("/auth/profile", {
         method: "PATCH",
         body: JSON.stringify(data),
     });

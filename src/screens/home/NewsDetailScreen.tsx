@@ -1,9 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Image as ExpoImage } from "expo-image";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useEffect, useRef, useState } from "react";
 import {
     Dimensions,
-    Image,
     Modal,
     Pressable,
     ScrollView,
@@ -11,10 +11,11 @@ import {
     Text,
     View,
 } from "react-native";
-import { ScreenLayout } from "../../components/ui";
+import { CachedImage, ScreenLayout } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
 import type { AuthenticatedRootParamList } from "../../navigation/types";
 import { colors, radius, spacing, textStyles } from "../../theme";
+import { imageDetailUrl } from "../../utils/imageUrl";
 
 const SCREEN_W = Dimensions.get("window").width;
 const SCREEN_H = Dimensions.get("window").height;
@@ -83,10 +84,12 @@ function PhotoViewer({
                 >
                     {urls.map((url, i) => (
                         <View key={i} style={viewerStyles.page}>
-                            <Image
-                                source={{ uri: url }}
+                            <ExpoImage
+                                source={{ uri: imageDetailUrl(url) }}
                                 style={viewerStyles.img}
-                                resizeMode="contain"
+                                contentFit="contain"
+                                cachePolicy="disk"
+                                transition={200}
                             />
                         </View>
                     ))}
@@ -166,10 +169,12 @@ export function NewsDetailScreen({ route, navigation }: Props) {
                                     onPress={() => openViewer(i)}
                                     style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1 }]}
                                 >
-                                    <Image
-                                        source={{ uri }}
+                                    <CachedImage
+                                        uri={uri}
                                         style={styles.galleryImg}
-                                        resizeMode="cover"
+                                        thumbWidth={Math.round(SCREEN_W)}
+                                        thumbHeight={IMG_H}
+                                        recyclingKey={`news-detail-${item.id}-${i}`}
                                     />
                                 </Pressable>
                             ))}

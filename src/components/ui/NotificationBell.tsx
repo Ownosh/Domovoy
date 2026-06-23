@@ -12,6 +12,7 @@ import { useApp, isVerifiedResident } from "../../context/AppContext";
 import type { AppNotification } from "../../types";
 import { colors, spacing, textStyles } from "../../theme";
 import { Card } from "./Card";
+import { MarkAllNotificationsButton } from "./MarkAllNotificationsButton";
 
 const typeMeta: Record<string, { label: string; color: string }> = {
     outage: { label: "Отключения", color: colors.warning },
@@ -110,11 +111,10 @@ export function NotificationBell() {
                         <View style={styles.header}>
                             <Text style={[textStyles.subtitle, styles.title]}>Уведомления</Text>
                             <View style={styles.headerRight}>
-                                {visibleNotifications.some((n) => !n.read) && (
-                                    <Pressable onPress={markAllNotificationsRead} hitSlop={10} style={styles.readAllBtn}>
-                                        <Ionicons name="checkmark-done" size={22} color={colors.primary} />
-                                    </Pressable>
-                                )}
+                                <MarkAllNotificationsButton
+                                    visible={visibleNotifications.some((n) => !n.read)}
+                                    onPress={markAllNotificationsRead}
+                                />
                                 <Pressable onPress={() => setOpen(false)} hitSlop={12}>
                                     <Ionicons name="close" size={26} color={colors.text} />
                                 </Pressable>
@@ -203,7 +203,6 @@ const styles = StyleSheet.create({
         borderBottomColor: colors.border,
     },
     headerRight: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-    readAllBtn: { padding: spacing.xs },
     title: { color: colors.text },
     scroll: {
         paddingHorizontal: spacing.lg,

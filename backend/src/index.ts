@@ -21,9 +21,11 @@ import filesRoutes from "./routes/files";
 import apartmentsRoutes from "./routes/apartments";
 
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
+dotenv.config({ path: path.resolve(__dirname, "../../../Domovoy_admin/backend/.env") });
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
+const ADMIN_API = process.env.ADMIN_API_ENABLED !== "0";
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(cors({ origin: process.env.FRONTEND_URL ?? "*" }));
@@ -54,14 +56,30 @@ app.use("/api/verification", verificationRoutes);
 app.use("/api/files", filesRoutes);
 app.use("/api/apartments", apartmentsRoutes);
 
-app.get("/health", (_req, res) => res.json({ ok: true }));
+app.get("/health", (_req, res) => res.json({ ok: true, adminApi: ADMIN_API }));
 
-migrate()
-    .then(() => {
-        startMaintenanceScheduler();
-        app.listen(PORT, () => console.log(`Server running on :${PORT}`));
-    })
-    .catch((err) => {
-        console.error("Migration failed:", err);
-        process.exit(1);
+async function mountAdminApi(application: express.Express): Promise<void> {
+    const adminModulePath = path.resolve(__dirname, "../../../Domovoy_admin/backend/src/registerAdminRoutes");
+    const { registerAdminRoutes } = require(adminModulePath) as {
+        registerAdminRoutes: (app: express.Express) => Promise<void>;
+    };
+    await registerAdminRoutes(application);
+}
+
+async function start() {
+    await migrate();
+    if (ADMIN_API) {
+        await mountAdminApi(app);
+        console.log("[server] Admin API mounted (auth, news, appeals, …)");
+    }
+    startMaintenanceScheduler();
+    app.listen(PORT, () => {
+        console.log(`[server] Mobile API: http://localhost:${PORT}/api`);
+        if (ADMIN_API) console.log(`[server] Admin API:  http://localhost:${PORT}`);
     });
+}
+
+start().catch((err) => {
+    console.error("Server failed to start:", err);
+    process.exit(1);
+});

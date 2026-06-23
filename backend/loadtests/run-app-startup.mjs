@@ -7,11 +7,11 @@
  *   node loadtests/run-app-startup.mjs
  *
  * Опции через env:
- *   BASE_URL, CONCURRENCY (по умолчанию 10), DURATION_SEC (30)
+ *   BASE_URL, CONCURRENCY (по умолчанию 30), DURATION_SEC (60)
  */
 const BASE_URL = process.env.BASE_URL || "http://127.0.0.1:3001";
-const CONCURRENCY = Number(process.env.CONCURRENCY || 10);
-const DURATION_SEC = Number(process.env.DURATION_SEC || 30);
+const CONCURRENCY = Number(process.env.CONCURRENCY || 30);
+const DURATION_SEC = Number(process.env.DURATION_SEC || 60);
 const TEST_EMAIL = process.env.TEST_EMAIL;
 const TEST_PASSWORD = process.env.TEST_PASSWORD;
 
@@ -62,7 +62,13 @@ async function runStartup(token) {
         ),
     );
     const failed = results.filter((r) => r.status === "rejected" || r.value.status >= 400);
-    return { ok: failed.length === 0, failed: failed.length, total: ENDPOINTS.length };
+    const details = results
+        .map((r, i) => {
+            if (r.status === "rejected") return { path: ENDPOINTS[i], status: "ERR" };
+            return { path: ENDPOINTS[i], status: r.value.status };
+        })
+        .filter((d) => d.status !== 200);
+    return { ok: failed.length === 0, failed: failed.length, total: ENDPOINTS.length, details };
 }
 
 function percentile(sorted, p) {
@@ -84,6 +90,7 @@ async function main() {
     const latencies = [];
     let iterations = 0;
     let errors = 0;
+    const errorSamples = new Map();
     const deadline = Date.now() + DURATION_SEC * 1000;
 
     async function worker() {
@@ -92,7 +99,13 @@ async function main() {
             try {
                 const result = await runStartup(token);
                 latencies.push(performance.now() - t0);
-                if (!result.ok) errors += 1;
+                if (!result.ok) {
+                    errors += 1;
+                    for (const d of result.details) {
+                        const key = `${d.status} ${d.path}`;
+                        errorSamples.set(key, (errorSamples.get(key) ?? 0) + 1);
+                    }
+                }
             } catch {
                 errors += 1;
             }
@@ -108,6 +121,13 @@ async function main() {
     console.log("--- Results ---");
     console.log(`Iterations: ${iterations} (${rps} startup/s)`);
     console.log(`Errors:     ${errors}`);
+    if (errorSamples.size > 0) {
+        console.log("Top failures:");
+        [...errorSamples.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 8)
+            .forEach(([key, count]) => console.log(`  ${count}x ${key}`));
+    }
     console.log(`Latency ms: p50=${percentile(latencies, 50).toFixed(0)} p95=${percentile(latencies, 95).toFixed(0)} p99=${percentile(latencies, 99).toFixed(0)} max=${latencies.at(-1)?.toFixed(0) ?? 0}`);
 }
 

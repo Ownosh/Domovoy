@@ -13,12 +13,38 @@ const BASE_URL = __ENV.BASE_URL || "http://127.0.0.1:3001";
 const TEST_EMAIL = __ENV.TEST_EMAIL;
 const TEST_PASSWORD = __ENV.TEST_PASSWORD;
 
-export const options = {
-    stages: [
-        { duration: "30s", target: Number(__ENV.VUS || 10) },
-        { duration: "1m", target: Number(__ENV.VUS || 10) },
+/** quick — локальная отладка; load — нормальная проверка; peak — пиковая нагрузка */
+const PROFILES = {
+    quick: [
+        { duration: "30s", target: 10 },
+        { duration: "1m", target: 10 },
         { duration: "30s", target: 0 },
     ],
+    load: [
+        { duration: "1m", target: 30 },
+        { duration: "3m", target: 30 },
+        { duration: "30s", target: 0 },
+    ],
+    peak: [
+        { duration: "1m", target: 50 },
+        { duration: "2m", target: 50 },
+        { duration: "1m", target: 0 },
+    ],
+};
+
+function resolveStages() {
+    const profileName = __ENV.LOAD_PROFILE || "load";
+    const base = PROFILES[profileName] ?? PROFILES.load;
+    if (!__ENV.VUS) return base;
+    const vus = Number(__ENV.VUS);
+    return base.map((stage) => ({
+        ...stage,
+        target: stage.target === 0 ? 0 : vus,
+    }));
+}
+
+export const options = {
+    stages: resolveStages(),
     thresholds: {
         http_req_failed: ["rate<0.05"],
         http_req_duration: ["p(95)<800", "p(99)<1500"],

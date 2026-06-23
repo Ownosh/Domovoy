@@ -243,7 +243,11 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 
     try {
 
-        const mod = await moderateContent("ad", { title: title.trim(), body: body.trim(), category: AD_CATEGORY_RU[category] });
+        const mod = await moderateContent("ad", {
+            title: title.trim(),
+            body: body.trim(),
+            categoryLabel: AD_CATEGORY_RU[category],
+        });
 
         if (!mod.ok) {
 
@@ -347,7 +351,11 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
 
 
 
-        const mod = await moderateContent("ad", { title: title.trim(), body: body.trim(), category: AD_CATEGORY_RU[categoryCode ?? ""] });
+        const mod = await moderateContent("ad", {
+            title: title.trim(),
+            body: body.trim(),
+            categoryLabel: AD_CATEGORY_RU[categoryCode ?? ""],
+        });
 
         if (!mod.ok) {
 

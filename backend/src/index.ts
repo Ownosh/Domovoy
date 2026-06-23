@@ -19,6 +19,7 @@ import notificationsRoutes from "./routes/notifications";
 import verificationRoutes from "./routes/verification";
 import filesRoutes from "./routes/files";
 import apartmentsRoutes from "./routes/apartments";
+import { isModerationEnabled } from "./utils/moderation";
 
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 dotenv.config({ path: path.resolve(__dirname, "../../../Domovoy_admin/backend/.env") });
@@ -76,6 +77,9 @@ async function start() {
     app.listen(PORT, () => {
         console.log(`[server] Mobile API: http://localhost:${PORT}/api`);
         if (ADMIN_API) console.log(`[server] Admin API:  http://localhost:${PORT}`);
+        console.log(isModerationEnabled()
+            ? "[moderation] Yandex GPT включена"
+            : "[moderation] YANDEX_API_KEY не задан — проверка отключена");
     });
 }
 

@@ -89,6 +89,56 @@ async function tableExists(table: string): Promise<boolean> {
     return rows.length > 0;
 }
 
+async function columnType(table: string, column: string): Promise<string | null> {
+    const [rows] = await pool.query<RowDataPacket[]>(
+        `SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+        [table, column],
+    );
+    return (rows[0]?.COLUMN_TYPE as string | undefined) ?? null;
+}
+
+/** MySQL не поддерживает ADD COLUMN IF NOT EXISTS (это синтаксис MariaDB). */
+async function addColumnIfNotExists(table: string, column: string, definition: string): Promise<void> {
+    if (!(await tableExists(table))) return;
+    if (await columnExists(table, column)) return;
+    await exec(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`);
+}
+
+async function addIndexIfNotExists(table: string, indexName: string, indexColumns: string): Promise<void> {
+    if (!(await tableExists(table))) return;
+    if (await indexExists(table, indexName)) return;
+    await exec(`ALTER TABLE \`${table}\` ADD INDEX \`${indexName}\` (${indexColumns})`);
+}
+
+async function dropColumnIfExists(table: string, column: string): Promise<void> {
+    if (!(await tableExists(table))) return;
+    if (!(await columnExists(table, column))) return;
+    await exec(`ALTER TABLE \`${table}\` DROP COLUMN \`${column}\``);
+}
+
+async function dropIndexIfExists(table: string, indexName: string): Promise<void> {
+    if (!(await tableExists(table))) return;
+    if (!(await indexExists(table, indexName))) return;
+    await exec(`ALTER TABLE \`${table}\` DROP INDEX \`${indexName}\``);
+}
+
+async function constraintExists(table: string, constraintName: string): Promise<boolean> {
+    const [rows] = await pool.query<RowDataPacket[]>(
+        `SELECT 1 FROM information_schema.TABLE_CONSTRAINTS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_NAME = ?
+         LIMIT 1`,
+        [table, constraintName],
+    );
+    return rows.length > 0;
+}
+
+async function dropConstraintIfExists(table: string, constraintName: string): Promise<void> {
+    if (!(await tableExists(table))) return;
+    if (!(await constraintExists(table, constraintName))) return;
+    await exec(`ALTER TABLE \`${table}\` DROP CHECK \`${constraintName}\``);
+}
+
 export async function migrate(): Promise<void> {
     // ============================================================
     //  БАЗОВЫЕ СПРАВОЧНИКИ
@@ -114,11 +164,11 @@ export async function migrate(): Promise<void> {
             PRIMARY KEY (building_key)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    await exec(`ALTER TABLE buildings ADD COLUMN IF NOT EXISTS lat DECIMAL(9,6) DEFAULT NULL`);
-    await exec(`ALTER TABLE buildings ADD COLUMN IF NOT EXISTS lng DECIMAL(9,6) DEFAULT NULL`);
-    await exec(`ALTER TABLE buildings ADD COLUMN IF NOT EXISTS chat_telegram_url VARCHAR(500) NOT NULL DEFAULT ''`);
-    await exec(`ALTER TABLE buildings ADD COLUMN IF NOT EXISTS chat_vk_url VARCHAR(500) NOT NULL DEFAULT ''`);
-    await exec(`ALTER TABLE buildings ADD COLUMN IF NOT EXISTS chat_max_url VARCHAR(500) NOT NULL DEFAULT ''`);
+    await addColumnIfNotExists("buildings", "lat", "DECIMAL(9,6) DEFAULT NULL");
+    await addColumnIfNotExists("buildings", "lng", "DECIMAL(9,6) DEFAULT NULL");
+    await addColumnIfNotExists("buildings", "chat_telegram_url", "VARCHAR(500) NOT NULL DEFAULT ''");
+    await addColumnIfNotExists("buildings", "chat_vk_url", "VARCHAR(500) NOT NULL DEFAULT ''");
+    await addColumnIfNotExists("buildings", "chat_max_url", "VARCHAR(500) NOT NULL DEFAULT ''");
 
     // Старые установки: buildings.id — избыточный суррогатный ключ, все FK уже ссылаются на building_key
     if (await columnExists("buildings", "id")) {
@@ -197,8 +247,8 @@ export async function migrate(): Promise<void> {
             CONSTRAINT fk_profile_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    await exec(`ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS profile_photo TEXT DEFAULT NULL`);
-    await exec(`ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS active_apartment_id BIGINT UNSIGNED DEFAULT NULL`);
+    await addColumnIfNotExists("user_profiles", "profile_photo", "TEXT DEFAULT NULL");
+    await addColumnIfNotExists("user_profiles", "active_apartment_id", "BIGINT UNSIGNED DEFAULT NULL");
 
     // --- Миграция старых установок: вынести building_key/apartment/entrances/area из user_profiles в user_apartments ---
     if (await columnExists("user_profiles", "building_key")) {
@@ -246,7 +296,7 @@ export async function migrate(): Promise<void> {
 
     // Старые установки хранили refresh-токен в открытом виде — переходим на SHA-256 хеш
     if (await columnExists("refresh_tokens", "token")) {
-        await exec(`ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS token_hash CHAR(64) DEFAULT NULL`);
+        await addColumnIfNotExists("refresh_tokens", "token_hash", "CHAR(64) DEFAULT NULL");
         await exec(`UPDATE refresh_tokens SET token_hash = SHA2(token, 256) WHERE token_hash IS NULL`);
         await exec(`ALTER TABLE refresh_tokens DROP INDEX token`);
         await exec(`ALTER TABLE refresh_tokens DROP COLUMN token`);
@@ -282,10 +332,10 @@ export async function migrate(): Promise<void> {
 
     // --- Миграция старых установок verification_requests (user_id/building_key -> apartment_id) ---
     if (await tableExists("verification_requests") && await columnExists("verification_requests", "user_id")) {
-        await exec(`ALTER TABLE verification_requests ADD COLUMN IF NOT EXISTS apartment_id BIGINT UNSIGNED DEFAULT NULL`);
-        await exec(`ALTER TABLE verification_requests ADD COLUMN IF NOT EXISTS comment TEXT DEFAULT NULL`);
-        await exec(`ALTER TABLE verification_requests ADD COLUMN IF NOT EXISTS reviewed_at DATETIME DEFAULT NULL`);
-        await exec(`ALTER TABLE verification_requests DROP COLUMN IF EXISTS reviewer_comment`);
+        await addColumnIfNotExists("verification_requests", "apartment_id", "BIGINT UNSIGNED DEFAULT NULL");
+        await addColumnIfNotExists("verification_requests", "comment", "TEXT DEFAULT NULL");
+        await addColumnIfNotExists("verification_requests", "reviewed_at", "DATETIME DEFAULT NULL");
+        await dropColumnIfExists("verification_requests", "reviewer_comment");
 
         // Заполняем apartment_id из активной квартиры пользователя
         await exec(`
@@ -313,7 +363,7 @@ export async function migrate(): Promise<void> {
         await exec(`ALTER TABLE verification_requests DROP FOREIGN KEY fk_vr_user`);
         await exec(`ALTER TABLE verification_requests DROP FOREIGN KEY fk_vr_apartment`);
         await exec(`ALTER TABLE verification_requests DROP COLUMN user_id`);
-        await exec(`ALTER TABLE verification_requests DROP COLUMN IF EXISTS building_key`);
+        await dropColumnIfExists("verification_requests", "building_key");
         await exec(`ALTER TABLE verification_requests ADD CONSTRAINT fk_vr_apartment FOREIGN KEY (apartment_id) REFERENCES user_apartments(id) ON DELETE CASCADE`);
         await exec(`ALTER TABLE verification_requests ADD INDEX idx_vr_apartment_submitted (apartment_id, submitted_at DESC)`);
         await exec(`ALTER TABLE verification_requests ADD INDEX idx_vr_status (status)`);
@@ -333,7 +383,7 @@ export async function migrate(): Promise<void> {
             PRIMARY KEY (id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    await exec(`ALTER TABLE buildings ADD COLUMN IF NOT EXISTS management_company_id BIGINT UNSIGNED DEFAULT NULL`);
+    await addColumnIfNotExists("buildings", "management_company_id", "BIGINT UNSIGNED DEFAULT NULL");
 
     // Перенос старых building_contacts (1:1 с домом) в management_companies (1:N)
     if (await tableExists("building_contacts")) {
@@ -388,7 +438,7 @@ export async function migrate(): Promise<void> {
             INDEX idx_news_building_published (building_key, published_at DESC)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    await exec(`ALTER TABLE news ADD COLUMN IF NOT EXISTS is_published TINYINT(1) NOT NULL DEFAULT 1`);
+    await addColumnIfNotExists("news", "is_published", "TINYINT(1) NOT NULL DEFAULT 1");
     if (await columnExists("news", "building_key")) {
         if (await foreignKeyExists("news", "fk_news_building")) {
             await exec(`ALTER TABLE news DROP FOREIGN KEY fk_news_building`);
@@ -417,7 +467,7 @@ export async function migrate(): Promise<void> {
             INDEX idx_notif_type_created      (type, created_at DESC)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    await exec(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS building_key VARCHAR(120) NULL COMMENT 'NULL = всем домам'`);
+    await addColumnIfNotExists("notifications", "building_key", "VARCHAR(120) NULL COMMENT 'NULL = всем домам'");
     if (await columnExists("notifications", "building_key")) {
         if (await foreignKeyExists("notifications", "fk_notif_building")) {
             await exec(`ALTER TABLE notifications DROP FOREIGN KEY fk_notif_building`);
@@ -472,15 +522,15 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
     await exec(`ALTER TABLE appeals MODIFY COLUMN author_apartment VARCHAR(20) NOT NULL DEFAULT '' COMMENT 'снепшот на момент подачи, не синхронизируется с user_apartments.apartment'`);
-    await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS manually_archived TINYINT(1) NOT NULL DEFAULT 0`);
-    await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS resolved_at DATETIME DEFAULT NULL`);
-    await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_comment TEXT DEFAULT NULL`);
-    await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_comment_at DATETIME DEFAULT NULL`);
-    await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_comment_read_at DATETIME DEFAULT NULL`);
+    await addColumnIfNotExists("appeals", "manually_archived", "TINYINT(1) NOT NULL DEFAULT 0");
+    await addColumnIfNotExists("appeals", "resolved_at", "DATETIME DEFAULT NULL");
+    await addColumnIfNotExists("appeals", "admin_comment", "TEXT DEFAULT NULL");
+    await addColumnIfNotExists("appeals", "admin_comment_at", "DATETIME DEFAULT NULL");
+    await addColumnIfNotExists("appeals", "admin_comment_read_at", "DATETIME DEFAULT NULL");
     if (await columnExists("appeals", "building_key")) {
         await exec(`ALTER TABLE appeals ADD CONSTRAINT fk_appeals_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
     }
-    await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS author_apartment_id BIGINT UNSIGNED DEFAULT NULL`);
+    await addColumnIfNotExists("appeals", "author_apartment_id", "BIGINT UNSIGNED DEFAULT NULL");
     if (
         await columnExists("appeals", "building_key") &&
         await columnExists("appeals", "author_apartment")
@@ -507,9 +557,9 @@ export async function migrate(): Promise<void> {
         }
         await exec(`ALTER TABLE appeals ADD CONSTRAINT fk_appeals_apartment FOREIGN KEY (author_apartment_id) REFERENCES user_apartments(id) ON DELETE SET NULL`);
     }
-    await exec(`ALTER TABLE appeals ADD INDEX IF NOT EXISTS idx_appeals_apartment (author_apartment_id)`);
+    await addIndexIfNotExists("appeals", "idx_appeals_apartment", "author_apartment_id");
     // author_apartment (snapshot) удаляем — значение берём через JOIN user_apartments
-    await exec(`ALTER TABLE appeals DROP COLUMN IF EXISTS author_apartment`);
+    await dropColumnIfExists("appeals", "author_apartment");
 
     // 3НФ: дом обращения выводится из квартиры автора (author_apartment_id ->
     // user_apartments.building_key), поэтому отдельная колонка appeals.building_key
@@ -517,19 +567,23 @@ export async function migrate(): Promise<void> {
     await exec(`DROP TRIGGER IF EXISTS trg_appeals_building_consistency_bi`);
     await exec(`DROP TRIGGER IF EXISTS trg_appeals_building_consistency_bu`);
 
-    // category -> ENUM (был свободный VARCHAR без проверки на фронтовый список категорий)
-    await exec(`
-        UPDATE appeals SET category = 'Другое'
-        WHERE category NOT IN (
-            'Аварийная ситуация','Сантехника','Электрика','Отопление','Вентиляция',
-            'Уборка и благоустройство','Нарушение порядка','Инициатива собрания собственников','Другое'
-        )
-    `);
-    await exec(`
-        ALTER TABLE appeals MODIFY COLUMN category
-        ENUM('Аварийная ситуация','Сантехника','Электрика','Отопление','Вентиляция','Уборка и благоустройство','Нарушение порядка','Инициатива собрания собственников','Другое')
-        NOT NULL DEFAULT 'Другое'
-    `);
+    // category -> ENUM (legacy: русские подписи). Пропускаем, если schema.sql уже с ключами (emergency, …).
+    const appealsCategoryType = await columnType("appeals", "category");
+    if (appealsCategoryType && !appealsCategoryType.includes("'emergency'")) {
+        await exec(`ALTER TABLE appeals MODIFY COLUMN category VARCHAR(255) NOT NULL DEFAULT 'Другое'`);
+        await exec(`
+            UPDATE appeals SET category = 'Другое'
+            WHERE category NOT IN (
+                'Аварийная ситуация','Сантехника','Электрика','Отопление','Вентиляция',
+                'Уборка и благоустройство','Нарушение порядка','Инициатива собрания собственников','Другое'
+            )
+        `);
+        await exec(`
+            ALTER TABLE appeals MODIFY COLUMN category
+            ENUM('Аварийная ситуация','Сантехника','Электрика','Отопление','Вентиляция','Уборка и благоустройство','Нарушение порядка','Инициатива собрания собственников','Другое')
+            NOT NULL DEFAULT 'Другое'
+        `);
+    }
     // Старые установки хранили entrance как VARCHAR(20) — приводим к INT, как в user_apartments.entrance
     await exec(`ALTER TABLE appeals MODIFY COLUMN entrance INT DEFAULT NULL`);
     // Старые статусы -> новые, затем сужаем ENUM
@@ -593,7 +647,7 @@ export async function migrate(): Promise<void> {
     await exec(`ALTER TABLE appeal_participants MODIFY COLUMN apartment VARCHAR(20) NOT NULL COMMENT 'снепшот на момент присоединения, не синхронизируется с user_apartments.apartment'`);
     await exec(`ALTER TABLE appeal_participants MODIFY COLUMN display_name VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'снепшот имени на момент присоединения, не синхронизируется с user_profiles.full_name'`);
     await exec(`ALTER TABLE appeal_participants MODIFY COLUMN entrance INT DEFAULT NULL`);
-    await exec(`ALTER TABLE appeal_participants ADD COLUMN IF NOT EXISTS apartment_id BIGINT UNSIGNED DEFAULT NULL`);
+    await addColumnIfNotExists("appeal_participants", "apartment_id", "BIGINT UNSIGNED DEFAULT NULL");
     // building_key в appeals уже удалён — дом берём через квартиру автора обращения
     await exec(`
         UPDATE appeal_participants ap
@@ -608,8 +662,8 @@ export async function migrate(): Promise<void> {
     await exec(`ALTER TABLE appeal_participants ADD CONSTRAINT fk_ap_apartment FOREIGN KEY (apartment_id) REFERENCES user_apartments(id) ON DELETE SET NULL`);
     await exec(`ALTER TABLE appeal_participants ADD INDEX idx_ap_apartment (apartment_id)`);
     // apartment/display_name (snapshots) удаляем — значение берём через JOIN
-    await exec(`ALTER TABLE appeal_participants DROP COLUMN IF EXISTS apartment`);
-    await exec(`ALTER TABLE appeal_participants DROP COLUMN IF EXISTS display_name`);
+    await dropColumnIfExists("appeal_participants", "apartment");
+    await dropColumnIfExists("appeal_participants", "display_name");
 
     // ============================================================
     //  ДОМ — ХАРАКТЕРИСТИКИ, ФОТО, СТАТУС, КАЛЕНДАРЬ, МУСОР
@@ -688,13 +742,13 @@ export async function migrate(): Promise<void> {
             INDEX idx_na_expires          (expires_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    await exec(`ALTER TABLE neighbor_ads DROP COLUMN IF EXISTS image_url`);
-    await exec(`ALTER TABLE neighbor_ads DROP COLUMN IF EXISTS image_urls`);
-    await exec(`
-        ALTER TABLE neighbor_ads ADD COLUMN IF NOT EXISTS status
-        ENUM('new','under_review','published','archived','rejected','under_review_appeal')
-        NOT NULL DEFAULT 'new'
-    `);
+    await dropColumnIfExists("neighbor_ads", "image_url");
+    await dropColumnIfExists("neighbor_ads", "image_urls");
+    await addColumnIfNotExists(
+        "neighbor_ads",
+        "status",
+        "ENUM('new','under_review','published','archived','rejected','under_review_appeal') NOT NULL DEFAULT 'new'",
+    );
     if (await columnExists("neighbor_ads", "building_key")) {
         if (!(await foreignKeyExists("neighbor_ads", "fk_na_building"))) {
             await exec(`ALTER TABLE neighbor_ads ADD CONSTRAINT fk_na_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
@@ -732,7 +786,7 @@ export async function migrate(): Promise<void> {
             sponsor          ENUM('uk','residents') NOT NULL DEFAULT 'residents',
             status           ENUM('new','under_review','active','completed','cancelled') NOT NULL DEFAULT 'new',
             topic            TEXT                   NOT NULL,
-            description      TEXT                   NOT NULL DEFAULT '',
+            description      TEXT                   NOT NULL,
             visibility       ENUM('open','secret')  NOT NULL DEFAULT 'open',
             ends_at          DATETIME               NOT NULL,
             closed           TINYINT(1)             NOT NULL DEFAULT 0,
@@ -746,13 +800,13 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
     await exec(`ALTER TABLE votes MODIFY COLUMN created_by_label VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'снепшот имени автора на момент создания, не синхронизируется с user_profiles.full_name'`);
-    await exec(`ALTER TABLE votes ADD COLUMN IF NOT EXISTS updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`);
-    await exec(`ALTER TABLE votes ADD COLUMN IF NOT EXISTS user_id BIGINT UNSIGNED NULL`);
-    await exec(`
-        ALTER TABLE votes ADD COLUMN IF NOT EXISTS status
-        ENUM('new','under_review','active','completed','cancelled')
-        NOT NULL DEFAULT 'new'
-    `);
+    await addColumnIfNotExists("votes", "updated_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+    await addColumnIfNotExists("votes", "user_id", "BIGINT UNSIGNED NULL");
+    await addColumnIfNotExists(
+        "votes",
+        "status",
+        "ENUM('new','under_review','active','completed','cancelled') NOT NULL DEFAULT 'new'",
+    );
     if (await columnExists("votes", "building_key")) {
         if (!(await foreignKeyExists("votes", "fk_votes_building"))) {
             await exec(`ALTER TABLE votes ADD CONSTRAINT fk_votes_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
@@ -769,7 +823,7 @@ export async function migrate(): Promise<void> {
     `);
     await exec(`ALTER TABLE votes ADD INDEX idx_votes_status (status)`);
     // created_by_label (snapshot) удаляем — имя/квартиру берём через JOIN
-    await exec(`ALTER TABLE votes DROP COLUMN IF EXISTS created_by_label`);
+    await dropColumnIfExists("votes", "created_by_label");
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS vote_options (
@@ -800,7 +854,7 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
     await exec(`ALTER TABLE vote_casts MODIFY COLUMN area_sqm DECIMAL(6,2) NOT NULL DEFAULT 0 COMMENT 'снепшот площади на момент голосования, не синхронизируется с user_apartments.apartment_area_sqm'`);
-    await exec(`ALTER TABLE vote_casts ADD COLUMN IF NOT EXISTS apartment_id BIGINT UNSIGNED DEFAULT NULL`);
+    await addColumnIfNotExists("vote_casts", "apartment_id", "BIGINT UNSIGNED DEFAULT NULL");
     await exec(`
         UPDATE vote_casts vc
         JOIN votes v ON v.id = vc.vote_id
@@ -815,7 +869,7 @@ export async function migrate(): Promise<void> {
     await exec(`ALTER TABLE vote_casts ADD CONSTRAINT fk_vc_apartment FOREIGN KEY (apartment_id) REFERENCES user_apartments(id) ON DELETE SET NULL`);
     await exec(`ALTER TABLE vote_casts ADD INDEX idx_vc_apartment (apartment_id)`);
     // area_sqm (snapshot) удаляем — площадь берём через JOIN user_apartments
-    await exec(`ALTER TABLE vote_casts DROP COLUMN IF EXISTS area_sqm`);
+    await dropColumnIfExists("vote_casts", "area_sqm");
 
     // ============================================================
     //  ОЦЕНКИ СРЕДЫ
@@ -891,9 +945,9 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
     await exec(`ALTER TABLE district_pois MODIFY COLUMN photo_url TEXT DEFAULT NULL`);
-    await exec(`ALTER TABLE district_pois ADD COLUMN IF NOT EXISTS created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`);
+    await addColumnIfNotExists("district_pois", "created_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
     // scope полностью определялся building_key (NULL -> city, иначе -> house) — избыточная колонка
-    await exec(`ALTER TABLE district_pois DROP COLUMN IF EXISTS scope`);
+    await dropColumnIfExists("district_pois", "scope");
     await exec(`ALTER TABLE district_pois ADD CONSTRAINT fk_dp_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
     // Старые установки: layer_id был ENUM — переводим на VARCHAR
     await exec(`ALTER TABLE district_pois MODIFY COLUMN layer_id VARCHAR(40) NOT NULL`);
@@ -927,15 +981,15 @@ export async function migrate(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
     await exec(`ALTER TABLE admin_users MODIFY COLUMN password_hash VARCHAR(255) NOT NULL`);
-    await exec(`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS role ENUM('admin','moderator') NOT NULL DEFAULT 'admin'`);
-    await exec(`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS building_key VARCHAR(120) DEFAULT NULL COMMENT 'moderator: дом; admin: NULL = все дома'`);
+    await addColumnIfNotExists("admin_users", "role", "ENUM('admin','moderator') NOT NULL DEFAULT 'admin'");
+    await addColumnIfNotExists("admin_users", "building_key", "VARCHAR(120) DEFAULT NULL COMMENT 'moderator: дом; admin: NULL = все дома'");
     await exec(`ALTER TABLE admin_users DROP FOREIGN KEY fk_admin_users_building`);
     await exec(`ALTER TABLE admin_users ADD CONSTRAINT fk_admin_users_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`);
     await exec(`ALTER TABLE admin_users ADD INDEX idx_admin_users_building (building_key)`);
 
     // Связи admin_users с сущностями, которые создаёт/обрабатывает админка
     for (const { table, column, fk, index } of ADMIN_FK_LINKS) {
-        await exec(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} BIGINT UNSIGNED DEFAULT NULL`);
+        await addColumnIfNotExists(table, column, "BIGINT UNSIGNED DEFAULT NULL");
         await exec(`ALTER TABLE ${table} DROP FOREIGN KEY fk_${table}_${column}`);
         await exec(`ALTER TABLE ${table} DROP FOREIGN KEY ${fk}`);
         await exec(`ALTER TABLE ${table} DROP INDEX idx_${table}_${column}`);
@@ -1444,7 +1498,7 @@ export async function migrate(): Promise<void> {
         await exec(
             `ALTER TABLE votes ADD CONSTRAINT fk_votes_building FOREIGN KEY (building_key) REFERENCES buildings(building_key) ON UPDATE CASCADE`,
         );
-        await exec(`ALTER TABLE votes DROP CONSTRAINT IF EXISTS chk_votes_building_source`);
+        await dropConstraintIfExists("votes", "chk_votes_building_source");
         await exec(`
             ALTER TABLE votes ADD CONSTRAINT chk_votes_building_source CHECK (
                 (author_apartment_id IS NOT NULL AND building_key IS NULL)
@@ -1480,7 +1534,7 @@ export async function migrate(): Promise<void> {
         await exec(`ALTER TABLE verification_requests ADD UNIQUE KEY uq_vr_pending_apartment (pending_apartment_id)`);
     }
 
-    await exec(`ALTER TABLE admin_users DROP CONSTRAINT IF EXISTS chk_admin_users_role_building`);
+    await dropConstraintIfExists("admin_users", "chk_admin_users_role_building");
     await exec(`
         ALTER TABLE admin_users ADD CONSTRAINT chk_admin_users_role_building CHECK (
             (role = 'admin' AND building_key IS NULL)
@@ -1496,8 +1550,8 @@ export async function migrate(): Promise<void> {
     await exec(`UPDATE buildings SET building_key = LOWER(TRIM(building_key))`);
     await exec(`UPDATE user_apartments SET building_key = LOWER(TRIM(building_key))`);
 
-    await exec(`ALTER TABLE user_apartments ADD COLUMN IF NOT EXISTS apartment_norm VARCHAR(20) DEFAULT NULL`);
-    await exec(`ALTER TABLE user_apartments ADD COLUMN IF NOT EXISTS verification_status ENUM('none','pending','lease','ownership','rejected') NOT NULL DEFAULT 'none'`);
+    await addColumnIfNotExists("user_apartments", "apartment_norm", "VARCHAR(20) DEFAULT NULL");
+    await addColumnIfNotExists("user_apartments", "verification_status", "ENUM('none','pending','lease','ownership','rejected') NOT NULL DEFAULT 'none'");
     await exec(`
         UPDATE user_apartments ua
         SET apartment_norm = ${SQL_NORMALIZE_APARTMENT_NORM.replace(/\bapartment\b/g, "ua.apartment")}
@@ -1529,7 +1583,7 @@ export async function migrate(): Promise<void> {
     `);
 
     await exec(`ALTER TABLE user_apartments MODIFY COLUMN apartment_norm VARCHAR(20) NOT NULL`);
-    await exec(`ALTER TABLE user_apartments DROP INDEX IF EXISTS uq_ua_user_building_apt`);
+    await dropIndexIfExists("user_apartments", "uq_ua_user_building_apt");
     await exec(`ALTER TABLE user_apartments ADD UNIQUE KEY uq_ua_user_building_norm (user_id, building_key, apartment_norm)`);
     // Дубликаты квартир в одном доме — оставляем запису с максимальным статусом верификации
     await pool.query(`
@@ -1545,13 +1599,13 @@ export async function migrate(): Promise<void> {
             HAVING COUNT(*) > 1
         ) d ON ua.building_key = d.building_key AND ua.apartment_norm = d.apartment_norm AND ua.id <> d.keep_id
     `);
-    await exec(`ALTER TABLE user_apartments DROP INDEX IF EXISTS uq_ua_building_apartment_norm`);
+    await dropIndexIfExists("user_apartments", "uq_ua_building_apartment_norm");
     await exec(`ALTER TABLE user_apartments ADD UNIQUE KEY uq_ua_building_apartment_norm (building_key, apartment_norm)`);
 
     // Обращения: снимок автора + категории по ключам
-    await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS author_building_key VARCHAR(120) NOT NULL DEFAULT ''`);
-    await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS author_apartment_snapshot VARCHAR(20) NOT NULL DEFAULT ''`);
-    await exec(`ALTER TABLE appeals ADD COLUMN IF NOT EXISTS author_user_id BIGINT UNSIGNED NOT NULL DEFAULT 0`);
+    await addColumnIfNotExists("appeals", "author_building_key", "VARCHAR(120) NOT NULL DEFAULT ''");
+    await addColumnIfNotExists("appeals", "author_apartment_snapshot", "VARCHAR(20) NOT NULL DEFAULT ''");
+    await addColumnIfNotExists("appeals", "author_user_id", "BIGINT UNSIGNED NOT NULL DEFAULT 0");
     await exec(`
         UPDATE appeals a
         JOIN user_apartments ua ON ua.id = a.author_apartment_id
@@ -1867,8 +1921,8 @@ export async function migrate(): Promise<void> {
     await runMaintenance();
     await installMaintenanceEvents();
 
-    await exec(`ALTER TABLE appeals ADD INDEX IF NOT EXISTS idx_appeals_author_building (author_building_key, created_at DESC)`);
-    await exec(`ALTER TABLE appeals ADD INDEX IF NOT EXISTS idx_appeals_author_user (author_user_id, created_at DESC)`);
+    await addIndexIfNotExists("appeals", "idx_appeals_author_building", "author_building_key, created_at DESC");
+    await addIndexIfNotExists("appeals", "idx_appeals_author_user", "author_user_id, created_at DESC");
 
     await exec(`UPDATE user_profiles SET phone = NULL WHERE phone IS NULL OR TRIM(phone) = ''`);
     await exec(`ALTER TABLE user_profiles MODIFY phone VARCHAR(50) NULL DEFAULT NULL`);
@@ -1883,7 +1937,7 @@ export async function migrate(): Promise<void> {
         ) d ON p.phone = d.phone AND p.user_id <> d.keep_uid
         SET p.phone = NULL
     `);
-    await exec(`ALTER TABLE user_profiles DROP INDEX IF EXISTS uq_profile_phone`);
+    await dropIndexIfExists("user_profiles", "uq_profile_phone");
     await exec(`ALTER TABLE user_profiles ADD UNIQUE KEY uq_profile_phone (phone)`);
 
     await exec(`DROP TRIGGER IF EXISTS trg_buildings_normalize_bi`);
@@ -1906,9 +1960,9 @@ export async function migrate(): Promise<void> {
     `);
 
     // appeal_participants: только подпись (квартира + дата), без анонимности/комментария/фото
-    await exec(`ALTER TABLE appeal_participants DROP COLUMN IF EXISTS anonymous`);
-    await exec(`ALTER TABLE appeal_participants DROP COLUMN IF EXISTS comment`);
-    await exec(`ALTER TABLE appeal_participants DROP COLUMN IF EXISTS photo_uri`);
+    await dropColumnIfExists("appeal_participants", "anonymous");
+    await dropColumnIfExists("appeal_participants", "comment");
+    await dropColumnIfExists("appeal_participants", "photo_uri");
 
     await exec(`DROP TABLE IF EXISTS environment_rating_feedback_tags`);
 

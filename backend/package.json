@@ -6,11 +6,15 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc --outDir dist",
     "start": "node dist/index.js",
+    "loadtest:check": "node loadtests/run-check.mjs",
     "loadtest:health": "autocannon -c 20 -d 10 http://127.0.0.1:3001/health",
+    "loadtest:diagnose": "node loadtests/diagnose.mjs",
     "loadtest:app": "node loadtests/run-app-startup.mjs",
-    "loadtest:k6:smoke": "k6 run loadtests/smoke.js",
-    "loadtest:k6:app": "k6 run loadtests/app-startup.js",
-    "loadtest:k6:stress": "k6 run loadtests/stress.js"
+    "loadtest:k6:smoke": "node loadtests/run-k6.mjs loadtests/smoke.js",
+    "loadtest:k6:app": "node loadtests/run-k6.mjs loadtests/app-startup.js load",
+    "loadtest:k6:load": "node loadtests/run-k6.mjs loadtests/app-startup.js load",
+    "loadtest:k6:peak": "node loadtests/run-k6.mjs loadtests/app-startup.js peak",
+    "loadtest:k6:stress": "node loadtests/run-k6.mjs loadtests/stress.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.102.0",

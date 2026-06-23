@@ -4,7 +4,7 @@ import { check, sleep } from "k6";
 const BASE_URL = __ENV.BASE_URL || "http://127.0.0.1:3001";
 
 export const options = {
-    vus: Number(__ENV.VUS || 10),
+    vus: Number(__ENV.VUS || 5),
     duration: __ENV.DURATION || "30s",
     thresholds: {
         http_req_failed: ["rate<0.01"],

@@ -14,6 +14,8 @@
     "loadtest:k6:app": "node loadtests/run-k6.mjs loadtests/app-startup.js load",
     "loadtest:k6:load": "node loadtests/run-k6.mjs loadtests/app-startup.js load",
     "loadtest:k6:peak": "node loadtests/run-k6.mjs loadtests/app-startup.js peak",
+    "loadtest:k6:writes": "node loadtests/run-k6.mjs loadtests/app-writes.js load",
+    "loadtest:k6:writes:peak": "node loadtests/run-k6.mjs loadtests/app-writes.js peak",
     "loadtest:k6:stress": "node loadtests/run-k6.mjs loadtests/stress.js"
   },
   "dependencies": {

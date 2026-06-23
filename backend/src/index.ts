@@ -77,9 +77,13 @@ async function start() {
     app.listen(PORT, () => {
         console.log(`[server] Mobile API: http://localhost:${PORT}/api`);
         if (ADMIN_API) console.log(`[server] Admin API:  http://localhost:${PORT}`);
+        const modFlag = process.env.MODERATION_ENABLED?.trim().toLowerCase();
+        const modOff = modFlag === "0" || modFlag === "false" || modFlag === "off";
         console.log(isModerationEnabled()
             ? "[moderation] Yandex GPT включена"
-            : "[moderation] YANDEX_API_KEY не задан — проверка отключена");
+            : modOff
+                ? "[moderation] отключена (MODERATION_ENABLED=0)"
+                : "[moderation] YANDEX_API_KEY не задан — проверка отключена");
     });
 }
 

@@ -486,6 +486,8 @@ async function moderateGeneric(fields: {
 }
 
 export function isModerationEnabled(): boolean {
+    const flag = process.env.MODERATION_ENABLED?.trim().toLowerCase();
+    if (flag === "0" || flag === "false" || flag === "off") return false;
     return Boolean(process.env.YANDEX_API_KEY);
 }
 
@@ -501,9 +503,12 @@ export async function moderateContent(
         options?: string[];
     },
 ): Promise<ModerationResult> {
+    if (!isModerationEnabled()) {
+        return { ok: true };
+    }
+
     const client = getClient();
     if (!client) {
-        console.warn("[moderation] YANDEX_API_KEY не задан — проверка отключена");
         return { ok: true };
     }
 

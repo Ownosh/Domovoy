@@ -1,5 +1,5 @@
 /**
- * Проверка готовности к нагрузочным тестам: health, login, все endpoint'ы старта приложения.
+ * Проверка готовности к нагрузочным тестам: health, login, profile, GET endpoint'ы, создание + удаление.
  *
  *   set TEST_EMAIL=...
  *   set TEST_PASSWORD=...
@@ -8,6 +8,7 @@
 const BASE_URL = process.env.BASE_URL || "http://127.0.0.1:3001";
 const TEST_EMAIL = process.env.TEST_EMAIL;
 const TEST_PASSWORD = process.env.TEST_PASSWORD;
+const CHECK_WRITES = process.env.CHECK_WRITES !== "0";
 
 const ENDPOINTS = [
     "/api/news",
@@ -57,27 +58,132 @@ async function checkLogin() {
     }
     const data = JSON.parse(text);
     console.log("✓ login OK");
-    return data.accessToken;
+    return { token: data.accessToken, profile: data.profile };
+}
+
+function checkProfile(profile) {
+    if (!profile) {
+        console.log("✗ profile отсутствует в ответе login");
+        return false;
+    }
+    const hasBuilding = Boolean(profile.building || profile.buildingName || profile.buildingKey);
+    const hasApartment = Boolean(profile.apartment || profile.apartmentId);
+    const ok = hasBuilding && hasApartment;
+    console.log(
+        ok
+            ? `✓ profile OK (${profile.buildingName || profile.building || "дом"}, кв. ${profile.apartment})`
+            : "✗ profile неполный — нет привязки к дому/квартире",
+    );
+    return ok;
+}
+
+async function request(method, path, token, body) {
+    const started = performance.now();
+    const headers = { Authorization: `Bearer ${token}` };
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+
+    const res = await fetch(`${BASE_URL}${path}`, {
+        method,
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    const ms = (performance.now() - started).toFixed(0);
+    const text = await res.text();
+    let json = null;
+    try {
+        json = text ? JSON.parse(text) : null;
+    } catch {
+        json = null;
+    }
+    return { res, ms, json, text };
+}
+
+function logResult(mark, label, status, ms, snippet = "") {
+    console.log(`${mark} ${label} ${status} (${ms} ms)${snippet ? ` ${snippet}` : ""}`);
 }
 
 async function checkEndpoints(token) {
-    const headers = { Authorization: `Bearer ${token}` };
     let failed = 0;
 
     for (const path of ENDPOINTS) {
-        const started = performance.now();
         try {
-            const res = await fetch(`${BASE_URL}${path}`, { headers });
-            const ms = (performance.now() - started).toFixed(0);
-            const snippet = res.status >= 400 ? (await res.text()).slice(0, 120) : "";
+            const { res, ms, text } = await request("GET", path, token);
+            const snippet = res.status >= 400 ? text.slice(0, 120) : "";
             const mark = res.ok ? "✓" : "✗";
-            console.log(`${mark} ${path} ${res.status} (${ms} ms)${snippet ? ` ${snippet}` : ""}`);
+            logResult(mark, path, res.status, ms, snippet);
             if (!res.ok) failed += 1;
         } catch (err) {
             console.log(`✗ ${path} ERROR ${err instanceof Error ? err.message : err}`);
             failed += 1;
         }
     }
+
+    return failed;
+}
+
+async function checkCreates(token) {
+    const tag = `[loadtest-${Date.now()}]`;
+    let failed = 0;
+
+    async function createAndDelete(label, createPath, createBody, idFromJson) {
+        try {
+            const created = await request("POST", createPath, token, createBody);
+            const mark = created.res.status === 201 ? "✓" : "✗";
+            logResult(mark, `POST ${createPath}`, created.res.status, created.ms, created.res.status >= 400 ? created.text.slice(0, 120) : "");
+
+            if (created.res.status !== 201) {
+                failed += 1;
+                return;
+            }
+
+            const id = idFromJson(created.json);
+            if (!id) {
+                console.log(`✗ POST ${createPath} — нет id в ответе`);
+                failed += 1;
+                return;
+            }
+
+            const deleted = await request("DELETE", `${createPath}/${id}`, token);
+            const delMark = deleted.res.ok || deleted.res.status === 204 ? "✓" : "✗";
+            logResult(delMark, `DELETE ${createPath}/${id}`, deleted.res.status, deleted.ms);
+            if (!deleted.res.ok && deleted.res.status !== 204) failed += 1;
+        } catch (err) {
+            console.log(`✗ ${label} ERROR ${err instanceof Error ? err.message : err}`);
+            failed += 1;
+        }
+    }
+
+    await createAndDelete(
+        "neighbor-ad",
+        "/api/neighbor-ads",
+        { title: `${tag} объявление`, body: "Тест диагностики", category: "other" },
+        (json) => json?.id,
+    );
+
+    await createAndDelete(
+        "appeal",
+        "/api/appeals",
+        {
+            title: `${tag} обращение`,
+            body: "Тест диагностики обращения",
+            category: "plumbing",
+            kind: "personal",
+        },
+        (json) => json?.id,
+    );
+
+    await createAndDelete(
+        "vote",
+        "/api/votes",
+        {
+            topic: `${tag} голосование`,
+            description: "Тест диагностики голосования",
+            visibility: "open",
+            optionLabels: ["Да", "Нет"],
+            durationDays: 3,
+        },
+        (json) => json?.id,
+    );
 
     return failed;
 }
@@ -91,20 +197,31 @@ async function main() {
         process.exit(1);
     }
 
-    const token = await checkLogin();
-    if (!token) {
+    const session = await checkLogin();
+    if (!session) {
         process.exit(TEST_EMAIL ? 1 : 0);
     }
 
-    console.log("\n--- Endpoints ---");
-    const failed = await checkEndpoints(token);
+    let failed = 0;
 
-    console.log(`\nИтого: ${failed} ошибок из ${ENDPOINTS.length}`);
+    console.log("\n--- Profile ---");
+    if (!checkProfile(session.profile)) failed += 1;
+
+    console.log("\n--- Endpoints ---");
+    failed += await checkEndpoints(session.token);
+
+    if (CHECK_WRITES) {
+        console.log("\n--- Create / delete ---");
+        failed += await checkCreates(session.token);
+    }
+
+    const writeNote = CHECK_WRITES ? " + 3 create/delete" : "";
+    console.log(`\nИтого: ${failed} ошибок`);
     if (failed > 0) {
-        console.log("Исправьте ошибки БД/SQL до нагрузочного теста — иначе loadtest:app будет сыпаться.");
+        console.log("Исправьте ошибки до нагрузочного теста — иначе loadtest:app будет сыпаться.");
         process.exit(1);
     }
-    console.log("Готово к loadtest:app / loadtest:k6:app");
+    console.log(`Готово к loadtest:app / loadtest:k6:app${writeNote}`);
 }
 
 main().catch((err) => {

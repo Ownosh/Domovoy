@@ -20,8 +20,10 @@ npm run loadtest:check
 |---------|---------------|--------------|-------|
 | `loadtest:check` | 5 → 30 | ~6 мин | Перед релизом |
 | `loadtest:k6:smoke` | 5 | 30 сек | Быстро «жив ли сервер» |
-| `loadtest:k6:load` | 30 | ~5 мин | Нормальная проверка |
-| `loadtest:k6:peak` | 50 | ~4 мин | Пик (крупный ЖК) |
+| `loadtest:k6:load` | 30 | ~5 мин | Чтение при открытии приложения |
+| `loadtest:k6:writes` | 10 | ~3 мин | Создание + удаление (объявление, обращение, голос) |
+| `loadtest:k6:writes:peak` | 20 | ~4 мин | Пик записи в БД |
+| `loadtest:k6:peak` | 50 | ~4 мин | Пик чтения (крупный ЖК) |
 | `loadtest:k6:stress` | до 150 | ~8 мин | Только `/health`, предел системы |
 
 ## Отдельные шаги
@@ -30,6 +32,13 @@ npm run loadtest:check
 npm run loadtest:diagnose
 npm run loadtest:k6:smoke
 npm run loadtest:k6:load
+npm run loadtest:k6:writes
+```
+
+Для create/delete без k6 (один прогон):
+
+```powershell
+npm run loadtest:diagnose
 ```
 
 Без k6 (autocannon + fetch):
@@ -47,7 +56,7 @@ npm run loadtest:app
 | `TEST_EMAIL` / `TEST_PASSWORD` | — | Тестовый пользователь из `users` |
 | `LOAD_PROFILE` | `load` | `quick` / `load` / `peak` |
 | `VUS` | из профиля | Переопределить число пользователей |
-| `K6_BIN` | авто | Путь к k6.exe |
+| `CHECK_WRITES` | `1` | Create/delete в diagnose (0 — только GET) |
 
 Установка k6: `winget install GrafanaLabs.k6`
 

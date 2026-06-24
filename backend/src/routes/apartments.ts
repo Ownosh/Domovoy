@@ -8,6 +8,12 @@ const router = Router();
 
 const VALID_DOC_TYPES = ["lease", "ownership"];
 
+/** user_apartments.verification_status: approved хранится как lease/ownership */
+function normalizeVerificationStatus(raw: string): string {
+    if (raw === "lease" || raw === "ownership") return "approved";
+    return raw;
+}
+
 // GET /api/apartments — список квартир пользователя со статусом верификации из verification_requests
 router.get("/", requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
@@ -49,7 +55,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res) => {
             entrance: r.entrance as number | null,
             apartmentAreaSqm: r.apartment_area_sqm as number | null,
             docType: (r.doc_type as string | null) ?? null,
-            verificationStatus: r.verification_status as string,
+            verificationStatus: normalizeVerificationStatus(r.verification_status as string),
             reviewerComment: (r.reviewer_comment as string | null) ?? null,
             submittedAt: r.submitted_at ? (r.submitted_at as Date).toISOString() : null,
             isActive: String(r.id) === String(activeId),

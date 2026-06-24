@@ -11,6 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useApp } from "../../context/AppContext";
 import { colors, radius, spacing, textStyles } from "../../theme";
 import type { UserApartment } from "../../types";
+import { normalizeApartmentVerificationStatus } from "../../utils/apartmentVerification";
 
 const statusDotColor: Record<string, string> = {
     approved: colors.primary,
@@ -78,7 +79,9 @@ export function ApartmentSwitcher() {
 
                         <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
                             {apartments.map((apt) => {
-                                const dotColor = statusDotColor[apt.verificationStatus] ?? colors.textDim;
+                                const dotColor =
+                                    statusDotColor[normalizeApartmentVerificationStatus(apt.verificationStatus)] ??
+                                    colors.textDim;
                                 const isLoading = switching === apt.id;
                                 return (
                                     <Pressable

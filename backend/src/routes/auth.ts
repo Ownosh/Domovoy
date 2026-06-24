@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { normalizeBuildingKey } from "../db/normalize";
+import { normalizeBuildingKey, normalizeApartment } from "../db/normalize";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
@@ -123,6 +123,18 @@ router.post("/register", async (req: Request, res: Response) => {
             "INSERT INTO user_profiles (user_id, full_name, phone) VALUES (?, ?, ?)",
             [userId, name, phone],
         );
+
+        const aptNorm = normalizeApartment(apartment);
+        const [[dupApartment]] = await conn.query<RowDataPacket[]>(
+            "SELECT id FROM user_apartments WHERE building_key = ? AND apartment_norm = ?",
+            [buildingKey, aptNorm],
+        );
+        if (dupApartment) {
+            await conn.rollback();
+            res.status(409).json({ error: "Эта квартира уже зарегистрирована другим пользователем" });
+            return;
+        }
+
         const [aptResult] = await conn.execute(
             "INSERT INTO user_apartments (user_id, building_key, apartment, entrance) VALUES (?, ?, ?, ?)",
             [userId, buildingKey, apartment, entrance],
@@ -146,8 +158,13 @@ router.post("/register", async (req: Request, res: Response) => {
                 name, phone, building: buildingKey, buildingName: buildingLabel, apartment, entrance: entrance ?? undefined
             },
         });
-    } catch (err) {
+    } catch (err: unknown) {
         await conn.rollback();
+        const code = (err as { code?: string })?.code;
+        if (code === "ER_DUP_ENTRY") {
+            res.status(409).json({ error: "Эта квартира уже зарегистрирована другим пользователем" });
+            return;
+        }
         console.error("[register]", err);
         res.status(500).json({ error: "Ошибка сервера" });
     } finally {

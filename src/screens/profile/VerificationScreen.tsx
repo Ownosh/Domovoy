@@ -65,7 +65,6 @@ const docTypes: { key: DocType; icon: keyof typeof Ionicons.glyphMap; title: str
 export function VerificationScreen({ navigation }: Props) {
     const { verification, submitVerification } = useApp();
     const [docType, setDocType] = useState<DocType>("lease");
-    const [pdConsent, setPdConsent] = useState(false);
     const [photos, setPhotos] = useState<string[]>([]);
     const [submitting, setSubmitting] = useState(false);
 
@@ -100,10 +99,6 @@ export function VerificationScreen({ navigation }: Props) {
     };
 
     const onSubmit = async () => {
-        if (!pdConsent) {
-            Alert.alert("Согласие нужно", "Отметьте согласие на обработку персональных данных.");
-            return;
-        }
         if (!photos.length) {
             Alert.alert("Фото нужно", "Прикрепите фото документа.");
             return;
@@ -176,29 +171,6 @@ export function VerificationScreen({ navigation }: Props) {
             {/* ── Форма отправки ── */}
             {canSubmit && (
                 <>
-                    {/* Согласие */}
-                    <Pressable
-                        onPress={() => setPdConsent((v) => !v)}
-                        style={({ pressed }) => [
-                            styles.consentCard,
-                            pdConsent && styles.consentCardOn,
-                            pressed && styles.consentPressed,
-                        ]}
-                    >
-                        <View style={[styles.checkbox, pdConsent && styles.checkboxOn]}>
-                            {pdConsent && <Ionicons name="checkmark" size={14} color={colors.bg} />}
-                        </View>
-                        <Text style={[textStyles.caption, styles.consentText]}>
-                            Согласен на обработку персональных данных для прохождения верификации.{"  "}
-                            <Text
-                                style={styles.policyLink}
-                                onPress={() => navigation.navigate("PrivacyPolicy")}
-                            >
-                                Политика конфиденциальности
-                            </Text>
-                        </Text>
-                    </Pressable>
-
                     {/* Тип документа */}
                     <View style={styles.sectionHeader}>
                         <View style={styles.sectionIconWrap}>
@@ -291,7 +263,7 @@ export function VerificationScreen({ navigation }: Props) {
                                 </View>
                                 <Text style={styles.uploadTitle}>Прикрепить фото</Text>
                                 <Text style={styles.uploadHint}>
-                                    JPEG или PNG · до {MAX_PHOTOS} фото · качество на камеру достаточно
+                                    JPEG или PNG · до {MAX_PHOTOS} фото
                                 </Text>
                             </Pressable>
                         )}
@@ -301,7 +273,7 @@ export function VerificationScreen({ navigation }: Props) {
                         <Button
                             title={submitting ? "Отправка..." : "Отправить на верификацию"}
                             onPress={() => { void onSubmit(); }}
-                            disabled={submitting || !pdConsent || !photos.length}
+                            disabled={submitting || !photos.length}
                             variant="info"
                         />
                     </Card>
@@ -369,37 +341,6 @@ const styles = StyleSheet.create({
         textTransform: "uppercase",
     },
     commentText: { color: colors.textMuted },
-
-    /* Согласие */
-    consentCard: {
-        flexDirection: "row",
-        alignItems: "flex-start",
-        gap: spacing.md,
-        padding: spacing.lg,
-        borderRadius: radius.lg,
-        backgroundColor: "rgba(26, 35, 46, 0.6)",
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
-    consentCardOn: {
-        borderColor: `${colors.primary}66`,
-        backgroundColor: colors.primarySoft,
-    },
-    consentPressed: { opacity: 0.85 },
-    checkbox: {
-        width: 22,
-        height: 22,
-        borderRadius: 6,
-        borderWidth: 2,
-        borderColor: colors.border,
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-        marginTop: 1,
-    },
-    checkboxOn: { borderColor: colors.primary, backgroundColor: colors.primary },
-    consentText: { flex: 1, color: colors.textMuted, lineHeight: 20 },
-    policyLink: { color: colors.primary, fontWeight: "600" },
 
     /* Секция */
     sectionHeader: {

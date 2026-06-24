@@ -306,7 +306,7 @@ export function RegisterScreen({ navigation }: Props) {
                                 )}
                             </View>
                             <Text style={[textStyles.caption, styles.consentText]}>
-                                Согласен на обработку персональных данных (ФИО, email, телефон, адрес).{"  "}
+                                Согласен на обработку персональных данных (ФИО, email, телефон, адрес, фото документов для верификации).{"  "}
                                 <Text
                                     style={styles.policyLink}
                                     onPress={() => navigation.navigate("PrivacyPolicy")}

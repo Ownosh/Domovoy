@@ -6,6 +6,7 @@ import { Button, Card, ScreenLayout } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
 import { colors, radius, spacing, textStyles } from "../../theme";
 import type { UserApartment } from "../../types";
+import { normalizeApartmentVerificationStatus } from "../../utils/apartmentVerification";
 
 type Props = ProfileScreenProps<"Apartments">;
 
@@ -75,7 +76,8 @@ export function ApartmentsScreen({ navigation }: Props) {
                 </Card>
             ) : (
                 apartments.map((apt) => {
-                    const cfg = statusConfig[apt.verificationStatus] ?? statusConfig.none;
+                    const displayStatus = normalizeApartmentVerificationStatus(apt.verificationStatus);
+                    const cfg = statusConfig[displayStatus] ?? statusConfig.none;
                     return (
                         <Card key={apt.id} style={[styles.aptCard, apt.isActive && styles.aptCardActive]}>
                             {/* Шапка: адрес + активная метка */}
@@ -109,11 +111,13 @@ export function ApartmentsScreen({ navigation }: Props) {
                                 <View style={[styles.statusDot, { backgroundColor: cfg.color }]} />
                                 <Ionicons name={cfg.icon} size={14} color={cfg.color} />
                                 <Text style={[styles.statusLabel, { color: cfg.color }]}>{cfg.label}</Text>
-                                <Text style={styles.docTypeText}>· {docTypeLabel[apt.docType] ?? apt.docType}</Text>
+                                {apt.docType ? (
+                                    <Text style={styles.docTypeText}>· {docTypeLabel[apt.docType]}</Text>
+                                ) : null}
                             </View>
 
                             {/* Комментарий при отклонении */}
-                            {apt.verificationStatus === "rejected" && apt.reviewerComment && (
+                            {displayStatus === "rejected" && apt.reviewerComment && (
                                 <View style={styles.commentBox}>
                                     <Ionicons name="chatbox-outline" size={13} color={colors.danger} />
                                     <Text style={styles.commentText} numberOfLines={3}>

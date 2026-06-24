@@ -65,7 +65,6 @@ export function AddApartmentScreen({ navigation }: Props) {
     const [entranceStr, setEntranceStr] = useState("");
     const [docType, setDocType] = useState<DocType>("lease");
     const [photos, setPhotos] = useState<string[]>([]);
-    const [pdConsent, setPdConsent] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
     const [errors, setErrors] = useState<{ building?: string; apartment?: string }>({});
@@ -113,10 +112,6 @@ export function AddApartmentScreen({ navigation }: Props) {
 
     const onSubmit = async () => {
         if (!validate()) return;
-        if (!pdConsent) {
-            Alert.alert("Согласие нужно", "Отметьте согласие на обработку персональных данных.");
-            return;
-        }
         if (!photos.length) {
             Alert.alert("Фото нужно", "Прикрепите фото документа.");
             return;
@@ -235,23 +230,6 @@ export function AddApartmentScreen({ navigation }: Props) {
                 })}
             </View>
 
-            {/* Согласие на ПДн */}
-            <Pressable
-                onPress={() => setPdConsent((v) => !v)}
-                style={({ pressed }) => [
-                    styles.consentCard,
-                    pdConsent && styles.consentCardOn,
-                    pressed && styles.consentPressed,
-                ]}
-            >
-                <View style={[styles.checkbox, pdConsent && styles.checkboxOn]}>
-                    {pdConsent && <Ionicons name="checkmark" size={14} color={colors.bg} />}
-                </View>
-                <Text style={[textStyles.caption, styles.consentText]}>
-                    Согласен на обработку персональных данных для верификации квартиры.
-                </Text>
-            </Pressable>
-
             {/* Фото документа */}
             <SectionHeader icon="camera-outline" title="Фото документа" />
             <Card>
@@ -291,7 +269,7 @@ export function AddApartmentScreen({ navigation }: Props) {
                 <Button
                     title={submitting ? "Отправка..." : "Отправить заявку"}
                     onPress={() => { void onSubmit(); }}
-                    disabled={submitting || !pdConsent || !photos.length}
+                    disabled={submitting || !photos.length}
                     variant="primary"
                 />
             </Card>
@@ -323,21 +301,6 @@ const styles = StyleSheet.create({
     docTitleOn: { color: colors.primary },
     docHint: { color: colors.textDim, lineHeight: 16 },
     docCheck: { position: "absolute", top: spacing.sm, right: spacing.sm },
-
-    consentCard: {
-        flexDirection: "row", alignItems: "flex-start", gap: spacing.md,
-        padding: spacing.lg, borderRadius: radius.lg,
-        backgroundColor: "rgba(26, 35, 46, 0.6)", borderWidth: 1, borderColor: colors.border,
-    },
-    consentCardOn: { borderColor: `${colors.primary}66`, backgroundColor: colors.primarySoft },
-    consentPressed: { opacity: 0.85 },
-    checkbox: {
-        width: 22, height: 22, borderRadius: 6, borderWidth: 2,
-        borderColor: colors.border, alignItems: "center", justifyContent: "center",
-        flexShrink: 0, marginTop: 1,
-    },
-    checkboxOn: { borderColor: colors.primary, backgroundColor: colors.primary },
-    consentText: { flex: 1, color: colors.textMuted, lineHeight: 20 },
 
     photoRow: { flexDirection: "row", marginBottom: spacing.xs },
     thumbWrap: { width: THUMB_SIZE, height: THUMB_SIZE, marginRight: spacing.sm, position: "relative" },

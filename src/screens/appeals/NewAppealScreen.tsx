@@ -26,7 +26,7 @@ export function NewAppealScreen({ navigation, route }: Props) {
 
     if (!isVerifiedResident(verification) && !route.params?.editId) {
         return (
-            <ScreenLayout title="Новое обращение" onBack={() => navigation.goBack()}>
+            <ScreenLayout title="Новое заявление" onBack={() => navigation.goBack()}>
                 <VerificationWall message="Подавать обращения могут только верифицированные жильцы дома." />
             </ScreenLayout>
         );
@@ -135,7 +135,7 @@ export function NewAppealScreen({ navigation, route }: Props) {
 
     return (
         <ScreenLayout
-            title={editId ? "Редактирование" : "Новое обращение"}
+            title={editId ? "Редактирование" : "Новое заявление"}
             subtitle="Опишите проблему"
             onBack={() => navigation.goBack()}
         >
@@ -221,7 +221,7 @@ export function NewAppealScreen({ navigation, route }: Props) {
                             <Ionicons name="warning-outline" size={20} color={colors.warning} style={styles.modIcon} />
                             <View style={styles.modTexts}>
                                 <Text style={styles.modIssue}>{err}</Text>
-                                <Text style={styles.modSuggestion}>Попробуйте: «{moderation.suggestion}»</Text>
+                                <Text style={styles.modSuggestion}>«{moderation.suggestion}»</Text>
                             </View>
                         </View>
                     )}

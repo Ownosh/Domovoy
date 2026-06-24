@@ -215,7 +215,7 @@ export function NeighborAdNewScreen({ navigation, route }: Props) {
                         <Ionicons name="warning-outline" size={20} color={colors.warning} style={styles.modIcon} />
                         <View style={styles.modTexts}>
                             <Text style={styles.modIssue}>{err}</Text>
-                            <Text style={styles.modSuggestion}>Попробуйте: «{moderation.suggestion}»</Text>
+                            <Text style={styles.modSuggestion}>«{moderation.suggestion}»</Text>
                         </View>
                     </View>
                 )}
